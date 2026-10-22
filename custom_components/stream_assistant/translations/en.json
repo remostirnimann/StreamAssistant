@@ -1,0 +1,86 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "description": "Enter the IP address of your Elgato Stream Deck Network Dock. Make sure no other software (Stream Deck app, Companion) is connected to it.",
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the Network Dock."
+        }
+      },
+      "zeroconf_confirm": {
+        "description": "Add the Stream Deck Network Dock at {host}?\n\nAttached deck: {deck}"
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the dock. Check the address and that no other software is connected to it."
+    },
+    "abort": {
+      "already_configured": "This dock is already configured.",
+      "cannot_connect": "Cannot connect to the dock.",
+      "not_network_dock": "This device is not a Stream Deck Network Dock."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "deck_connected": {
+        "name": "Stream Deck connected"
+      }
+    },
+    "event": {
+      "key": {
+        "name": "Key {key}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "pressed": "Pressed",
+              "released": "Released",
+              "short_press": "Short press",
+              "long_press": "Long press"
+            }
+          }
+        }
+      }
+    },
+    "number": {
+      "brightness": {
+        "name": "Brightness"
+      }
+    }
+  },
+  "services": {
+    "set_key": {
+      "name": "Set key",
+      "description": "Changes what a Stream Deck key shows. The layout is stored and restored after reconnects and restarts.",
+      "fields": {
+        "text": {
+          "name": "Text",
+          "description": "Text shown on the key, may contain line breaks."
+        },
+        "background_color": {
+          "name": "Background color",
+          "description": "Background color of the key."
+        },
+        "text_color": {
+          "name": "Text color",
+          "description": "Color of the text."
+        },
+        "font_size": {
+          "name": "Font size",
+          "description": "Font size in pixels. Default depends on the key size."
+        },
+        "image": {
+          "name": "Image",
+          "description": "Path to an image file on the Home Assistant host, scaled to fill the key."
+        }
+      }
+    },
+    "clear_key": {
+      "name": "Clear key",
+      "description": "Blanks a Stream Deck key and removes its stored appearance."
+    }
+  }
+}

@@ -1,0 +1,35 @@
+set_key:
+  target:
+    entity:
+      integration: stream_assistant
+      domain: event
+  fields:
+    text:
+      example: "Licht\nan"
+      selector:
+        text:
+          multiline: true
+    background_color:
+      example: "#203040"
+      selector:
+        color_rgb:
+    text_color:
+      example: "#ffffff"
+      selector:
+        color_rgb:
+    font_size:
+      selector:
+        number:
+          min: 6
+          max: 96
+          mode: box
+    image:
+      example: "/config/www/streamdeck/lamp.png"
+      selector:
+        text:
+
+clear_key:
+  target:
+    entity:
+      integration: stream_assistant
+      domain: event

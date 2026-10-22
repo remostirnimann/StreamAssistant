@@ -1,0 +1,86 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "description": "Gib die IP-Adresse deines Elgato Stream Deck Network Dock ein. Es darf keine andere Software (Stream-Deck-App, Companion) damit verbunden sein.",
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "IP-Adresse oder Hostname des Network Dock."
+        }
+      },
+      "zeroconf_confirm": {
+        "description": "Stream Deck Network Dock unter {host} hinzufügen?\n\nAngeschlossenes Deck: {deck}"
+      }
+    },
+    "error": {
+      "cannot_connect": "Keine Verbindung zum Dock. Prüfe die Adresse und ob eine andere Software damit verbunden ist."
+    },
+    "abort": {
+      "already_configured": "Dieses Dock ist bereits eingerichtet.",
+      "cannot_connect": "Keine Verbindung zum Dock.",
+      "not_network_dock": "Dieses Gerät ist kein Stream Deck Network Dock."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "deck_connected": {
+        "name": "Stream Deck verbunden"
+      }
+    },
+    "event": {
+      "key": {
+        "name": "Taste {key}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "pressed": "Gedrückt",
+              "released": "Losgelassen",
+              "short_press": "Kurz gedrückt",
+              "long_press": "Lang gedrückt"
+            }
+          }
+        }
+      }
+    },
+    "number": {
+      "brightness": {
+        "name": "Helligkeit"
+      }
+    }
+  },
+  "services": {
+    "set_key": {
+      "name": "Taste setzen",
+      "description": "Ändert, was eine Stream-Deck-Taste anzeigt. Das Layout wird gespeichert und nach Neuverbindung und Neustart wiederhergestellt.",
+      "fields": {
+        "text": {
+          "name": "Text",
+          "description": "Text auf der Taste, Zeilenumbrüche sind erlaubt."
+        },
+        "background_color": {
+          "name": "Hintergrundfarbe",
+          "description": "Hintergrundfarbe der Taste."
+        },
+        "text_color": {
+          "name": "Textfarbe",
+          "description": "Farbe des Texts."
+        },
+        "font_size": {
+          "name": "Schriftgrösse",
+          "description": "Schriftgrösse in Pixel. Standard hängt von der Tastengrösse ab."
+        },
+        "image": {
+          "name": "Bild",
+          "description": "Pfad zu einer Bilddatei auf dem Home-Assistant-Host, wird auf die Taste skaliert."
+        }
+      }
+    },
+    "clear_key": {
+      "name": "Taste leeren",
+      "description": "Leert eine Stream-Deck-Taste und entfernt das gespeicherte Aussehen."
+    }
+  }
+}
