@@ -26,8 +26,11 @@
   },
   "entity": {
     "binary_sensor": {
+      "dock_connected": {
+        "name": "Verbunden"
+      },
       "deck_connected": {
-        "name": "Stream Deck verbunden"
+        "name": "Verbunden"
       }
     },
     "event": {

@@ -7,7 +7,7 @@ import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_HOST, CONF_MAC
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -63,20 +63,32 @@ class StreamAssistantDevice:
         self._repaint_task: asyncio.Task[None] | None = None
 
     @property
+    def dock_connected(self) -> bool:
+        """Return True while the dock is reachable."""
+        return self.client.dock_connected
+
+    @property
     def deck_connected(self) -> bool:
         """Return True when the deck accepts commands."""
         return self.client.deck_connected
 
     @property
     def dock_device_info(self) -> DeviceInfo:
-        """Device info of the dock."""
-        return DeviceInfo(
+        """Device info of the dock.
+
+        The MAC connection lets Home Assistant's DHCP watcher report new
+        leases of this dock (see async_step_dhcp).
+        """
+        info = DeviceInfo(
             identifiers={(DOMAIN, self.dock_serial)},
             manufacturer="Elgato",
             model="Stream Deck Network Dock",
             name="Stream Deck Network Dock",
             serial_number=self.dock_serial,
         )
+        if mac := self.entry.data.get(CONF_MAC):
+            info["connections"] = {(dr.CONNECTION_NETWORK_MAC, mac)}
+        return info
 
     @property
     def deck_device_info(self) -> DeviceInfo:

@@ -102,6 +102,11 @@ class DockClient:
         self._stopping = False
 
     @property
+    def dock_connected(self) -> bool:
+        """Return True while the dock itself is reachable."""
+        return self._dock is not None and self._dock.connected
+
+    @property
     def deck_connected(self) -> bool:
         """Return True when the deck can receive commands."""
         return self.deck is not None and self._deck is not None and self._deck.connected

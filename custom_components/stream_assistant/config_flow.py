@@ -1,4 +1,11 @@
-"""Config flow for Stream Assistant."""
+"""Config flow for Stream Assistant.
+
+The dock is identified by its serial number, never by its address. Address
+changes are picked up from two sources:
+
+- mDNS (_elg._tcp): the dock announces serial, MAC and current IP
+- DHCP: for docks whose MAC is known, Home Assistant reports new leases
+"""
 
 from __future__ import annotations
 
@@ -7,8 +14,10 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_HOST
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
+from homeassistant.const import CONF_HOST, CONF_MAC
+from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .const import CONF_DECK_PRODUCT_ID, CONF_DECK_SERIAL, CONF_DOCK_SERIAL, DOMAIN
@@ -17,9 +26,12 @@ from .protocol import NETWORK_DOCK_DEVICE_TYPE, ChildInfo, CoraError, DockInfo, 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _entry_data(host: str, dock: DockInfo, child: ChildInfo | None) -> dict[str, Any]:
+def _entry_data(
+    host: str, mac: str | None, dock: DockInfo, child: ChildInfo | None
+) -> dict[str, Any]:
     return {
         CONF_HOST: host,
+        CONF_MAC: mac,
         CONF_DOCK_SERIAL: dock.serial,
         CONF_DECK_SERIAL: child.serial if child else None,
         CONF_DECK_PRODUCT_ID: child.product_id if child else None,
@@ -34,6 +46,7 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the flow."""
         self._host: str | None = None
+        self._mac: str | None = None
         self._dock: DockInfo | None = None
         self._child: ChildInfo | None = None
 
@@ -62,10 +75,24 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
             deck = f"unsupported (product id {self._child.product_id:#06x})"
         return {"host": self._host or "", "deck": deck}
 
+    def _create_entry(self) -> ConfigFlowResult:
+        assert self._host and self._dock
+        return self.async_create_entry(
+            title=self._title(),
+            data=_entry_data(self._host, self._mac, self._dock, self._child),
+        )
+
+    def _address_updates(self, host: str, mac: str | None) -> dict[str, Any]:
+        """Data to update on an existing entry. A known MAC is never cleared."""
+        updates: dict[str, Any] = {CONF_HOST: host}
+        if mac:
+            updates[CONF_MAC] = mac
+        return updates
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manual setup by IP address."""
+        """Manual setup by IP address or hostname."""
         errors: dict[str, str] = {}
         if user_input is not None:
             host = user_input[CONF_HOST].strip()
@@ -73,9 +100,8 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
                 assert self._dock
                 await self.async_set_unique_id(self._dock.serial)
                 self._abort_if_unique_id_configured(updates={CONF_HOST: host})
-                return self.async_create_entry(
-                    title=self._title(), data=_entry_data(host, self._dock, self._child)
-                )
+                # The MAC is filled in by the next mDNS announcement
+                return self._create_entry()
             errors["base"] = error
 
         return self.async_show_form(
@@ -94,15 +120,23 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="not_network_dock")
 
         host = discovery_info.host
+        raw_mac = properties.get("id")
+        self._mac = format_mac(raw_mac) if raw_mac else None
+
         if serial := properties.get("sn"):
             await self.async_set_unique_id(serial)
-            self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+            # Known dock: only refresh its address (reloads the entry if it changed)
+            self._abort_if_unique_id_configured(
+                updates=self._address_updates(host, self._mac)
+            )
 
         if await self._probe(host):
             return self.async_abort(reason="cannot_connect")
         assert self._dock
         await self.async_set_unique_id(self._dock.serial)
-        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+        self._abort_if_unique_id_configured(
+            updates=self._address_updates(host, self._mac)
+        )
 
         self.context["title_placeholders"] = {"name": self._title()}
         return await self.async_step_zeroconf_confirm()
@@ -111,13 +145,36 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Ask the user to confirm a discovered dock."""
-        assert self._host and self._dock
         if user_input is not None:
-            return self.async_create_entry(
-                title=self._title(),
-                data=_entry_data(self._host, self._dock, self._child),
-            )
+            return self._create_entry()
         return self.async_show_form(
             step_id="zeroconf_confirm",
             description_placeholders=self._description_placeholders(),
         )
+
+    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> ConfigFlowResult:
+        """A configured dock got a (new) DHCP lease.
+
+        Only registered devices are matched (see manifest), so this never
+        sets up new docks; it just keeps the address of known ones current.
+        """
+        mac = format_mac(discovery_info.macaddress)
+        entry: ConfigEntry | None = next(
+            (e for e in self._async_current_entries() if e.data.get(CONF_MAC) == mac),
+            None,
+        )
+        if entry is None:
+            return self.async_abort(reason="not_network_dock")
+
+        if entry.data.get(CONF_HOST) != discovery_info.ip:
+            _LOGGER.info(
+                "Dock %s moved from %s to %s (DHCP)",
+                entry.unique_id,
+                entry.data.get(CONF_HOST),
+                discovery_info.ip,
+            )
+            self.hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_HOST: discovery_info.ip}
+            )
+            self.hass.config_entries.async_schedule_reload(entry.entry_id)
+        return self.async_abort(reason="already_configured")
