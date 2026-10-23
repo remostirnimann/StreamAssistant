@@ -6,13 +6,12 @@
   editor, templates, actions, troubleshooting), screenshots, `info.md`/README for HACS,
   GitHub releases with version tags, published first as a **beta** (pre-release) to
   collect feedback while development continues.
-- Planning without any dock: allow using the editor (templates) before the first dock
-  is set up.
 
 ## Done
 
 - Dock info page and simple dock automations (night brightness by time window or sun,
   fade out when idle with "first press only wakes") — 0.4.0
+- Planning without any dock: "Only plan (no hardware yet)" entry in the config flow — 0.5.0
 
 ## Later
 

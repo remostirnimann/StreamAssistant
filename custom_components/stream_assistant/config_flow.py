@@ -20,7 +20,15 @@ from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
-from .const import CONF_DECK_PRODUCT_ID, CONF_DECK_SERIAL, CONF_DOCK_SERIAL, DOMAIN
+from .const import (
+    CONF_DECK_PRODUCT_ID,
+    CONF_DECK_SERIAL,
+    CONF_DOCK_SERIAL,
+    CONF_KIND,
+    DOMAIN,
+    KIND_PLANNER,
+    PLANNER_UNIQUE_ID,
+)
 from .protocol import NETWORK_DOCK_DEVICE_TYPE, ChildInfo, CoraError, DockInfo, find_model, probe
 
 _LOGGER = logging.getLogger(__name__)
@@ -92,6 +100,22 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Add a dock, or only enable planning (templates) without hardware."""
+        return self.async_show_menu(step_id="user", menu_options=["dock", "planner"])
+
+    async def async_step_planner(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Entry without hardware: loads the editor so templates can be planned."""
+        await self.async_set_unique_id(PLANNER_UNIQUE_ID)
+        self._abort_if_unique_id_configured()
+        if user_input is not None:
+            return self.async_create_entry(title="Stream Assistant", data={CONF_KIND: KIND_PLANNER})
+        return self.async_show_form(step_id="planner")
+
+    async def async_step_dock(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Manual setup by IP address or hostname."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -105,7 +129,7 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
             errors["base"] = error
 
         return self.async_show_form(
-            step_id="user",
+            step_id="dock",
             data_schema=vol.Schema({vol.Required(CONF_HOST): str}),
             errors=errors,
         )

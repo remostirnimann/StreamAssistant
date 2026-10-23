@@ -2,7 +2,17 @@
   "config": {
     "flow_title": "{name}",
     "step": {
+      "zeroconf_confirm": {
+        "description": "Add the Stream Deck Network Dock at {host}?\n\nAttached deck: {deck}"
+      },
       "user": {
+        "title": "Add Stream Assistant",
+        "menu_options": {
+          "dock": "Add a Stream Deck Network Dock",
+          "planner": "Only plan (no hardware yet)"
+        }
+      },
+      "dock": {
         "description": "Enter the IP address of your Elgato Stream Deck Network Dock. Make sure no other software (Stream Deck app, Companion) is connected to it.",
         "data": {
           "host": "Host"
@@ -11,15 +21,16 @@
           "host": "IP address or hostname of the Network Dock."
         }
       },
-      "zeroconf_confirm": {
-        "description": "Add the Stream Deck Network Dock at {host}?\n\nAttached deck: {deck}"
+      "planner": {
+        "title": "Only plan (no hardware yet)",
+        "description": "Enables the Stream Assistant editor in the sidebar without a dock. Plan templates for your future Stream Decks there and assign them once the hardware is set up. You can keep this entry or remove it later."
       }
     },
     "error": {
       "cannot_connect": "Cannot connect to the dock. Check the address and that no other software is connected to it."
     },
     "abort": {
-      "already_configured": "This dock is already configured.",
+      "already_configured": "Already configured.",
       "cannot_connect": "Cannot connect to the dock.",
       "not_network_dock": "This device is not a Stream Deck Network Dock."
     }

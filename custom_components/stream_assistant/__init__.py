@@ -7,7 +7,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from . import websocket
-from .const import DOMAIN, PLATFORMS
+from .const import CONF_KIND, DOMAIN, KIND_PLANNER, PLATFORMS
 from .device import StreamAssistantConfigEntry, StreamAssistantDevice
 from .panel import async_register_panel
 from .templates import DATA_TEMPLATES, TemplateManager
@@ -25,8 +25,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+def _is_planner(entry: StreamAssistantConfigEntry) -> bool:
+    return entry.data.get(CONF_KIND) == KIND_PLANNER
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: StreamAssistantConfigEntry) -> bool:
     """Set up a dock from a config entry."""
+    if _is_planner(entry):
+        # Nothing to connect to: the entry only makes HA load the editor (async_setup)
+        entry.runtime_data = None  # type: ignore[assignment]
+        return True
     device = StreamAssistantDevice(hass, entry)
     entry.runtime_data = device
     await device.async_start()
@@ -36,6 +44,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: StreamAssistantConfigEnt
 
 async def async_unload_entry(hass: HomeAssistant, entry: StreamAssistantConfigEntry) -> bool:
     """Unload a config entry."""
+    if _is_planner(entry):
+        return True
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         await entry.runtime_data.async_stop()

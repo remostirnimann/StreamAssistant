@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.const import Platform
 
 DOMAIN = "stream_assistant"
-VERSION = "0.4.3"
+VERSION = "0.5.0"
 PANEL_URL = "stream-assistant"
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.NUMBER]
@@ -13,6 +13,11 @@ PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.NU
 CONF_DOCK_SERIAL = "dock_serial"
 CONF_DECK_SERIAL = "deck_serial"
 CONF_DECK_PRODUCT_ID = "deck_product_id"
+
+# A config entry without a dock: only loads the editor for planning templates
+CONF_KIND = "kind"
+KIND_PLANNER = "planner"
+PLANNER_UNIQUE_ID = "planner"
 
 LONG_PRESS_SECONDS = 0.5
 

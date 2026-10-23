@@ -2,7 +2,17 @@
   "config": {
     "flow_title": "{name}",
     "step": {
+      "zeroconf_confirm": {
+        "description": "Stream Deck Network Dock unter {host} hinzufügen?\n\nAngeschlossenes Deck: {deck}"
+      },
       "user": {
+        "title": "Stream Assistant hinzufügen",
+        "menu_options": {
+          "dock": "Stream Deck Network Dock hinzufügen",
+          "planner": "Nur planen (noch ohne Hardware)"
+        }
+      },
+      "dock": {
         "description": "Gib die IP-Adresse deines Elgato Stream Deck Network Dock ein. Es darf keine andere Software (Stream-Deck-App, Companion) damit verbunden sein.",
         "data": {
           "host": "Host"
@@ -11,15 +21,16 @@
           "host": "IP-Adresse oder Hostname des Network Dock."
         }
       },
-      "zeroconf_confirm": {
-        "description": "Stream Deck Network Dock unter {host} hinzufügen?\n\nAngeschlossenes Deck: {deck}"
+      "planner": {
+        "title": "Nur planen (noch ohne Hardware)",
+        "description": "Aktiviert den Stream-Assistant-Editor in der Seitenleiste ohne Dock. Plane dort Vorlagen für deine künftigen Stream Decks und weise sie zu, sobald die Hardware eingerichtet ist. Dieser Eintrag kann bleiben oder später entfernt werden."
       }
     },
     "error": {
       "cannot_connect": "Keine Verbindung zum Dock. Prüfe die Adresse und ob eine andere Software damit verbunden ist."
     },
     "abort": {
-      "already_configured": "Dieses Dock ist bereits eingerichtet.",
+      "already_configured": "Bereits eingerichtet.",
       "cannot_connect": "Keine Verbindung zum Dock.",
       "not_network_dock": "Dieses Gerät ist kein Stream Deck Network Dock."
     }
