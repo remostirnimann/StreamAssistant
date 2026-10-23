@@ -25,9 +25,10 @@ from .const import (
 )
 from .device import StreamAssistantConfigEntry, StreamAssistantDevice
 from .entity import StreamAssistantEntity
-from .render import DEFAULT_BACKGROUND, DEFAULT_TEXT_COLOR, KeyAppearance
 
 PARALLEL_UPDATES = 0
+DEFAULT_BACKGROUND = "#000000"
+DEFAULT_TEXT_COLOR = "#ffffff"
 
 
 def _color(value: Any) -> str:
@@ -39,10 +40,10 @@ def _color(value: Any) -> str:
     from PIL import ImageColor  # noqa: PLC0415
 
     try:
-        ImageColor.getrgb(value)
+        r, g, b = ImageColor.getrgb(value)[:3]
     except ValueError as err:
         raise vol.Invalid(f"Invalid colour: {value}") from err
-    return value
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 SET_KEY_SCHEMA = {
@@ -108,8 +109,8 @@ class StreamDeckKeyEvent(StreamAssistantEntity, EventEntity):
         self.async_write_ha_state()
 
     async def async_set_key(self, **kwargs: Any) -> None:
-        """Service: change what this key shows."""
-        await self.device.async_set_key(self.key, KeyAppearance(**kwargs))
+        """Service: change what this key shows (on the page currently shown)."""
+        await self.device.async_set_key(self.key, kwargs)
 
     async def async_clear_key(self) -> None:
         """Service: blank this key."""

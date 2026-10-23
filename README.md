@@ -8,13 +8,22 @@ no Companion, no extra computer.
 
 ## Features (so far)
 
-- Auto discovery (mDNS `_elg._tcp`) or manual setup by IP, one config entry per dock
+- **Key editor** in the sidebar (*Stream Assistant*, admins only): pages and folders,
+  per key an entity (drives colours and second line), title, MDI icon, on/off colours,
+  and actions for short and long press (toggle/run, open folder/page, back, any action
+  with data). The preview shows the real rendered keys with live states.
+- Keys follow their entity live (light brightness, cover position, sensor values …)
+- Short press runs instantly when no long-press action is set
+- Auto discovery (mDNS `_elg._tcp`) or manual setup by IP, one config entry per dock;
+  address changes are followed via mDNS and DHCP
 - One `event` entity per key: `pressed`, `released`, `short_press`, `long_press`
 - Brightness (`number`), restored after restarts
-- Connection state (`binary_sensor`)
-- Actions `stream_assistant.set_key` (text, colours, font size, image) and
-  `stream_assistant.clear_key`; the layout is stored and repainted on reconnect
+- Connection state of dock and deck (`binary_sensor`)
+- Actions `stream_assistant.set_key` and `stream_assistant.clear_key` (act on the page shown)
 - Automatic reconnect, deck hot-plug (a different deck triggers a reload)
+
+Bundled assets: Material Design Icons font (Pictogrammers, Apache 2.0) and
+Roboto Medium (Apache 2.0), see `assets/`.
 
 Only one client can be connected to a dock at a time. Close the Stream Deck app
 or Companion before using this integration.
@@ -45,6 +54,8 @@ automation:
 
 - `custom_components/stream_assistant/protocol/`: Home Assistant independent dock/deck client
   (Cora TCP framing, Gen2 HID reports). Will move to its own PyPI package.
+- `custom_components/stream_assistant/frontend/panel.js`: the editor panel (plain web component, no build step).
 - `poc/`: Node.js proof of concept used to validate the protocol.
+- `scripts/`: live test against a dock, key render sheet, WebSocket probe for the HA host.
 
 Protocol knowledge based on [node-elgato-stream-deck](https://github.com/Julusian/node-elgato-stream-deck) (MIT).

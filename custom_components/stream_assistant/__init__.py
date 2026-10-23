@@ -3,9 +3,22 @@
 from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.typing import ConfigType
 
-from .const import PLATFORMS
+from . import websocket
+from .const import DOMAIN, PLATFORMS
 from .device import StreamAssistantConfigEntry, StreamAssistantDevice
+from .panel import async_register_panel
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the editor panel and its WebSocket API once."""
+    websocket.async_register(hass)
+    await async_register_panel(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: StreamAssistantConfigEntry) -> bool:
