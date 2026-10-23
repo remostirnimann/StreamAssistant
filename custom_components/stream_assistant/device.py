@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import OrderedDict
 import copy
 import logging
 import secrets
@@ -31,27 +30,29 @@ from .const import (
     signal_key,
     signal_state,
 )
-from .display import back_visual, key_visual
+from .display import page_key_slot, page_key_visual
 from .layout import (
     ACTION_BACK,
     ACTION_NONE,
     ACTION_PAGE,
-    BACK_KEY,
     KEY_SCHEMA,
     ROOT_PAGE_ID,
     SECOND_LINE_NONE,
     empty_layout,
+    merge_into_template,
     migrate_v1,
+    remap_layout,
 )
+from .preview import RenderCache
 from .protocol import CoraError, DeckInfo, DeckModel, DockClient, find_model
-from .render import KeyVisual, render_key, render_preview
+from .render import KeyVisual
+from .templates import DATA_TEMPLATES
 
 _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 2
 SAVE_DELAY = 2
 DEFAULT_BRIGHTNESS = 70
-RENDER_CACHE_SIZE = 256
 BACK_ACTION = {"type": ACTION_BACK}
 NO_ACTION = {"type": ACTION_NONE}
 
@@ -83,7 +84,14 @@ class StreamAssistantDevice:
         # The model is fixed per config entry so the key entities exist even while offline
         self.model: DeckModel | None = find_model(product_id) if product_id else None
         self.brightness = DEFAULT_BRIGHTNESS
+        self.templates = hass.data[DATA_TEMPLATES]
+        # What the deck shows: the own layout, or the linked template's (fitted to this model)
         self.layout: dict[str, Any] = empty_layout()
+        self._own_layout: dict[str, Any] = empty_layout()
+        self.template_id: str | None = None
+        # Keys of the template that do not fit this deck's grid
+        self.template_dropped = 0
+        self._unsub_template: CALLBACK_TYPE | None = None
         # Bumped on every change; the editor sends it back to detect stale saves.
         # The random prefix keeps revisions from before a restart from matching.
         self._revision_prefix = secrets.token_hex(4)
@@ -96,7 +104,7 @@ class StreamAssistantDevice:
         self._unsub_states: CALLBACK_TYPE | None = None
         # What each key should show; a finished render is only sent if it still matches
         self._wanted: dict[int, KeyVisual] = {}
-        self._render_cache: OrderedDict[tuple[int, KeyVisual], bytes] = OrderedDict()
+        self._renderer = RenderCache(hass)
         self._dock_device_id: str | None = None
 
     @property
@@ -154,7 +162,10 @@ class StreamAssistantDevice:
     async def async_start(self) -> None:
         """Load the layout and start connecting."""
         if stored := await self._store.async_load():
-            self.layout = stored
+            self._own_layout = {"pages": stored["pages"]}
+            if (template_id := stored.get("template_id")) and self.templates.get(template_id):
+                self._link(template_id)
+        self._update_effective_layout()
 
         dev_reg = dr.async_get(self.hass)
         dock = dev_reg.async_get_or_create(config_entry_id=self.entry.entry_id, **self.dock_device_info)
@@ -173,8 +184,14 @@ class StreamAssistantDevice:
         if self._unsub_states:
             self._unsub_states()
             self._unsub_states = None
+        if self._unsub_template:
+            self._unsub_template()
+            self._unsub_template = None
         await self.client.stop()
-        await self._store.async_save(self.layout)
+        await self._store.async_save(self._data_to_store())
+
+    def _data_to_store(self) -> dict[str, Any]:
+        return {**self._own_layout, "template_id": self.template_id}
 
     # Layout
 
@@ -182,15 +199,87 @@ class StreamAssistantDevice:
         """Return a page of the layout."""
         return next((p for p in self.layout["pages"] if p["id"] == page_id), None)
 
-    async def async_set_layout(self, layout: dict[str, Any]) -> None:
-        """Replace the whole layout (already validated) and show it."""
-        self.layout = layout
+    def _update_effective_layout(self) -> None:
+        template = self.templates.get(self.template_id) if self.template_id else None
+        template_model = self.templates.model(self.template_id) if template else None
+        if template and template_model and self.model:
+            self.layout, self.template_dropped = remap_layout(
+                template["layout"], template_model.cols, self.model.cols, self.model.rows
+            )
+        elif template:
+            self.layout, self.template_dropped = copy.deepcopy(template["layout"]), 0
+        else:
+            self.layout, self.template_dropped = self._own_layout, 0
+
+    @callback
+    def _refresh(self) -> None:
+        """Show the (changed) layout on the deck."""
         self._revision_counter += 1
-        self._store.async_delay_save(lambda: self.layout, SAVE_DELAY)
         if self.page(self.current_page) is None:
             self.current_page = ROOT_PAGE_ID
         self._track_page_entities()
         self._schedule_repaint()
+        async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
+
+    async def async_set_layout(self, layout: dict[str, Any]) -> None:
+        """Replace the whole layout (already validated for this deck) and show it.
+
+        A linked deck writes into its template, which updates every linked deck.
+        """
+        if self.template_id and (template_model := self.templates.model(self.template_id)):
+            if self.model and (template_model.cols, template_model.rows) != (self.model.cols, self.model.rows):
+                layout = merge_into_template(
+                    layout,
+                    self.model.cols,
+                    self.model.rows,
+                    self.templates.get(self.template_id)["layout"],
+                    template_model.cols,
+                    template_model.rows,
+                )
+            await self.templates.async_set_layout(self.template_id, layout)
+            return
+        self._own_layout = layout
+        self._store.async_delay_save(self._data_to_store, SAVE_DELAY)
+        self._update_effective_layout()
+        self._refresh()
+
+    @callback
+    def _link(self, template_id: str) -> None:
+        if self._unsub_template:
+            self._unsub_template()
+        self.template_id = template_id
+        self._unsub_template = self.templates.async_subscribe(template_id, self._on_template_change)
+
+    @callback
+    def _on_template_change(self, template: dict[str, Any]) -> None:
+        if template.get("deleted"):
+            # Keep showing the same keys, now as our own layout
+            self._own_layout = copy.deepcopy(self.layout)
+            self.template_id = None
+            self._unsub_template = None
+            self._store.async_delay_save(self._data_to_store, SAVE_DELAY)
+        self._update_effective_layout()
+        self._refresh()
+
+    async def async_link_template(self, template_id: str) -> None:
+        """Show (and edit) a template's layout on this deck."""
+        self._link(template_id)
+        self._store.async_delay_save(self._data_to_store, SAVE_DELAY)
+        self._update_effective_layout()
+        self._refresh()
+
+    async def async_detach_template(self) -> None:
+        """Stop following the template, keeping its current layout as a copy."""
+        if not self.template_id:
+            return
+        self._own_layout = copy.deepcopy(self.layout)
+        if self._unsub_template:
+            self._unsub_template()
+            self._unsub_template = None
+        self.template_id = None
+        self._store.async_delay_save(self._data_to_store, SAVE_DELAY)
+        self._update_effective_layout()
+        self._refresh()
 
     async def async_show_page(self, page_id: str) -> None:
         """Switch the deck to another page."""
@@ -202,21 +291,11 @@ class StreamAssistantDevice:
         self._schedule_repaint()
         async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
 
-    def _key_slot(self, page: dict[str, Any], index: int) -> tuple[dict[str, Any] | None, bool]:
-        """Return (key config, is_back_key) for a key of a page."""
-        if page.get("parent") and index == BACK_KEY:
-            return None, True
-        return page["keys"].get(str(index)), False
-
-    def _visual(self, page: dict[str, Any], index: int) -> KeyVisual:
-        key, is_back = self._key_slot(page, index)
-        return back_visual(self.hass) if is_back else key_visual(self.hass, key)
-
     def _actions(self, index: int) -> tuple[dict[str, Any], dict[str, Any]]:
         page = self.page(self.current_page)
         if page is None:
             return NO_ACTION, NO_ACTION
-        key, is_back = self._key_slot(page, index)
+        key, is_back = page_key_slot(page, index)
         if is_back:
             return BACK_ACTION, NO_ACTION
         if not key:
@@ -258,21 +337,6 @@ class StreamAssistantDevice:
             self.hass, self._async_paint(list(indices)), "stream_assistant paint"
         )
 
-    async def _async_render(self, size: int, visual: KeyVisual, *, upright: bool) -> bytes:
-        assert self.model
-        cache_key = (size if upright else -size, visual)
-        if (jpeg := self._render_cache.get(cache_key)) is not None:
-            self._render_cache.move_to_end(cache_key)
-            return jpeg
-        if upright:
-            jpeg = await self.hass.async_add_executor_job(render_preview, size, visual)
-        else:
-            jpeg = await self.hass.async_add_executor_job(render_key, self.model, visual)
-        self._render_cache[cache_key] = jpeg
-        if len(self._render_cache) > RENDER_CACHE_SIZE:
-            self._render_cache.popitem(last=False)
-        return jpeg
-
     async def _async_paint(self, keys: list[int]) -> None:
         if not self.model:
             return
@@ -282,9 +346,9 @@ class StreamAssistantDevice:
         for index in keys:
             if index >= self.model.key_count:
                 continue
-            visual = self._visual(page, index)
+            visual = page_key_visual(self.hass, page, index)
             self._wanted[index] = visual
-            jpeg = await self._async_render(self.model.key_size, visual, upright=False)
+            jpeg = await self._renderer.async_render(self.model, visual, upright=False)
             if self._wanted.get(index) != visual or not self.deck_connected:
                 continue
             try:
@@ -296,10 +360,7 @@ class StreamAssistantDevice:
     async def async_render_page_preview(self, page: dict[str, Any]) -> list[bytes]:
         """Upright JPEGs of every key of a (possibly unsaved) page, for the editor."""
         assert self.model
-        return [
-            await self._async_render(self.model.key_size, self._visual(page, index), upright=True)
-            for index in range(self.model.key_count)
-        ]
+        return await self._renderer.async_page_preview(self.model, page)
 
     # Connection callbacks (event loop)
 
@@ -407,7 +468,7 @@ class StreamAssistantDevice:
         page = page or self.page(self.current_page)
         if page is None:
             return
-        key, is_back = self._key_slot(page, index)
+        key, is_back = page_key_slot(page, index)
         if is_back:
             short, long = BACK_ACTION, NO_ACTION
         elif key:

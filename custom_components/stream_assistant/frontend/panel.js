@@ -102,6 +102,32 @@ const T = {
     test: "Ausführen",
     testHint: "Wie ein echter Tastendruck: löst die Events und die Aktion aus (auch ungespeichert)",
     tested: "Ausgeführt",
+    devices: "Geräte",
+    templatesGroup: "Vorlagen",
+    newTemplate: "+ Vorlage",
+    templateInfo: "Vorlage für {model}",
+    usedBy: "verwendet von",
+    notUsed: "noch keinem Deck",
+    deleteTemplate: "Vorlage löschen",
+    droppedKeys: "{n} Tasten der Vorlage passen nicht auf dieses Deck.",
+    linkedTo: "Verknüpft mit Vorlage «{name}». Änderungen gelten für alle verknüpften Decks.",
+    openTemplate: "Vorlage öffnen",
+    detach: "Loskoppeln",
+    ownLayout: "Eigenes Layout",
+    assignTemplate: "Vorlage zuweisen …",
+    saveAsTemplate: "Als Vorlage speichern",
+    virtual: "Vorlage (ohne Hardware)",
+    leaveUnsaved: "Es gibt ungespeicherte Änderungen. Trotzdem wechseln?",
+    templateHelp: "Eine Vorlage ist ein Layout ohne Hardware. Du kannst sie planen, bevor das Deck da ist, und später einem oder mehreren Decks zuweisen.",
+    templateName: "Name der Vorlage",
+    templateNamePlaceholder: "z. B. Wohnzimmer",
+    model: "Modell",
+    cancel: "Abbrechen",
+    create: "Erstellen",
+    savedAsTemplate: "Als Vorlage gespeichert und verknüpft.",
+    confirmLink: "Das Deck zeigt danach die Vorlage. Sein bisheriges Layout wird ersetzt. Weiter?",
+    confirmDetach: "Das Deck bekommt eine eigene Kopie der Vorlage und folgt ihr nicht mehr. Weiter?",
+    confirmDeleteTemplate: "Vorlage löschen? Verknüpfte Decks behalten eine Kopie des Layouts.",
   },
   en: {
     title: "Stream Assistant",
@@ -186,6 +212,32 @@ const T = {
     test: "Run",
     testHint: "Like a real key press: fires the events and the action (also unsaved)",
     tested: "Ran",
+    devices: "Devices",
+    templatesGroup: "Templates",
+    newTemplate: "+ Template",
+    templateInfo: "Template for {model}",
+    usedBy: "used by",
+    notUsed: "no deck yet",
+    deleteTemplate: "Delete template",
+    droppedKeys: "{n} keys of the template do not fit this deck.",
+    linkedTo: "Linked to template '{name}'. Changes apply to all linked decks.",
+    openTemplate: "Open template",
+    detach: "Detach",
+    ownLayout: "Own layout",
+    assignTemplate: "Assign template …",
+    saveAsTemplate: "Save as template",
+    virtual: "Template (no hardware)",
+    leaveUnsaved: "There are unsaved changes. Switch anyway?",
+    templateHelp: "A template is a layout without hardware. Plan it before the deck arrives and assign it to one or more decks later.",
+    templateName: "Template name",
+    templateNamePlaceholder: "e.g. Living room",
+    model: "Model",
+    cancel: "Cancel",
+    create: "Create",
+    savedAsTemplate: "Saved as template and linked.",
+    confirmLink: "The deck will show the template, replacing its current layout. Continue?",
+    confirmDetach: "The deck gets its own copy of the template and stops following it. Continue?",
+    confirmDeleteTemplate: "Delete the template? Linked decks keep a copy of the layout.",
   },
 };
 
@@ -246,6 +298,9 @@ class StreamAssistantPanel extends HTMLElement {
     this._narrow = false;
     this._started = false;
     this.entries = [];
+    this.templates = [];
+    this.models = [];
+    this.targetKind = "entry";
     this.entryId = null;
     this.info = null;
     this.saved = null;
@@ -292,20 +347,46 @@ class StreamAssistantPanel extends HTMLElement {
   async _init() {
     this._renderShell();
     try {
-      [this.entries, this.icons] = await Promise.all([
+      let lists;
+      [lists, this.icons, this.models] = await Promise.all([
         this._hass.callWS({ type: "stream_assistant/entries" }),
         this._hass.callWS({ type: "stream_assistant/icons" }),
+        this._hass.callWS({ type: "stream_assistant/models" }),
       ]);
+      this.entries = lists.entries;
+      this.templates = lists.templates;
     } catch (err) {
       this.message = String(err?.message || err);
     }
-    if (this.entries.length) await this._loadEntry(this.entries[0].entry_id);
+    if (this.entries.length) await this._loadTarget("entry", this.entries[0].entry_id);
+    else if (this.templates.length) await this._loadTarget("template", this.templates[0].template_id);
     else this._renderAll();
   }
 
-  async _loadEntry(entryId) {
-    this.entryId = entryId;
-    const result = await this._hass.callWS({ type: "stream_assistant/layout/get", entry_id: entryId });
+  async _refreshLists() {
+    const lists = await this._hass.callWS({ type: "stream_assistant/entries" });
+    this.entries = lists.entries;
+    this.templates = lists.templates;
+  }
+
+  // Parameters that address the current dock or template in WebSocket calls
+  get _targetParams() {
+    return this.targetKind === "template" ? { template_id: this.entryId } : { entry_id: this.entryId };
+  }
+
+  get isTemplate() {
+    return this.targetKind === "template";
+  }
+
+  // Kept for the existing callers: a dock is the default target kind
+  async _loadEntry(id) {
+    return this._loadTarget(this.targetKind || "entry", id);
+  }
+
+  async _loadTarget(kind, id) {
+    this.targetKind = kind;
+    this.entryId = id;
+    const result = await this._hass.callWS({ type: "stream_assistant/layout/get", ...this._targetParams });
     this.info = result;
     this.revision = result.revision;
     this.saved = result.layout;
@@ -353,7 +434,7 @@ class StreamAssistantPanel extends HTMLElement {
     try {
       const result = await this._hass.callWS({
         type: "stream_assistant/preview",
-        entry_id: this.entryId,
+        ...this._targetParams,
         page: this._cleanPage(this.page),
       });
       this.images = result.images;
@@ -432,7 +513,7 @@ class StreamAssistantPanel extends HTMLElement {
     try {
       const result = await this._hass.callWS({
         type: "stream_assistant/layout/save",
-        entry_id: this.entryId,
+        ...this._targetParams,
         layout,
         revision: this.revision,
       });
@@ -470,6 +551,102 @@ class StreamAssistantPanel extends HTMLElement {
     });
     this.info.current_page = result.current_page;
     this._renderTabs();
+  }
+
+  // Templates
+
+  _confirmLeave() {
+    return !this.dirty || confirm(this.t.leaveUnsaved);
+  }
+
+  async _afterTemplateChange(kind, id) {
+    await this._refreshLists();
+    await this._loadTarget(kind, id);
+  }
+
+  _openTemplateDialog() {
+    const t = this.t;
+    this._picker = { kind: "template" };
+    const dlg = this.shadowRoot.getElementById("picker");
+    const models = this.models
+      .map((m) => `<option value="${esc(m.id)}">${esc(m.name)} (${m.cols} × ${m.rows})</option>`)
+      .join("");
+    dlg.innerHTML = `
+      <div class="dlg-head"><h2>${t.newTemplate}</h2><button type="button" class="icon-btn" data-role="pk-close" aria-label="${esc(t.close)}"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      <div class="dlg-body">
+        <p class="help">${t.templateHelp}</p>
+        <label>${t.templateName}<input id="tpl-name" maxlength="60" placeholder="${esc(t.templateNamePlaceholder)}"></label>
+        <label>${t.model}<select id="tpl-model">${models}</select></label>
+      </div>
+      <div class="dlg-foot">
+        <button type="button" class="btn" data-role="pk-close">${t.cancel}</button>
+        <button type="button" class="btn primary" data-role="tpl-create">${t.create}</button>
+      </div>`;
+    dlg.showModal();
+    this.shadowRoot.getElementById("tpl-name").focus();
+  }
+
+  async _createTemplate() {
+    const name = this.shadowRoot.getElementById("tpl-name").value.trim();
+    const model = this.shadowRoot.getElementById("tpl-model").value;
+    if (!name) return;
+    if (!this._confirmLeave()) return;
+    this._closePicker();
+    const result = await this._hass.callWS({ type: "stream_assistant/template/create", name, model });
+    await this._afterTemplateChange("template", result.template_id);
+  }
+
+  async _saveAsTemplate() {
+    const t = this.t;
+    if (this.dirty) await this._save();
+    const name = prompt(t.templateName, this.info.title);
+    if (!name) return;
+    await this._hass.callWS({ type: "stream_assistant/template/create", name: name.slice(0, 60), from_entry_id: this.entryId });
+    await this._afterTemplateChange("entry", this.entryId);
+    this.message = t.savedAsTemplate;
+    this._renderStatus();
+  }
+
+  async _link(templateId) {
+    const t = this.t;
+    if (!templateId || !this._confirmLeave() || !confirm(t.confirmLink)) {
+      this._renderLinkBar();
+      return;
+    }
+    const result = await this._hass.callWS({ type: "stream_assistant/link", entry_id: this.entryId, template_id: templateId });
+    await this._afterTemplateChange("entry", this.entryId);
+    if (result.dropped) {
+      this.message = t.droppedKeys.replace("{n}", result.dropped);
+      this._renderStatus();
+    }
+  }
+
+  async _detach() {
+    if (!this._confirmLeave() || !confirm(this.t.confirmDetach)) return;
+    await this._hass.callWS({ type: "stream_assistant/detach", entry_id: this.entryId });
+    await this._afterTemplateChange("entry", this.entryId);
+  }
+
+  async _renameTemplate() {
+    const name = prompt(this.t.rename, this.info.title);
+    if (!name) return;
+    await this._hass.callWS({ type: "stream_assistant/template/rename", template_id: this.entryId, name: name.slice(0, 60) });
+    await this._refreshLists();
+    this.info.title = name.slice(0, 60);
+    this._renderAll();
+  }
+
+  async _deleteTemplate() {
+    if (!confirm(this.t.confirmDeleteTemplate)) return;
+    await this._hass.callWS({ type: "stream_assistant/template/delete", template_id: this.entryId });
+    await this._refreshLists();
+    this.dirty = false;
+    if (this.entries.length) await this._loadTarget("entry", this.entries[0].entry_id);
+    else if (this.templates.length) await this._loadTarget("template", this.templates[0].template_id);
+    else {
+      this.info = null;
+      this._renderAll();
+    }
   }
 
   _addFolder() {
@@ -542,24 +719,35 @@ class StreamAssistantPanel extends HTMLElement {
   _renderAll() {
     const t = this.t;
     const content = this.shadowRoot.getElementById("content");
-    if (!this.entries.length) {
-      content.innerHTML = `<div class="card empty">${esc(this.message || t.noEntries)}</div>`;
+    if (!this.entries.length && !this.templates.length) {
+      content.innerHTML = `<div class="card empty">${esc(this.message || t.noEntries)}
+        <p><button class="btn" data-role="new-template">${t.newTemplate}</button></p></div>`;
       return;
     }
-    const entryOptions = this.entries
-      .map((e) => `<option value="${esc(e.entry_id)}" ${e.entry_id === this.entryId ? "selected" : ""}>${esc(e.title)}</option>`)
+    const option = (kind, id, title) => {
+      const selected = kind === this.targetKind && id === this.entryId;
+      return `<option value="${kind}:${esc(id)}" ${selected ? "selected" : ""}>${esc(title)}</option>`;
+    };
+    const entryOptions = this.entries.map((e) => option("entry", e.entry_id, e.title)).join("");
+    const templateOptions = this.templates
+      .map((tpl) => option("template", tpl.template_id, `${tpl.title} (${tpl.model?.name || "?"})`))
       .join("");
     content.innerHTML = `
       <div class="topbar">
         <label class="inline">${t.device}
-          <select data-role="entry">${entryOptions}</select>
+          <select data-role="entry">
+            ${entryOptions ? `<optgroup label="${esc(t.devices)}">${entryOptions}</optgroup>` : ""}
+            ${templateOptions ? `<optgroup label="${esc(t.templatesGroup)}">${templateOptions}</optgroup>` : ""}
+          </select>
         </label>
+        <button class="btn small" data-role="new-template">${t.newTemplate}</button>
         <span id="status-chip"></span>
         <span class="spacer"></span>
         <span id="status-text" class="status-text"></span>
         <button class="btn" data-role="discard">${t.discard}</button>
         <button class="btn primary" data-role="save">${t.save}</button>
       </div>
+      <div class="linkbar card" id="linkbar"></div>
       <div class="layout">
         <section class="left">
           <div class="tabs" id="tabs"></div>
@@ -571,9 +759,45 @@ class StreamAssistantPanel extends HTMLElement {
         <aside class="card right" id="form"></aside>
       </div>`;
     this._renderStatus();
+    this._renderLinkBar();
     this._renderTabs();
     this._renderDeck();
     this._renderForm();
+  }
+
+  _renderLinkBar() {
+    const t = this.t;
+    const bar = this.shadowRoot.getElementById("linkbar");
+    if (!bar || !this.info) return;
+    if (this.isTemplate) {
+      const used = this.info.linked?.length ? this.info.linked.join(", ") : t.notUsed;
+      bar.innerHTML = `<ha-icon icon="mdi:file-document-outline"></ha-icon>
+        <span class="link-text">${esc(t.templateInfo.replace("{model}", this.info.model?.name || "?"))} · ${esc(t.usedBy)}: ${esc(used)}</span>
+        <span class="spacer"></span>
+        <button class="btn small" data-role="rename-template">${t.rename}</button>
+        <button class="btn small danger" data-role="delete-template">${t.deleteTemplate}</button>`;
+      return;
+    }
+    if (this.info.template_id) {
+      const tpl = this.templates.find((x) => x.template_id === this.info.template_id);
+      const dropped = this.info.template_dropped
+        ? `<span class="warn-text">${esc(t.droppedKeys.replace("{n}", this.info.template_dropped))}</span>`
+        : "";
+      bar.innerHTML = `<ha-icon icon="mdi:link-variant"></ha-icon>
+        <span class="link-text">${esc(t.linkedTo.replace("{name}", tpl?.title || "?"))} ${dropped}</span>
+        <span class="spacer"></span>
+        <button class="btn small" data-role="open-template">${t.openTemplate}</button>
+        <button class="btn small" data-role="detach">${t.detach}</button>`;
+      return;
+    }
+    const options = this.templates
+      .map((tpl) => `<option value="${esc(tpl.template_id)}">${esc(tpl.title)} (${esc(tpl.model?.name || "?")})</option>`)
+      .join("");
+    bar.innerHTML = `<ha-icon icon="mdi:link-variant-off"></ha-icon>
+      <span class="link-text">${t.ownLayout}</span>
+      <span class="spacer"></span>
+      ${options ? `<select data-role="link" aria-label="${esc(t.assignTemplate)}"><option value="">${t.assignTemplate}</option>${options}</select>` : ""}
+      <button class="btn small" data-role="save-as-template">${t.saveAsTemplate}</button>`;
   }
 
   _renderStatus() {
@@ -581,9 +805,14 @@ class StreamAssistantPanel extends HTMLElement {
     const chip = this.shadowRoot.getElementById("status-chip");
     const text = this.shadowRoot.getElementById("status-text");
     if (!chip || !this.info) return;
-    const ok = this.info.deck_connected;
-    chip.className = `chip ${ok ? "ok" : "bad"}`;
-    chip.textContent = ok ? t.connected : t.disconnected;
+    if (this.isTemplate) {
+      chip.className = "chip neutral";
+      chip.textContent = t.virtual;
+    } else {
+      const ok = this.info.deck_connected;
+      chip.className = `chip ${ok ? "ok" : "bad"}`;
+      chip.textContent = ok ? t.connected : t.disconnected;
+    }
     text.textContent = this.message || (this.dirty ? t.unsaved : "");
     text.classList.toggle("warn", this.dirty);
   }
@@ -605,7 +834,7 @@ class StreamAssistantPanel extends HTMLElement {
     const pages = this.draft.pages
       .map((p) => {
         const active = p.id === this.pageId;
-        const onDeck = p.id === this.info?.current_page;
+        const onDeck = !this.isTemplate && p.id === this.info?.current_page;
         const name = p.id === ROOT_PAGE ? t.root : p.name;
         const icon = p.parent ? `<ha-icon icon="mdi:folder-outline"></ha-icon>` : `<ha-icon icon="mdi:home-outline"></ha-icon>`;
         return `<button class="tab ${active ? "active" : ""}" data-role="page" data-page="${esc(p.id)}" style="--depth:${this._pageDepth(p)}">
@@ -618,7 +847,7 @@ class StreamAssistantPanel extends HTMLElement {
       <button class="tab add" data-role="add-folder">${t.newFolder}</button>
       <span class="spacer"></span>
       ${isFolder ? `<button class="btn small" data-role="rename">${t.rename}</button><button class="btn small danger" data-role="delete-page">${t.deletePage}</button>` : ""}
-      <button class="btn small" data-role="show">${this.pageId === this.info?.current_page ? t.shownOnDeck : t.showOnDeck}</button>`;
+      ${this.isTemplate ? "" : `<button class="btn small" data-role="show">${this.pageId === this.info?.current_page ? t.shownOnDeck : t.showOnDeck}</button>`}`;
   }
 
   _renderDeck() {
@@ -692,17 +921,19 @@ class StreamAssistantPanel extends HTMLElement {
     try {
       await this._hass.callWS({
         type: "stream_assistant/press",
-        entry_id: this.entryId,
+        ...this._targetParams,
         key: this.selected,
         long,
         page: this._cleanPage(this.page),
       });
       this.message = `${t.tested}: ${t.key} ${this.selected + 1} · ${long ? t.long : t.short}`;
-      // A folder/back action switches the deck page
-      const entries = await this._hass.callWS({ type: "stream_assistant/entries" });
-      const current = entries.find((e) => e.entry_id === this.entryId);
-      if (current) this.info.current_page = current.current_page;
-      this._renderTabs();
+      if (!this.isTemplate) {
+        // A folder/back action switches the deck page
+        await this._refreshLists();
+        const current = this.entries.find((e) => e.entry_id === this.entryId);
+        if (current) this.info.current_page = current.current_page;
+        this._renderTabs();
+      }
     } catch (err) {
       this.message = String(err?.message || err);
     }
@@ -1011,6 +1242,20 @@ class StreamAssistantPanel extends HTMLElement {
     const role = target.dataset.role;
     if (role === "test") {
       this._test(target.dataset.long === "1");
+    } else if (role === "new-template") {
+      this._openTemplateDialog();
+    } else if (role === "tpl-create") {
+      this._createTemplate();
+    } else if (role === "save-as-template") {
+      this._saveAsTemplate();
+    } else if (role === "open-template") {
+      if (this._confirmLeave()) this._loadTarget("template", this.info.template_id);
+    } else if (role === "detach") {
+      this._detach();
+    } else if (role === "rename-template") {
+      this._renameTemplate();
+    } else if (role === "delete-template") {
+      this._deleteTemplate();
     } else if (role === "pick-entity") {
       this._openEntityPicker(target.dataset.target);
     } else if (role === "pick-icon") {
@@ -1113,7 +1358,11 @@ class StreamAssistantPanel extends HTMLElement {
       return;
     }
     if (el.dataset.role === "entry") {
-      this._loadEntry(el.value);
+      const [kind, ...rest] = el.value.split(":");
+      if (this._confirmLeave()) this._loadTarget(kind, rest.join(":"));
+      else this._renderAll();
+    } else if (el.dataset.role === "link") {
+      this._link(el.value);
     } else if (el.dataset.role === "auto-text") {
       const key = this._ensureKey(this.selected);
       key.text_color = el.checked ? null : "#ffffff";
@@ -1191,6 +1440,13 @@ const STYLE = `
   .icon-input { display: flex; align-items: center; gap: 8px; }
   .color-auto { display: flex; align-items: center; gap: 8px; }
   .form-foot { display: flex; justify-content: flex-end; margin-top: 20px; }
+  .linkbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; margin-bottom: 16px; font-size: 14px; }
+  .linkbar ha-icon { color: var(--secondary-text-color); }
+  .linkbar select { width: auto; }
+  .link-text { min-width: 0; }
+  .warn-text { color: var(--warning-color, #e65100); margin-left: 6px; }
+  .chip.neutral { background: var(--secondary-background-color, rgba(0,0,0,0.06)); color: var(--secondary-text-color); }
+  .dlg-body { display: flex; flex-direction: column; gap: 12px; padding: 8px 24px 16px; }
   .action-row { display: flex; gap: 8px; align-items: center; }
   .action-row select { flex: 1 1 auto; min-width: 0; }
   .btn.test { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; height: 40px; }

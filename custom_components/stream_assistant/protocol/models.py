@@ -24,6 +24,8 @@ class DeckModel:
     # Offset of the first key state in a button input report
     key_data_offset: int = 3
     tested: bool = False
+    # Stable id used by templates (planned decks without hardware)
+    model_id: str = ""
 
     @property
     def key_count(self) -> int:
@@ -54,9 +56,9 @@ class DeckModel:
 
 
 MODELS: tuple[DeckModel, ...] = (
-    DeckModel("Stream Deck MK.2", (0x0080, 0x00A5, 0x00B9), 5, 3, 72, tested=True),
-    DeckModel("Stream Deck Original v2", (0x006D,), 5, 3, 72),
-    DeckModel("Stream Deck XL", (0x006C, 0x008F), 8, 4, 96),
+    DeckModel("Stream Deck MK.2", (0x0080, 0x00A5, 0x00B9), 5, 3, 72, tested=True, model_id="mk2"),
+    DeckModel("Stream Deck Original v2", (0x006D,), 5, 3, 72, model_id="original_v2"),
+    DeckModel("Stream Deck XL", (0x006C, 0x008F), 8, 4, 96, model_id="xl"),
 )
 
 
@@ -66,6 +68,11 @@ def find_model(product_id: int) -> DeckModel | None:
         if product_id in model.product_ids:
             return model
     return None
+
+
+def find_model_by_id(model_id: str) -> DeckModel | None:
+    """Return the model for a model id (see DeckModel.model_id)."""
+    return next((model for model in MODELS if model.model_id == model_id), None)
 
 
 def brightness_report(percent: int) -> bytes:

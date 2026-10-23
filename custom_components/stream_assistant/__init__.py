@@ -10,12 +10,16 @@ from . import websocket
 from .const import DOMAIN, PLATFORMS
 from .device import StreamAssistantConfigEntry, StreamAssistantDevice
 from .panel import async_register_panel
+from .templates import DATA_TEMPLATES, TemplateManager
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the editor panel and its WebSocket API once."""
+    """Load templates, register the editor panel and its WebSocket API once."""
+    templates = TemplateManager(hass)
+    await templates.async_load()
+    hass.data[DATA_TEMPLATES] = templates
     websocket.async_register(hass)
     await async_register_panel(hass)
     return True

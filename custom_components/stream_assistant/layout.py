@@ -162,6 +162,63 @@ def migrate_v1(old: dict[str, Any]) -> dict[str, Any]:
     return layout
 
 
+def remap_layout(
+    layout: dict[str, Any], from_cols: int, to_cols: int, to_rows: int
+) -> tuple[dict[str, Any], int]:
+    """Move keys to another grid size, keeping row and column.
+
+    Returns the new layout and how many keys did not fit.
+    """
+    result = copy.deepcopy(layout)
+    if from_cols == to_cols:
+        dropped = 0
+        for page in result["pages"]:
+            for index in [i for i in page["keys"] if int(i) >= to_cols * to_rows]:
+                del page["keys"][index]
+                dropped += 1
+        return result, dropped
+    dropped = 0
+    for page in result["pages"]:
+        moved: dict[str, Any] = {}
+        for index, key in page["keys"].items():
+            row, col = divmod(int(index), from_cols)
+            if row < to_rows and col < to_cols:
+                moved[str(row * to_cols + col)] = key
+            else:
+                dropped += 1
+        page["keys"] = moved
+    return result, dropped
+
+
+def merge_into_template(
+    deck_layout: dict[str, Any],
+    deck_cols: int,
+    deck_rows: int,
+    template_layout: dict[str, Any],
+    template_cols: int,
+    template_rows: int,
+) -> dict[str, Any]:
+    """Write a smaller (or differently shaped) deck's edit back into its template.
+
+    Only the part of the template the deck can show is replaced; keys
+    outside the deck's grid are kept, so editing on a small deck never
+    deletes keys of a bigger template.
+    """
+    mapped, _ = remap_layout(deck_layout, deck_cols, template_cols, template_rows)
+    old_pages = {page["id"]: page for page in template_layout["pages"]}
+    pages = []
+    for page in mapped["pages"]:
+        keys = {}
+        if (old := old_pages.get(page["id"])) is not None:
+            for index, key in old["keys"].items():
+                row, col = divmod(int(index), template_cols)
+                if row >= deck_rows or col >= deck_cols:
+                    keys[index] = copy.deepcopy(key)
+        keys.update(page["keys"])
+        pages.append({**page, "keys": keys})
+    return {"pages": pages}
+
+
 def default_key() -> dict[str, Any]:
     """A blank key with all defaults filled in."""
     return KEY_SCHEMA({})

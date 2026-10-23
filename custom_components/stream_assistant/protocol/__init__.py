@@ -2,7 +2,7 @@
 
 from .cora import CoraError
 from .dock import ChildInfo, DeckInfo, DockClient, DockInfo, probe
-from .models import MODELS, NETWORK_DOCK_DEVICE_TYPE, DeckModel, find_model
+from .models import MODELS, NETWORK_DOCK_DEVICE_TYPE, DeckModel, find_model, find_model_by_id
 
 __all__ = [
     "MODELS",
@@ -14,5 +14,6 @@ __all__ = [
     "DockClient",
     "DockInfo",
     "find_model",
+    "find_model_by_id",
     "probe",
 ]

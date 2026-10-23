@@ -7,7 +7,7 @@ from typing import Any
 from homeassistant.const import ATTR_FRIENDLY_NAME, ATTR_UNIT_OF_MEASUREMENT, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, State
 
-from .layout import SECOND_LINE_NONE, SECOND_LINE_STATE, SECOND_LINE_TEXT
+from .layout import BACK_KEY, SECOND_LINE_NONE, SECOND_LINE_STATE, SECOND_LINE_TEXT
 from .render import KeyVisual
 
 OFFLINE_BG = "#3a3a3a"
@@ -141,6 +141,19 @@ def format_state(hass: HomeAssistant, state: State) -> str:
             shown = shown.replace(".", ",")
         return f"{shown} {unit}"
     return text
+
+
+def page_key_slot(page: dict[str, Any], index: int) -> tuple[dict[str, Any] | None, bool]:
+    """Return (key config, is_back_key) for a key of a page."""
+    if page.get("parent") and index == BACK_KEY:
+        return None, True
+    return page["keys"].get(str(index)), False
+
+
+def page_key_visual(hass: HomeAssistant, page: dict[str, Any], index: int) -> KeyVisual:
+    """What a key of a page shows right now."""
+    key, is_back = page_key_slot(page, index)
+    return back_visual(hass) if is_back else key_visual(hass, key)
 
 
 def back_visual(hass: HomeAssistant) -> KeyVisual:

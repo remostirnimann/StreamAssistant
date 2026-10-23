@@ -12,6 +12,10 @@ no Companion, no extra computer.
   per key an entity (drives colours and second line), title, MDI icon, on/off colours,
   and actions for short and long press (toggle/run, open folder/page, back, any action
   with data). The preview shows the real rendered keys with live states.
+- **Templates / planned decks**: layouts with a model but no hardware, designed in the same
+  editor with live preview. Decks can be linked to a template (shared layout, also across
+  different sizes by row/column) or detached into their own copy.
+- **Run** buttons simulate a key press (events + action), also for unsaved edits
 - Keys follow their entity live (light brightness, cover position, sensor values …)
 - Short press runs instantly when no long-press action is set
 - Auto discovery (mDNS `_elg._tcp`) or manual setup by IP, one config entry per dock;
