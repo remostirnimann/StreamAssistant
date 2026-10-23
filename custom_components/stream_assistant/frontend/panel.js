@@ -128,6 +128,51 @@ const T = {
     confirmLink: "Das Deck zeigt danach die Vorlage. Sein bisheriges Layout wird ersetzt. Weiter?",
     confirmDetach: "Das Deck bekommt eine eigene Kopie der Vorlage und folgt ihr nicht mehr. Weiter?",
     confirmDeleteTemplate: "Vorlage löschen? Verknüpfte Decks behalten eine Kopie des Layouts.",
+    viewKeys: "Tasten",
+    viewInfo: "Info & Verhalten",
+    infoTitle: "Informationen",
+    behaviorTitle: "Verhalten",
+    factDock: "Network Dock",
+    factDeck: "Stream Deck",
+    factDisplay: "Anzeige",
+    factLayout: "Layout",
+    factSerial: "Seriennummer",
+    factFirmware: "Firmware",
+    factAddress: "IP-Adresse",
+    factMac: "MAC-Adresse",
+    factConnection: "Verbindung",
+    factSince: "Verbunden seit",
+    factModel: "Modell",
+    factKeys: "Tasten",
+    factBrightnessSet: "Helligkeit (eingestellt)",
+    factBrightnessNow: "Helligkeit (aktuell)",
+    factDimsAt: "Dimmt um",
+    factTemplate: "Vorlage",
+    factPages: "Seiten",
+    factFolders: "Ordner",
+    factAssigned: "Belegte Tasten",
+    factCurrentPage: "Aktuelle Seite",
+    stateDimmed: "gedimmt",
+    stateNight: "Nacht",
+    nightTitle: "Nacht-Helligkeit",
+    nightHelp: "Während der Nacht leuchtet das Deck mit eigener Helligkeit.",
+    nightMode: "Nacht ist",
+    nightModeTime: "Zeitfenster",
+    nightModeSun: "Sonne untergegangen",
+    nightBrightness: "Helligkeit in der Nacht (%)",
+    from: "Von",
+    to: "Bis",
+    idleTitle: "Ausblenden ohne Bedienung",
+    idleHelp: "Nach einer Zeit ohne Tastendruck wird das Deck gedimmt oder ausgeschaltet. Ein Tastendruck holt es zurück.",
+    idleTimeout: "Ausblenden nach (Sekunden)",
+    idleBrightness: "Helligkeit ausgeblendet (%, 0 = aus)",
+    wakeOnly: "Erster Druck weckt nur auf (keine Aktion, keine Events)",
+    idleWhen: "Aktiv",
+    idleWhenAlways: "Immer",
+    idleWhenNight: "Nur nachts",
+    idleWhenTime: "Eigenes Zeitfenster",
+    idleWhenNightHelp: "Nacht wie oben bei der Nacht-Helligkeit definiert (Zeitfenster oder Sonne), auch wenn diese ausgeschaltet ist.",
+    saveBehavior: "Verhalten speichern",
   },
   en: {
     title: "Stream Assistant",
@@ -238,6 +283,51 @@ const T = {
     confirmLink: "The deck will show the template, replacing its current layout. Continue?",
     confirmDetach: "The deck gets its own copy of the template and stops following it. Continue?",
     confirmDeleteTemplate: "Delete the template? Linked decks keep a copy of the layout.",
+    viewKeys: "Keys",
+    viewInfo: "Info & behaviour",
+    infoTitle: "Information",
+    behaviorTitle: "Behaviour",
+    factDock: "Network Dock",
+    factDeck: "Stream Deck",
+    factDisplay: "Display",
+    factLayout: "Layout",
+    factSerial: "Serial number",
+    factFirmware: "Firmware",
+    factAddress: "IP address",
+    factMac: "MAC address",
+    factConnection: "Connection",
+    factSince: "Connected since",
+    factModel: "Model",
+    factKeys: "Keys",
+    factBrightnessSet: "Brightness (set)",
+    factBrightnessNow: "Brightness (now)",
+    factDimsAt: "Dims at",
+    factTemplate: "Template",
+    factPages: "Pages",
+    factFolders: "folders",
+    factAssigned: "Assigned keys",
+    factCurrentPage: "Current page",
+    stateDimmed: "dimmed",
+    stateNight: "night",
+    nightTitle: "Night brightness",
+    nightHelp: "At night the deck uses its own brightness.",
+    nightMode: "Night is",
+    nightModeTime: "Time window",
+    nightModeSun: "Sun has set",
+    nightBrightness: "Brightness at night (%)",
+    from: "From",
+    to: "To",
+    idleTitle: "Fade out when idle",
+    idleHelp: "After a while without key presses the deck dims or turns off. A key press brings it back.",
+    idleTimeout: "Fade out after (seconds)",
+    idleBrightness: "Brightness when faded (%, 0 = off)",
+    wakeOnly: "First press only wakes (no action, no events)",
+    idleWhen: "Active",
+    idleWhenAlways: "Always",
+    idleWhenNight: "Only at night",
+    idleWhenTime: "Own time window",
+    idleWhenNightHelp: "Night as defined above for night brightness (time window or sun), even if that is turned off.",
+    saveBehavior: "Save behaviour",
   },
 };
 
@@ -302,6 +392,11 @@ class StreamAssistantPanel extends HTMLElement {
     this.models = [];
     this.targetKind = "entry";
     this.entryId = null;
+    this.view = "keys";
+    this.dockInfo = null;
+    this.behaviorDraft = null;
+    this.behaviorDirty = false;
+    this._infoTimer = null;
     this.info = null;
     this.saved = null;
     this.draft = null;
@@ -395,6 +490,15 @@ class StreamAssistantPanel extends HTMLElement {
     this.selected = null;
     this.dirty = false;
     this.message = "";
+    if (this.view === "info" && !this.isTemplate) {
+      await this._showView("info");
+      return;
+    }
+    if (this.isTemplate) {
+      this.view = "keys";
+      clearInterval(this._infoTimer);
+      this._infoTimer = null;
+    }
     this._renderAll();
     this._schedulePreview(0);
   }
@@ -705,6 +809,7 @@ class StreamAssistantPanel extends HTMLElement {
       <div class="toolbar">
         <ha-menu-button></ha-menu-button>
         <div class="main-title">Stream Assistant</div>
+        <nav class="header-views" id="header-views"></nav>
       </div>
       <div class="content" id="content"></div>
       <dialog id="picker" class="dlg"></dialog>`;
@@ -748,7 +853,7 @@ class StreamAssistantPanel extends HTMLElement {
         <button class="btn primary" data-role="save">${t.save}</button>
       </div>
       <div class="linkbar card" id="linkbar"></div>
-      <div class="layout">
+      ${!this.isTemplate && this.view === "info" ? this._infoViewHtml() : `<div class="layout">
         <section class="left">
           <div class="tabs" id="tabs"></div>
           <div class="card deck-card">
@@ -757,12 +862,188 @@ class StreamAssistantPanel extends HTMLElement {
           </div>
         </section>
         <aside class="card right" id="form"></aside>
-      </div>`;
+      </div>`}`;
     this._renderStatus();
+    this._renderHeaderViews();
     this._renderLinkBar();
     this._renderTabs();
     this._renderDeck();
     this._renderForm();
+    this._renderFacts();
+  }
+
+  // View switch lives in the header bar, like tabs of HA's own pages
+  _renderHeaderViews() {
+    const t = this.t;
+    const views = this.shadowRoot.getElementById("header-views");
+    if (!views) return;
+    if (this.isTemplate || !this.entries.length) {
+      views.innerHTML = "";
+      return;
+    }
+    const tab = (view, icon, label) =>
+      `<button class="header-tab ${this.view === view ? "active" : ""}" data-role="view" data-view="${view}" aria-pressed="${this.view === view}" aria-label="${esc(label)}">
+        <ha-icon icon="${icon}"></ha-icon><span>${label}</span></button>`;
+    views.innerHTML = tab("keys", "mdi:keyboard-outline", t.viewKeys) + tab("info", "mdi:information-outline", t.viewInfo);
+  }
+
+  // Info & behavior view (docks only)
+
+  async _showView(view) {
+    this.view = view;
+    clearInterval(this._infoTimer);
+    this._infoTimer = null;
+    if (view === "info") {
+      await this._loadInfo();
+      this.behaviorDraft = clone(this.dockInfo.behavior);
+      this._infoTimer = setInterval(() => this._loadInfo().then(() => this._renderFacts()), 5000);
+    }
+    this._renderAll();
+    if (view === "keys") this._schedulePreview(0);
+  }
+
+  async _loadInfo() {
+    try {
+      this.dockInfo = await this._hass.callWS({ type: "stream_assistant/info", entry_id: this.entryId });
+    } catch (err) {
+      this.message = String(err?.message || err);
+    }
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._infoTimer);
+    this._infoTimer = null;
+  }
+
+  connectedCallback() {
+    // Coming back to the panel: keep the info page live again
+    if (this.view === "info" && !this._infoTimer && this.entryId && !this.isTemplate) {
+      this._infoTimer = setInterval(() => this._loadInfo().then(() => this._renderFacts()), 5000);
+    }
+  }
+
+  _fmtDate(iso) {
+    if (!iso) return "–";
+    return new Date(iso).toLocaleString(this._hass?.locale?.language || undefined, {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+  }
+
+  _renderFacts() {
+    const facts = this.shadowRoot.getElementById("facts");
+    if (!facts || !this.dockInfo) return;
+    const t = this.t;
+    const i = this.dockInfo;
+    const yes = (v) => (v ? t.connected : t.disconnected);
+    const tpl = i.layout.template_id ? this.templates.find((x) => x.template_id === i.layout.template_id)?.title || "?" : t.ownLayout;
+    const page = this.draft?.pages.find((p) => p.id === i.layout.current_page);
+    let brightness = `${i.brightness.current} %`;
+    if (i.brightness.dimmed) brightness += ` (${t.stateDimmed})`;
+    else if (i.brightness.night_active) brightness += ` (${t.stateNight})`;
+    const rows = [
+      [t.factDock, ""],
+      [t.factSerial, i.dock.serial],
+      [t.factFirmware, i.dock.firmware || "–"],
+      [t.factAddress, i.dock.host],
+      [t.factMac, i.dock.mac || "–"],
+      [t.factConnection, yes(i.dock.connected)],
+      [t.factDeck, ""],
+      [t.factModel, i.deck.model || "–"],
+      [t.factSerial, i.deck.serial || "–"],
+      [t.factFirmware, i.deck.firmware || "–"],
+      [t.factConnection, yes(i.deck.connected)],
+      [t.factSince, this._fmtDate(i.deck.connected_since)],
+      [t.factKeys, i.deck.key_count ?? "–"],
+      [t.factDisplay, ""],
+      [t.factBrightnessSet, `${i.brightness.base} %`],
+      [t.factBrightnessNow, brightness],
+      [t.factDimsAt, i.brightness.dims_at ? this._fmtDate(i.brightness.dims_at) : "–"],
+      [t.factLayout, ""],
+      [t.factTemplate, tpl],
+      [t.factPages, `${i.layout.pages} (${i.layout.folders} ${t.factFolders})`],
+      [t.factAssigned, i.layout.keys],
+      [t.factCurrentPage, page ? (page.id === ROOT_PAGE ? t.root : page.name) : i.layout.current_page],
+    ];
+    facts.innerHTML = rows
+      .map(([k, v]) => (v === "" ? `<dt class="fact-group">${esc(k)}</dt>` : `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`))
+      .join("");
+  }
+
+  _infoViewHtml() {
+    const t = this.t;
+    const b = this.behaviorDraft || { night: {}, idle: {} };
+    const n = b.night;
+    const idle = b.idle;
+    const checked = (v) => (v ? "checked" : "");
+    return `<div class="layout">
+      <section class="card info-card">
+        <h2>${t.infoTitle}</h2>
+        <dl class="facts" id="facts"></dl>
+      </section>
+      <section class="card info-card">
+        <h2>${t.behaviorTitle}</h2>
+        <div class="section">
+          <label class="check toggle"><input type="checkbox" data-bfield="night.enabled" ${checked(n.enabled)}>${t.nightTitle}</label>
+          <p class="help">${t.nightHelp}</p>
+          <div class="grid2 ${n.enabled ? "" : "disabled"}">
+            <label>${t.nightMode}<select data-bfield="night.mode">
+              <option value="time" ${n.mode === "time" ? "selected" : ""}>${t.nightModeTime}</option>
+              <option value="sun" ${n.mode === "sun" ? "selected" : ""}>${t.nightModeSun}</option>
+            </select></label>
+            <label>${t.nightBrightness}<input type="number" min="0" max="100" data-bfield="night.brightness" value="${esc(n.brightness)}"></label>
+            ${n.mode === "sun" ? "" : `<label>${t.from}<input type="time" data-bfield="night.start" value="${esc(n.start)}"></label>
+            <label>${t.to}<input type="time" data-bfield="night.end" value="${esc(n.end)}"></label>`}
+          </div>
+        </div>
+        <div class="section">
+          <label class="check toggle"><input type="checkbox" data-bfield="idle.enabled" ${checked(idle.enabled)}>${t.idleTitle}</label>
+          <p class="help">${t.idleHelp}</p>
+          <div class="grid2 ${idle.enabled ? "" : "disabled"}">
+            <label>${t.idleTimeout}<input type="number" min="5" max="86400" data-bfield="idle.timeout" value="${esc(idle.timeout)}"></label>
+            <label>${t.idleBrightness}<input type="number" min="0" max="100" data-bfield="idle.brightness" value="${esc(idle.brightness)}"></label>
+            <label>${t.idleWhen}<select data-bfield="idle.when">
+              <option value="always" ${idle.when === "always" ? "selected" : ""}>${t.idleWhenAlways}</option>
+              <option value="night" ${idle.when === "night" ? "selected" : ""}>${t.idleWhenNight}</option>
+              <option value="time" ${idle.when === "time" ? "selected" : ""}>${t.idleWhenTime}</option>
+            </select></label>
+            <span></span>
+            ${idle.when === "time" ? `<label>${t.from}<input type="time" data-bfield="idle.start" value="${esc(idle.start)}"></label>
+            <label>${t.to}<input type="time" data-bfield="idle.end" value="${esc(idle.end)}"></label>` : ""}
+          </div>
+          ${idle.when === "night" ? `<p class="help">${t.idleWhenNightHelp}</p>` : ""}
+          <label class="check"><input type="checkbox" data-bfield="idle.wake_only" ${checked(idle.wake_only)}>${t.wakeOnly}</label>
+        </div>
+        <div class="form-foot"><button class="btn primary" data-role="save-behavior">${t.saveBehavior}</button></div>
+      </section>
+    </div>`;
+  }
+
+  _onBehaviorInput(el) {
+    const [group, field] = el.dataset.bfield.split(".");
+    let value = el.value;
+    if (el.type === "checkbox") value = el.checked;
+    else if (el.type === "number") value = Number(value);
+    this.behaviorDraft[group][field] = value;
+    this.behaviorDirty = true;
+    this.message = this.t.unsaved;
+    this._renderStatus();
+  }
+
+  async _saveBehavior() {
+    try {
+      this.dockInfo = await this._hass.callWS({
+        type: "stream_assistant/behavior/set",
+        entry_id: this.entryId,
+        behavior: this.behaviorDraft,
+      });
+      this.behaviorDraft = clone(this.dockInfo.behavior);
+      this.behaviorDirty = false;
+      this.message = this.t.saved;
+    } catch (err) {
+      this.message = String(err?.message || err);
+    }
+    this._renderAll();
   }
 
   _renderLinkBar() {
@@ -1242,6 +1523,10 @@ class StreamAssistantPanel extends HTMLElement {
     const role = target.dataset.role;
     if (role === "test") {
       this._test(target.dataset.long === "1");
+    } else if (role === "view") {
+      if (this.view !== target.dataset.view) this._showView(target.dataset.view);
+    } else if (role === "save-behavior") {
+      this._saveBehavior();
     } else if (role === "new-template") {
       this._openTemplateDialog();
     } else if (role === "tpl-create") {
@@ -1306,6 +1591,10 @@ class StreamAssistantPanel extends HTMLElement {
 
   _onInput(ev) {
     const el = ev.target;
+    if (el.dataset.bfield && el.type !== "checkbox" && el.tagName !== "SELECT") {
+      this._onBehaviorInput(el);
+      return;
+    }
     if (el.id === "pk-search" && this._picker) {
       this._picker.search = el.value;
       this._renderEntityList();
@@ -1346,6 +1635,11 @@ class StreamAssistantPanel extends HTMLElement {
 
   _onChange(ev) {
     const el = ev.target;
+    if (el.dataset.bfield && (el.type === "checkbox" || el.tagName === "SELECT")) {
+      this._onBehaviorInput(el);
+      this._renderAll();
+      return;
+    }
     if (this._picker?.kind === "entity" && ["pk-area", "pk-device", "pk-domain", "pk-all"].includes(el.id)) {
       const p = this._picker;
       if (el.id === "pk-area") {
@@ -1440,6 +1734,19 @@ const STYLE = `
   .icon-input { display: flex; align-items: center; gap: 8px; }
   .color-auto { display: flex; align-items: center; gap: 8px; }
   .form-foot { display: flex; justify-content: flex-end; margin-top: 20px; }
+  .header-views { display: flex; align-self: stretch; margin-left: auto; gap: 4px; }
+  .header-tab { display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; border: none; border-bottom: 2px solid transparent; background: transparent; color: inherit; opacity: 0.75; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .header-tab ha-icon { --mdc-icon-size: 20px; }
+  .header-tab:hover { opacity: 1; }
+  .header-tab.active { opacity: 1; border-bottom-color: currentColor; }
+  @media (max-width: 600px) { .header-tab span { display: none; } }
+  .info-card { flex: 1 1 420px; min-width: 0; padding: 16px 20px; }
+  .facts { display: grid; grid-template-columns: minmax(140px, max-content) minmax(0, 1fr); gap: 6px 16px; margin: 12px 0 0; font-size: 14px; }
+  .facts dt { color: var(--secondary-text-color); }
+  .facts dd { margin: 0; overflow-wrap: anywhere; }
+  .facts .fact-group { grid-column: 1 / -1; margin-top: 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--primary-text-color); }
+  .toggle { font-size: 15px; color: var(--primary-text-color); font-weight: 500; }
+  .disabled { opacity: 0.5; }
   .linkbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; margin-bottom: 16px; font-size: 14px; }
   .linkbar ha-icon { color: var(--secondary-text-color); }
   .linkbar select { width: auto; }

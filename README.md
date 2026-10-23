@@ -15,6 +15,9 @@ no Companion, no extra computer.
 - **Templates / planned decks**: layouts with a model but no hardware, designed in the same
   editor with live preview. Decks can be linked to a template (shared layout, also across
   different sizes by row/column) or detached into their own copy.
+- **Info & behaviour** per dock: serials, firmware, IP/MAC, connection, brightness, layout
+  facts; night brightness (time window or sunset) and fading out when idle (dim or off,
+  optionally the first press only wakes the deck)
 - **Run** buttons simulate a key press (events + action), also for unsaved edits
 - Keys follow their entity live (light brightness, cover position, sensor values …)
 - Short press runs instantly when no long-press action is set

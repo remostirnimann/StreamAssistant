@@ -19,6 +19,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 
 from .actions import async_run_action
+from .behavior import BEHAVIOR_SCHEMA
 from .const import DOMAIN
 from .device import StreamAssistantDevice
 from .display import page_key_slot
@@ -47,6 +48,8 @@ def async_register(hass: HomeAssistant) -> None:
         ws_template_delete,
         ws_link,
         ws_detach,
+        ws_info,
+        ws_set_behavior,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -381,6 +384,39 @@ async def ws_link(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
         return
     await device.async_link_template(msg["template_id"])
     connection.send_result(msg["id"], {"dropped": device.template_dropped})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "stream_assistant/info", vol.Required("entry_id"): str})
+@callback
+def ws_info(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Facts about a dock and its deck, plus its automation settings."""
+    if (device := _device(hass, msg["entry_id"])) is None:
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Dock not found or not loaded")
+        return
+    connection.send_result(msg["id"], device.info())
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "stream_assistant/behavior/set",
+        vol.Required("entry_id"): str,
+        vol.Required("behavior"): dict,
+    }
+)
+@websocket_api.async_response
+async def ws_set_behavior(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Store a dock's automation settings (night brightness, dim when idle)."""
+    if (device := _device(hass, msg["entry_id"])) is None:
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Dock not found or not loaded")
+        return
+    try:
+        settings = BEHAVIOR_SCHEMA(msg["behavior"])
+    except vol.Invalid as err:
+        connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
+        return
+    await device.async_set_behavior(settings)
+    connection.send_result(msg["id"], device.info())
 
 
 @websocket_api.require_admin

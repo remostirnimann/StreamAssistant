@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from datetime import datetime
 import logging
 import secrets
 from typing import Any
@@ -15,8 +16,10 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from .actions import async_run_action
+from .behavior import BEHAVIOR_SCHEMA, BehaviorController
 from .const import (
     CONF_DECK_PRODUCT_ID,
     CONF_DECK_SERIAL,
@@ -106,6 +109,10 @@ class StreamAssistantDevice:
         self._wanted: dict[int, KeyVisual] = {}
         self._renderer = RenderCache(hass)
         self._dock_device_id: str | None = None
+        self.behavior = BehaviorController(hass, self._apply_brightness)
+        self.deck_connected_since: datetime | None = None
+        # Keys whose press only woke the display: their release is ignored too
+        self._swallowed: set[int] = set()
 
     @property
     def layout_revision(self) -> str:
@@ -161,11 +168,14 @@ class StreamAssistantDevice:
 
     async def async_start(self) -> None:
         """Load the layout and start connecting."""
+        behavior = None
         if stored := await self._store.async_load():
             self._own_layout = {"pages": stored["pages"]}
             if (template_id := stored.get("template_id")) and self.templates.get(template_id):
                 self._link(template_id)
+            behavior = stored.get("behavior")
         self._update_effective_layout()
+        self.behavior.async_start(behavior)
 
         dev_reg = dr.async_get(self.hass)
         dock = dev_reg.async_get_or_create(config_entry_id=self.entry.entry_id, **self.dock_device_info)
@@ -187,11 +197,72 @@ class StreamAssistantDevice:
         if self._unsub_template:
             self._unsub_template()
             self._unsub_template = None
+        self.behavior.async_stop()
         await self.client.stop()
         await self._store.async_save(self._data_to_store())
 
     def _data_to_store(self) -> dict[str, Any]:
-        return {**self._own_layout, "template_id": self.template_id}
+        return {
+            **self._own_layout,
+            "template_id": self.template_id,
+            "behavior": self.behavior.settings,
+        }
+
+    # Behavior and info
+
+    @callback
+    def _apply_brightness(self) -> None:
+        """Send the brightness the behavior asks for (normal, night or dimmed)."""
+        if self.deck_connected:
+            try:
+                self.client.set_brightness(self.behavior.target_brightness(self.brightness))
+            except CoraError as err:
+                _LOGGER.debug("Setting brightness failed: %s", err)
+        async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
+
+    async def async_set_behavior(self, settings: dict[str, Any]) -> None:
+        """Store new automation settings and apply them right away."""
+        self.behavior.async_start(BEHAVIOR_SCHEMA(settings))
+        self._store.async_delay_save(self._data_to_store, SAVE_DELAY)
+
+    def info(self) -> dict[str, Any]:
+        """Facts for the editor's info page."""
+        dock = self.client.dock_info
+        deck = self.client.deck
+        pages = self.layout["pages"]
+        deadline = self.behavior.idle_deadline
+        return {
+            "dock": {
+                "serial": self.dock_serial,
+                "firmware": dock.firmware if dock else None,
+                "host": self.client.host,
+                "mac": self.entry.data.get(CONF_MAC),
+                "connected": self.dock_connected,
+            },
+            "deck": {
+                "model": self.model.name if self.model else None,
+                "serial": self.deck_serial,
+                "firmware": deck.firmware if deck else None,
+                "connected": self.deck_connected,
+                "connected_since": self.deck_connected_since.isoformat() if self.deck_connected_since else None,
+                "key_count": self.model.key_count if self.model else None,
+            },
+            "brightness": {
+                "base": self.brightness,
+                "current": self.behavior.target_brightness(self.brightness),
+                "night_active": self.behavior.night_active,
+                "dimmed": self.behavior.dimmed,
+                "dims_at": deadline.isoformat() if deadline else None,
+            },
+            "layout": {
+                "template_id": self.template_id,
+                "pages": len(pages),
+                "folders": sum(1 for p in pages if p.get("parent")),
+                "keys": sum(len(p["keys"]) for p in pages),
+                "current_page": self.current_page,
+            },
+            "behavior": self.behavior.settings,
+        }
 
     # Layout
 
@@ -400,17 +471,17 @@ class StreamAssistantDevice:
                 sw_version=deck.firmware,
             )
 
-        try:
-            self.client.set_brightness(self.brightness)
-        except CoraError as err:
-            _LOGGER.debug("Setting brightness failed: %s", err)
+        self.deck_connected_since = dt_util.utcnow()
+        # Normal, night or dimmed brightness, whatever applies right now
+        self._apply_brightness()
         self._wanted.clear()
         self._schedule_repaint()
-        async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
 
     @callback
     def _on_deck_disconnected(self) -> None:
         self._cancel_timers()
+        self._swallowed.clear()
+        self.deck_connected_since = None
         async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
 
     def _cancel_timers(self) -> None:
@@ -423,6 +494,14 @@ class StreamAssistantDevice:
 
     @callback
     def _on_key(self, key: int, pressed: bool) -> None:
+        if pressed and self.behavior.async_activity():
+            # This press only woke the display: no events, no action
+            self._swallowed.add(key)
+            return
+        if not pressed and key in self._swallowed:
+            self._swallowed.discard(key)
+            return
+
         signal = signal_key(self.entry.entry_id, key)
         short, long = self._actions(key)
 
@@ -476,6 +555,8 @@ class StreamAssistantDevice:
         else:
             short, long = NO_ACTION, NO_ACTION
 
+        # A test press counts as activity (wakes the display) but always runs
+        self.behavior.async_activity()
         signal = signal_key(self.entry.entry_id, index)
         async_dispatcher_send(self.hass, signal, EVENT_PRESSED)
         if long_press:
@@ -509,8 +590,7 @@ class StreamAssistantDevice:
     async def async_set_brightness(self, percent: int) -> None:
         """Set brightness, remembered across reconnects."""
         self.brightness = percent
-        if self.deck_connected:
-            self.client.set_brightness(percent)
+        self._apply_brightness()
 
     async def async_set_key(self, key: int, values: dict[str, Any]) -> None:
         """set_key action: change the look of a key on the page currently shown."""
