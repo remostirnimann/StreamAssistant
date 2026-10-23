@@ -27,7 +27,7 @@ from .const import DOMAIN
 from .device import StreamAssistantDevice
 from .display import page_key_slot
 from .layout import ACTION_CALL, ACTION_DEFAULT, PAGE_SCHEMA, validate_layout
-from .protocol import MODELS, DeckModel, find_model_by_id
+from .capabilities import CATALOG, DeckCapabilities, find_capabilities
 from .render import ASSETS
 from .templates import DATA_TEMPLATES, TemplateManager
 
@@ -61,7 +61,7 @@ def async_register(hass: HomeAssistant) -> None:
 class Target:
     """What a layout command works on."""
 
-    model: DeckModel | None
+    model: DeckCapabilities | None
     device: StreamAssistantDevice | None = None
     template_id: str | None = None
 
@@ -94,7 +94,7 @@ def _target(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
     return None
 
 
-def _model_info(model: DeckModel | None) -> dict[str, Any] | None:
+def _model_info(model: DeckCapabilities | None) -> dict[str, Any] | None:
     if not model:
         return None
     return {
@@ -115,7 +115,7 @@ def _entry_summary(device: StreamAssistantDevice) -> dict[str, Any]:
         "dock_connected": device.dock_connected,
         "deck_connected": device.deck_connected,
         "current_page": device.current_page,
-        "host": device.client.host,
+        "host": device.transport.hub_info().get("host"),
         "template_id": device.template_id,
         "template_dropped": device.template_dropped,
     }
@@ -126,7 +126,7 @@ def _template_summary(hass: HomeAssistant, template: dict[str, Any]) -> dict[str
     return {
         "template_id": template["id"],
         "title": template["name"],
-        "model": _model_info(find_model_by_id(template["model"])),
+        "model": _model_info(find_capabilities(template["model"])),
         "linked": linked,
     }
 
@@ -150,7 +150,7 @@ def ws_entries(hass: HomeAssistant, connection: websocket_api.ActiveConnection, 
 @callback
 def ws_models(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Models a template can be planned for."""
-    connection.send_result(msg["id"], [_model_info(m) for m in MODELS])
+    connection.send_result(msg["id"], [_model_info(m) for m in CATALOG])
 
 
 @websocket_api.require_admin
@@ -329,7 +329,7 @@ async def ws_template_create(hass: HomeAssistant, connection: websocket_api.Acti
         model = device.model
         layout = device.layout
     else:
-        model = find_model_by_id(msg.get("model", ""))
+        model = find_capabilities(msg.get("model", ""))
         if model is None:
             connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, "Unknown model")
             return

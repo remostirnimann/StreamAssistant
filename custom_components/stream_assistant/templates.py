@@ -19,7 +19,7 @@ from homeassistant.util.hass_dict import HassKey
 from .const import DOMAIN
 from .layout import empty_layout
 from .preview import RenderCache
-from .protocol import DeckModel, find_model_by_id
+from .capabilities import DeckCapabilities, find_capabilities
 
 STORAGE_VERSION = 1
 SAVE_DELAY = 2
@@ -61,10 +61,10 @@ class TemplateManager:
         """Return one template."""
         return self._templates.get(template_id)
 
-    def model(self, template_id: str) -> DeckModel | None:
+    def model(self, template_id: str) -> DeckCapabilities | None:
         """Model (grid size) of a template."""
         template = self.get(template_id)
-        return find_model_by_id(template["model"]) if template else None
+        return find_capabilities(template["model"]) if template else None
 
     def revision(self, template_id: str) -> str:
         """Changes on every save, so stale editor saves can be refused."""

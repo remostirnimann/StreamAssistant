@@ -8,7 +8,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 
 from .display import page_key_visual
-from .protocol import DeckModel
+from .capabilities import DeckCapabilities
 from .render import KeyVisual, render_key, render_preview
 
 CACHE_SIZE = 256
@@ -22,7 +22,7 @@ class RenderCache:
         self.hass = hass
         self._cache: OrderedDict[tuple[str, bool, KeyVisual], bytes] = OrderedDict()
 
-    async def async_render(self, model: DeckModel, visual: KeyVisual, *, upright: bool) -> bytes:
+    async def async_render(self, model: DeckCapabilities, visual: KeyVisual, *, upright: bool) -> bytes:
         """JPEG of a key: upright for the editor, else as the deck expects it."""
         cache_key = (model.model_id, upright, visual)
         if (jpeg := self._cache.get(cache_key)) is not None:
@@ -37,7 +37,7 @@ class RenderCache:
             self._cache.popitem(last=False)
         return jpeg
 
-    async def async_page_preview(self, model: DeckModel, page: dict[str, Any]) -> list[bytes]:
+    async def async_page_preview(self, model: DeckCapabilities, page: dict[str, Any]) -> list[bytes]:
         """Upright JPEGs of every key of a page, with live entity states."""
         return [
             await self.async_render(model, page_key_visual(self.hass, page, index), upright=True)

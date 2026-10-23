@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image, ImageColor, ImageDraw, ImageFont, ImageOps
 
-from .protocol import DeckModel
+from .capabilities import DeckCapabilities
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -76,11 +76,12 @@ def _jpeg(image: Image.Image) -> bytes:
     return out.getvalue()
 
 
-def render_key(model: DeckModel, visual: KeyVisual) -> bytes:
-    """Return a JPEG ready to send to the given model."""
-    image = _draw(model.key_size, visual)
-    if model.rotate_180:
-        image = image.transpose(Image.Transpose.ROTATE_180)
+def render_key(caps: DeckCapabilities, visual: KeyVisual) -> bytes:
+    """Return an image ready to send to a deck with these capabilities."""
+    image = _draw(caps.key_size, visual)
+    if caps.rotation:
+        # PIL rotates counter-clockwise; the deck needs the image turned by `rotation`
+        image = image.rotate(-caps.rotation, expand=True)
     return _jpeg(image)
 
 

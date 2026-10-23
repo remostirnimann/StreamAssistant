@@ -47,9 +47,11 @@ from .layout import (
     remap_layout,
 )
 from .preview import RenderCache
-from .protocol import CoraError, DeckInfo, DeckModel, DockClient, find_model
+from .capabilities import DeckCapabilities, find_capabilities
+from .protocol import find_model
 from .render import KeyVisual
 from .templates import DATA_TEMPLATES
+from .transport import AttachedDeck, DeckTransport, NetworkDockTransport, TransportError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -80,12 +82,13 @@ class StreamAssistantDevice:
         """Initialize."""
         self.hass = hass
         self.entry = entry
-        self.client = DockClient(entry.data[CONF_HOST])
+        self.transport: DeckTransport = NetworkDockTransport(entry.data[CONF_HOST])
         self.dock_serial: str = entry.data[CONF_DOCK_SERIAL]
         self.deck_serial: str | None = entry.data.get(CONF_DECK_SERIAL)
         product_id = entry.data.get(CONF_DECK_PRODUCT_ID)
         # The model is fixed per config entry so the key entities exist even while offline
-        self.model: DeckModel | None = find_model(product_id) if product_id else None
+        hardware = find_model(product_id) if product_id else None
+        self.model: DeckCapabilities | None = find_capabilities(hardware.model_id) if hardware else None
         self.brightness = DEFAULT_BRIGHTNESS
         self.templates = hass.data[DATA_TEMPLATES]
         # What the deck shows: the own layout, or the linked template's (fitted to this model)
@@ -124,12 +127,12 @@ class StreamAssistantDevice:
     @property
     def dock_connected(self) -> bool:
         """Return True while the dock is reachable."""
-        return self.client.dock_connected
+        return self.transport.hub_connected
 
     @property
     def deck_connected(self) -> bool:
         """Return True when the deck accepts commands."""
-        return self.client.deck_connected
+        return self.transport.deck_connected
 
     @property
     def dock_device_info(self) -> DeviceInfo:
@@ -181,12 +184,12 @@ class StreamAssistantDevice:
         dock = dev_reg.async_get_or_create(config_entry_id=self.entry.entry_id, **self.dock_device_info)
         self._dock_device_id = dock.id
 
-        self.client.on_dock_state = self._on_dock_state
-        self.client.on_deck_connected = self._on_deck_connected
-        self.client.on_deck_disconnected = self._on_deck_disconnected
-        self.client.on_key = self._on_key
+        self.transport.on_hub_state = self._on_dock_state
+        self.transport.on_deck_connected = self._on_deck_connected
+        self.transport.on_deck_disconnected = self._on_deck_disconnected
+        self.transport.on_key = self._on_key
         self._track_page_entities()
-        self.client.start()
+        self.transport.start()
 
     async def async_stop(self) -> None:
         """Disconnect and flush storage."""
@@ -198,7 +201,7 @@ class StreamAssistantDevice:
             self._unsub_template()
             self._unsub_template = None
         self.behavior.async_stop()
-        await self.client.stop()
+        await self.transport.stop()
         await self._store.async_save(self._data_to_store())
 
     def _data_to_store(self) -> dict[str, Any]:
@@ -215,8 +218,8 @@ class StreamAssistantDevice:
         """Send the brightness the behavior asks for (normal, night or dimmed)."""
         if self.deck_connected:
             try:
-                self.client.set_brightness(self.behavior.target_brightness(self.brightness))
-            except CoraError as err:
+                self.transport.set_brightness(self.behavior.target_brightness(self.brightness))
+            except TransportError as err:
                 _LOGGER.debug("Setting brightness failed: %s", err)
         async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
 
@@ -227,15 +230,15 @@ class StreamAssistantDevice:
 
     def info(self) -> dict[str, Any]:
         """Facts for the editor's info page."""
-        dock = self.client.dock_info
-        deck = self.client.deck
+        hub = self.transport.hub_info()
+        deck = self.transport.deck
         pages = self.layout["pages"]
         deadline = self.behavior.idle_deadline
         return {
             "dock": {
                 "serial": self.dock_serial,
-                "firmware": dock.firmware if dock else None,
-                "host": self.client.host,
+                "firmware": hub.get("firmware"),
+                "host": hub.get("host"),
                 "mac": self.entry.data.get(CONF_MAC),
                 "connected": self.dock_connected,
             },
@@ -423,8 +426,8 @@ class StreamAssistantDevice:
             if self._wanted.get(index) != visual or not self.deck_connected:
                 continue
             try:
-                self.client.set_key_image(index, jpeg)
-            except CoraError as err:
+                self.transport.set_key_image(index, jpeg)
+            except TransportError as err:
                 _LOGGER.debug("Painting key %s failed: %s", index, err)
                 return
 
@@ -437,28 +440,29 @@ class StreamAssistantDevice:
 
     @callback
     def _on_dock_state(self, connected: bool) -> None:
-        dock = self.client.dock_info
-        if connected and dock and self._dock_device_id:
-            dr.async_get(self.hass).async_update_device(self._dock_device_id, sw_version=dock.firmware)
+        firmware = self.transport.hub_info().get("firmware")
+        if connected and firmware and self._dock_device_id:
+            dr.async_get(self.hass).async_update_device(self._dock_device_id, sw_version=firmware)
         async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
 
     @callback
-    def _on_deck_connected(self, deck: DeckInfo) -> None:
-        if deck.child.serial != self.deck_serial or deck.model is not self.model:
+    def _on_deck_connected(self, deck: AttachedDeck) -> None:
+        caps = deck.capabilities
+        if deck.serial != self.deck_serial or self.model is None or caps.model_id != self.model.model_id:
             # Another deck was plugged in: store it and rebuild the entities
             _LOGGER.info(
                 "Dock %s: now has %s (%s) attached, reloading",
                 self.dock_serial,
-                deck.model.name,
-                deck.child.serial,
+                caps.name,
+                deck.serial,
             )
             self.hass.config_entries.async_update_entry(
                 self.entry,
-                title=f"{deck.model.name} ({self.dock_serial})",
+                title=f"{caps.name} ({self.dock_serial})",
                 data={
                     **self.entry.data,
-                    CONF_DECK_SERIAL: deck.child.serial,
-                    CONF_DECK_PRODUCT_ID: deck.child.product_id,
+                    CONF_DECK_SERIAL: deck.serial,
+                    CONF_DECK_PRODUCT_ID: deck.hardware_id,
                 },
             )
             self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
@@ -467,7 +471,7 @@ class StreamAssistantDevice:
         if deck.firmware:
             dr.async_get(self.hass).async_get_or_create(
                 config_entry_id=self.entry.entry_id,
-                identifiers={(DOMAIN, deck.child.serial)},
+                identifiers={(DOMAIN, deck.serial)},
                 sw_version=deck.firmware,
             )
 

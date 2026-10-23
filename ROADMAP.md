@@ -35,6 +35,10 @@
   vendor-neutral Stream Assistant protocol (device capabilities, show image/colour on
   key N, key/dial/touch events) with the vendor drivers inside the bridge, instead of
   only emulating the Elgato Network Dock. **Decided 2026-10-23: neutral protocol.**
+  **Bridge language: .NET (C#, .NET 10 LTS)**, published as self-contained single-file
+  builds (win-x64, osx-arm64/x64, linux-x64/arm64, linux-musl for the HA add-on);
+  HidSharp for USB HID, Avalonia for the virtual deck window. The neutral protocol is
+  written down as a language-independent specification first.
 - **Virtual Stream Deck**: a deck that exists only in software.
   - In Home Assistant: config entry "virtual Stream Deck" with a chosen model and all
     entities/layout/templates/behaviour like a real deck, shown as a dashboard card or a
@@ -45,7 +49,8 @@
 
 ### Proposed order (2026-10-23)
 
-1. Transport + capabilities layer in the integration (Network Dock, Bridge, Virtual)
+1. ~~Transport + capabilities layer in the integration~~ done in 0.5.1 (Network Dock
+   transport; `scripts/fake_dock.py` + `scripts/selftest_transport.py` test it without hardware)
 2. Virtual deck in HA with dashboard card
 3. Bridge with neutral protocol + Elgato USB driver (several decks per computer, hot-plug)
 4. HA add-on and platform packages, then more manufacturers

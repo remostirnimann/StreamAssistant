@@ -52,3 +52,6 @@ Thumbs.db
 # Python
 __pycache__/
 .venv/
+
+# Fake dock output
+fake_dock_out/
