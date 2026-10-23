@@ -167,6 +167,7 @@ const T = {
     idleTimeout: "Ausblenden nach (Sekunden)",
     idleBrightness: "Helligkeit ausgeblendet (%, 0 = aus)",
     wakeOnly: "Erster Druck weckt nur auf (keine Aktion, keine Events)",
+    invalidValues: "Bitte die rot markierten Felder ausfüllen.",
     idleWhen: "Aktiv",
     idleWhenAlways: "Immer",
     idleWhenNight: "Nur nachts",
@@ -322,6 +323,7 @@ const T = {
     idleTimeout: "Fade out after (seconds)",
     idleBrightness: "Brightness when faded (%, 0 = off)",
     wakeOnly: "First press only wakes (no action, no events)",
+    invalidValues: "Please fill in the fields marked red.",
     idleWhen: "Active",
     idleWhenAlways: "Always",
     idleWhenNight: "Only at night",
@@ -396,6 +398,7 @@ class StreamAssistantPanel extends HTMLElement {
     this.dockInfo = null;
     this.behaviorDraft = null;
     this.behaviorDirty = false;
+    this._behaviorErrors = new Set();
     this._infoTimer = null;
     this.info = null;
     this.saved = null;
@@ -659,8 +662,13 @@ class StreamAssistantPanel extends HTMLElement {
 
   // Templates
 
+  get _infoActive() {
+    return this.view === "info" && !this.isTemplate;
+  }
+
+  // Unsaved keys or unsaved behaviour: ask before throwing them away
   _confirmLeave() {
-    return !this.dirty || confirm(this.t.leaveUnsaved);
+    return (!this.dirty && !this.behaviorDirty) || confirm(this.t.leaveUnsaved);
   }
 
   async _afterTemplateChange(kind, id) {
@@ -849,8 +857,10 @@ class StreamAssistantPanel extends HTMLElement {
         <span id="status-chip"></span>
         <span class="spacer"></span>
         <span id="status-text" class="status-text"></span>
-        <button class="btn" data-role="discard">${t.discard}</button>
-        <button class="btn primary" data-role="save">${t.save}</button>
+        ${this._infoActive
+          ? "" /* The info view has its own "save behaviour" button; these act on the keys */
+          : `<button class="btn" data-role="discard">${t.discard}</button>
+        <button class="btn primary" data-role="save">${t.save}</button>`}
       </div>
       <div class="linkbar card" id="linkbar"></div>
       ${!this.isTemplate && this.view === "info" ? this._infoViewHtml() : `<div class="layout">
@@ -893,6 +903,8 @@ class StreamAssistantPanel extends HTMLElement {
     this.view = view;
     clearInterval(this._infoTimer);
     this._infoTimer = null;
+    this.behaviorDirty = false;
+    this._behaviorErrors = new Set();
     if (view === "info") {
       await this._loadInfo();
       this.behaviorDraft = clone(this.dockInfo.behavior);
@@ -1023,7 +1035,18 @@ class StreamAssistantPanel extends HTMLElement {
     const [group, field] = el.dataset.bfield.split(".");
     let value = el.value;
     if (el.type === "checkbox") value = el.checked;
-    else if (el.type === "number") value = Number(value);
+    else if (el.type === "number" || el.type === "time") {
+      // An emptied or out-of-range field must not silently become 0 / be sent
+      const invalid = el.value === "" || !el.checkValidity();
+      el.classList.toggle("invalid", invalid);
+      this._behaviorErrors[invalid ? "add" : "delete"](el.dataset.bfield);
+      if (invalid) {
+        this.behaviorDirty = true;
+        this._renderStatus();
+        return;
+      }
+      if (el.type === "number") value = Number(value);
+    }
     this.behaviorDraft[group][field] = value;
     this.behaviorDirty = true;
     this.message = this.t.unsaved;
@@ -1031,6 +1054,11 @@ class StreamAssistantPanel extends HTMLElement {
   }
 
   async _saveBehavior() {
+    if (this._behaviorErrors.size) {
+      this.message = this.t.invalidValues;
+      this._renderStatus();
+      return;
+    }
     try {
       this.dockInfo = await this._hass.callWS({
         type: "stream_assistant/behavior/set",
@@ -1524,7 +1552,11 @@ class StreamAssistantPanel extends HTMLElement {
     if (role === "test") {
       this._test(target.dataset.long === "1");
     } else if (role === "view") {
-      if (this.view !== target.dataset.view) this._showView(target.dataset.view);
+      // Leaving the info view drops unsaved behaviour; leaving the keys keeps the key draft
+      const leavingInfo = this.view === "info";
+      if (this.view !== target.dataset.view && (!leavingInfo || !this.behaviorDirty || confirm(this.t.leaveUnsaved))) {
+        this._showView(target.dataset.view);
+      }
     } else if (role === "save-behavior") {
       this._saveBehavior();
     } else if (role === "new-template") {
@@ -1637,6 +1669,8 @@ class StreamAssistantPanel extends HTMLElement {
     const el = ev.target;
     if (el.dataset.bfield && (el.type === "checkbox" || el.tagName === "SELECT")) {
       this._onBehaviorInput(el);
+      // The redraw fills every field from the (valid) draft again
+      this._behaviorErrors.clear();
       this._renderAll();
       return;
     }

@@ -2,6 +2,9 @@
 
 Layout commands address either a dock (`entry_id`) or a template
 (`template_id`, a planned deck without hardware).
+
+All commands are admin-only, like the panel: they expose addresses, serial
+numbers and the layout (entity ids), or change things.
 """
 
 from __future__ import annotations
@@ -128,6 +131,7 @@ def _template_summary(hass: HomeAssistant, template: dict[str, Any]) -> dict[str
     }
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({vol.Required("type"): "stream_assistant/entries"})
 @callback
 def ws_entries(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
@@ -141,6 +145,7 @@ def ws_entries(hass: HomeAssistant, connection: websocket_api.ActiveConnection, 
     )
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({vol.Required("type"): "stream_assistant/models"})
 @callback
 def ws_models(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
@@ -148,6 +153,7 @@ def ws_models(hass: HomeAssistant, connection: websocket_api.ActiveConnection, m
     connection.send_result(msg["id"], [_model_info(m) for m in MODELS])
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({vol.Required("type"): "stream_assistant/layout/get", **TARGET})
 @callback
 def ws_get_layout(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
@@ -203,6 +209,7 @@ async def ws_save_layout(hass: HomeAssistant, connection: websocket_api.ActiveCo
     connection.send_result(msg["id"], {"layout": layout, "revision": revision})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "stream_assistant/preview", **TARGET, vol.Required("page"): dict}
 )
@@ -289,6 +296,7 @@ def _icon_names() -> list[str]:
     return sorted(json.loads((ASSETS / "mdi.json").read_text(encoding="utf-8")))
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({vol.Required("type"): "stream_assistant/icons"})
 @websocket_api.async_response
 async def ws_icons(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
@@ -386,6 +394,7 @@ async def ws_link(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
     connection.send_result(msg["id"], {"dropped": device.template_dropped})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({vol.Required("type"): "stream_assistant/info", vol.Required("entry_id"): str})
 @callback
 def ws_info(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:

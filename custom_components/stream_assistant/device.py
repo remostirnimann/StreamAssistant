@@ -19,7 +19,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .actions import async_run_action
-from .behavior import BEHAVIOR_SCHEMA, BehaviorController
+from .behavior import BehaviorController
 from .const import (
     CONF_DECK_PRODUCT_ID,
     CONF_DECK_SERIAL,
@@ -222,7 +222,7 @@ class StreamAssistantDevice:
 
     async def async_set_behavior(self, settings: dict[str, Any]) -> None:
         """Store new automation settings and apply them right away."""
-        self.behavior.async_start(BEHAVIOR_SCHEMA(settings))
+        self.behavior.async_start(settings)
         self._store.async_delay_save(self._data_to_store, SAVE_DELAY)
 
     def info(self) -> dict[str, Any]:
@@ -472,6 +472,8 @@ class StreamAssistantDevice:
             )
 
         self.deck_connected_since = dt_util.utcnow()
+        # The idle time ran on while the deck was away: start it fresh, deck lit
+        self.behavior.async_wake()
         # Normal, night or dimmed brightness, whatever applies right now
         self._apply_brightness()
         self._wanted.clear()

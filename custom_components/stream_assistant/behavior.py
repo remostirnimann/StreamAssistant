@@ -110,7 +110,12 @@ class BehaviorController:
         """(Re)start with the given settings."""
         self.async_stop()
         if settings is not None:
-            self.settings = BEHAVIOR_SCHEMA(settings)
+            try:
+                self.settings = BEHAVIOR_SCHEMA(settings)
+            except vol.Invalid as err:
+                # E.g. data from another version: fall back instead of breaking the dock
+                _LOGGER.warning("Ignoring invalid behaviour settings (%s), using defaults", err)
+                self.settings = default_behavior()
         self._running = True
         night, idle = self.settings["night"], self.settings["idle"]
         if night["enabled"] or (idle["enabled"] and idle["when"] != WHEN_ALWAYS):
