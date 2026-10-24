@@ -3,7 +3,8 @@
 The device (layout, rendering, behaviour, entities) only uses DeckTransport.
 Implementations:
 - NetworkDockTransport: Elgato Stream Deck Network Dock (Cora over TCP)
-- later: bridge (vendor-neutral protocol) and virtual decks
+- VirtualTransport: a panel that only exists in Home Assistant (dashboard card)
+- later: bridge (vendor-neutral protocol)
 """
 
 from __future__ import annotations
@@ -163,3 +164,79 @@ class NetworkDockTransport(DeckTransport):
             self._client.set_key_image(index, image)
         except CoraError as err:
             raise TransportError(str(err)) from err
+
+
+# Listener of a virtual panel: ("image", key index) / ("brightness", None) / ("stopped", None)
+PanelListener = Callable[[str, int | None], None]
+
+
+class VirtualTransport(DeckTransport):
+    """A panel shown by dashboard cards; always connected.
+
+    Keeps the current image of every key and the brightness, so a card that
+    opens later gets the full picture. Cards report presses with `press`.
+    """
+
+    def __init__(self, serial: str, capabilities: DeckCapabilities, firmware: str) -> None:
+        """Initialize."""
+        super().__init__()
+        self._deck = AttachedDeck(serial=serial, capabilities=capabilities, firmware=firmware)
+        self.images: dict[int, bytes] = {}
+        self.brightness = 100
+        self._listeners: set[PanelListener] = set()
+        self._running = False
+
+    @property
+    def hub_connected(self) -> bool:
+        """There is no hub; the panel counts as reachable while running."""
+        return self._running
+
+    @property
+    def deck(self) -> AttachedDeck | None:
+        """The panel while running."""
+        return self._deck if self._running else None
+
+    def hub_info(self) -> dict[str, Any]:
+        """No hub facts."""
+        return {"host": None}
+
+    def start(self) -> None:
+        """Become available right away."""
+        self._running = True
+        if self.on_hub_state:
+            self.on_hub_state(True)
+        if self.on_deck_connected:
+            self.on_deck_connected(self._deck)
+
+    async def stop(self, *, reset: bool = True) -> None:
+        """Tell open cards to subscribe again (the entry reloads or unloads)."""
+        self._running = False
+        for listener in list(self._listeners):
+            listener("stopped", None)
+        self._listeners.clear()
+
+    def set_brightness(self, percent: int) -> None:
+        """Remember the brightness; cards dim their keys."""
+        self.brightness = percent
+        self._notify("brightness", None)
+
+    def set_key_image(self, index: int, image: bytes) -> None:
+        """Remember the image and push it to open cards."""
+        self.images[index] = image
+        self._notify("image", index)
+
+    # Card side
+
+    def subscribe(self, listener: PanelListener) -> Callable[[], None]:
+        """Call listener on every change until the returned function is called."""
+        self._listeners.add(listener)
+        return lambda: self._listeners.discard(listener)
+
+    def press(self, index: int, pressed: bool) -> None:
+        """A card reports a key going down or up."""
+        if self._running and 0 <= index < self._deck.capabilities.key_count and self.on_key:
+            self.on_key(index, pressed)
+
+    def _notify(self, kind: str, index: int | None) -> None:
+        for listener in list(self._listeners):
+            listener(kind, index)

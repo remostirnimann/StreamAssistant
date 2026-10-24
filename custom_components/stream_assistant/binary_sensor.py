@@ -23,6 +23,9 @@ async def async_setup_entry(
 ) -> None:
     """Add one connectivity sensor for the dock and one for the deck."""
     device = entry.runtime_data
+    if device.virtual:
+        # Always "connected", nothing to report
+        return
     async_add_entities([DockConnectedSensor(device), DeckConnectedSensor(device)])
 
 

@@ -122,6 +122,9 @@ const T = {
     templateName: "Name der Vorlage",
     templateNamePlaceholder: "z. B. Wohnzimmer",
     model: "Modell",
+    freeGrid: "Freies Raster (virtuelles Panel) …",
+    cols: "Spalten",
+    rows: "Zeilen",
     cancel: "Abbrechen",
     create: "Erstellen",
     savedAsTemplate: "Als Vorlage gespeichert und verknüpft.",
@@ -133,6 +136,8 @@ const T = {
     infoTitle: "Informationen",
     behaviorTitle: "Verhalten",
     factDock: "Network Dock",
+    factPanel: "Virtuelles Panel",
+    factGrid: "Raster",
     factDeck: "Stream Deck",
     factDisplay: "Anzeige",
     factLayout: "Layout",
@@ -278,6 +283,9 @@ const T = {
     templateName: "Template name",
     templateNamePlaceholder: "e.g. Living room",
     model: "Model",
+    freeGrid: "Free grid (virtual panel) …",
+    cols: "Columns",
+    rows: "Rows",
     cancel: "Cancel",
     create: "Create",
     savedAsTemplate: "Saved as template and linked.",
@@ -289,6 +297,8 @@ const T = {
     infoTitle: "Information",
     behaviorTitle: "Behaviour",
     factDock: "Network Dock",
+    factPanel: "Virtual panel",
+    factGrid: "Grid",
     factDeck: "Stream Deck",
     factDisplay: "Display",
     factLayout: "Layout",
@@ -682,13 +692,17 @@ class StreamAssistantPanel extends HTMLElement {
     const dlg = this.shadowRoot.getElementById("picker");
     const models = this.models
       .map((m) => `<option value="${esc(m.id)}">${esc(m.name)} (${m.cols} × ${m.rows})</option>`)
-      .join("");
+      .join("") + `<option value="grid">${esc(t.freeGrid)}</option>`;
     dlg.innerHTML = `
       <div class="dlg-head"><h2>${t.newTemplate}</h2><button type="button" class="icon-btn" data-role="pk-close" aria-label="${esc(t.close)}"><ha-icon icon="mdi:close"></ha-icon></button></div>
       <div class="dlg-body">
         <p class="help">${t.templateHelp}</p>
         <label>${t.templateName}<input id="tpl-name" maxlength="60" placeholder="${esc(t.templateNamePlaceholder)}"></label>
         <label>${t.model}<select id="tpl-model">${models}</select></label>
+        <div class="grid-size" id="tpl-grid" hidden>
+          <label>${t.cols}<input id="tpl-cols" type="number" min="1" max="12" value="5"></label>
+          <label>${t.rows}<input id="tpl-rows" type="number" min="1" max="8" value="3"></label>
+        </div>
       </div>
       <div class="dlg-foot">
         <button type="button" class="btn" data-role="pk-close">${t.cancel}</button>
@@ -700,7 +714,11 @@ class StreamAssistantPanel extends HTMLElement {
 
   async _createTemplate() {
     const name = this.shadowRoot.getElementById("tpl-name").value.trim();
-    const model = this.shadowRoot.getElementById("tpl-model").value;
+    let model = this.shadowRoot.getElementById("tpl-model").value;
+    if (model === "grid") {
+      const clamp = (id, max) => Math.max(1, Math.min(max, Math.round(Number(this.shadowRoot.getElementById(id).value) || 1)));
+      model = `grid_${clamp("tpl-cols", 12)}x${clamp("tpl-rows", 8)}`;
+    }
     if (!name) return;
     if (!this._confirmLeave()) return;
     this._closePicker();
@@ -953,20 +971,29 @@ class StreamAssistantPanel extends HTMLElement {
     let brightness = `${i.brightness.current} %`;
     if (i.brightness.dimmed) brightness += ` (${t.stateDimmed})`;
     else if (i.brightness.night_active) brightness += ` (${t.stateNight})`;
+    const hardware = i.virtual
+      ? [
+          [t.factPanel, ""],
+          [t.factGrid, i.deck.model || "–"],
+          [t.factKeys, i.deck.key_count ?? "–"],
+        ]
+      : [
+          [t.factDock, ""],
+          [t.factSerial, i.dock.serial],
+          [t.factFirmware, i.dock.firmware || "–"],
+          [t.factAddress, i.dock.host],
+          [t.factMac, i.dock.mac || "–"],
+          [t.factConnection, yes(i.dock.connected)],
+          [t.factDeck, ""],
+          [t.factModel, i.deck.model || "–"],
+          [t.factSerial, i.deck.serial || "–"],
+          [t.factFirmware, i.deck.firmware || "–"],
+          [t.factConnection, yes(i.deck.connected)],
+          [t.factSince, this._fmtDate(i.deck.connected_since)],
+          [t.factKeys, i.deck.key_count ?? "–"],
+        ];
     const rows = [
-      [t.factDock, ""],
-      [t.factSerial, i.dock.serial],
-      [t.factFirmware, i.dock.firmware || "–"],
-      [t.factAddress, i.dock.host],
-      [t.factMac, i.dock.mac || "–"],
-      [t.factConnection, yes(i.dock.connected)],
-      [t.factDeck, ""],
-      [t.factModel, i.deck.model || "–"],
-      [t.factSerial, i.deck.serial || "–"],
-      [t.factFirmware, i.deck.firmware || "–"],
-      [t.factConnection, yes(i.deck.connected)],
-      [t.factSince, this._fmtDate(i.deck.connected_since)],
-      [t.factKeys, i.deck.key_count ?? "–"],
+      ...hardware,
       [t.factDisplay, ""],
       [t.factBrightnessSet, `${i.brightness.base} %`],
       [t.factBrightnessNow, brightness],
@@ -1685,6 +1712,10 @@ class StreamAssistantPanel extends HTMLElement {
       this._renderEntityList();
       return;
     }
+    if (el.id === "tpl-model") {
+      this.shadowRoot.getElementById("tpl-grid").hidden = el.value !== "grid";
+      return;
+    }
     if (el.dataset.role === "entry") {
       const [kind, ...rest] = el.value.split(":");
       if (this._confirmLeave()) this._loadTarget(kind, rest.join(":"));
@@ -1788,6 +1819,8 @@ const STYLE = `
   .warn-text { color: var(--warning-color, #e65100); margin-left: 6px; }
   .chip.neutral { background: var(--secondary-background-color, rgba(0,0,0,0.06)); color: var(--secondary-text-color); }
   .dlg-body { display: flex; flex-direction: column; gap: 12px; padding: 8px 24px 16px; }
+  .grid-size { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-size[hidden] { display: none; }
   .action-row { display: flex; gap: 8px; align-items: center; }
   .action-row select { flex: 1 1 auto; min-width: 0; }
   .btn.test { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; height: 40px; }

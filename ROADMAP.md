@@ -51,7 +51,8 @@
 
 1. ~~Transport + capabilities layer in the integration~~ done in 0.5.1 (Network Dock
    transport; `scripts/fake_dock.py` + `scripts/selftest_transport.py` test it without hardware)
-2. Virtual deck in HA with dashboard card
+2. ~~Virtual deck in HA with dashboard card~~ done in 0.6.0 (free grid of columns × rows
+   instead of a fixed model; card `custom:stream-assistant-card`; templates can use free grids too)
 3. Bridge with neutral protocol + Elgato USB driver (several decks per computer, hot-plug)
 4. HA add-on and platform packages, then more manufacturers
 5. Docs + HACS beta (possibly already after step 2)

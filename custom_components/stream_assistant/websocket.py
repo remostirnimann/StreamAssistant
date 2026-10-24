@@ -3,8 +3,12 @@
 Layout commands address either a dock (`entry_id`) or a template
 (`template_id`, a planned deck without hardware).
 
-All commands are admin-only, like the panel: they expose addresses, serial
-numbers and the layout (entity ids), or change things.
+All editor commands are admin-only, like the panel: they expose addresses,
+serial numbers and the layout (entity ids), or change things.
+
+The panel/* commands serve the dashboard card of virtual panels and are open
+to every user: they only show key images and press keys, like a real deck
+hanging on the wall.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ from .layout import ACTION_CALL, ACTION_DEFAULT, PAGE_SCHEMA, validate_layout
 from .capabilities import CATALOG, DeckCapabilities, find_capabilities
 from .render import ASSETS
 from .templates import DATA_TEMPLATES, TemplateManager
+from .transport import VirtualTransport
 
 TARGET = {vol.Exclusive("entry_id", "target"): str, vol.Exclusive("template_id", "target"): str}
 
@@ -53,6 +58,9 @@ def async_register(hass: HomeAssistant) -> None:
         ws_detach,
         ws_info,
         ws_set_behavior,
+        ws_panel_list,
+        ws_panel_subscribe,
+        ws_panel_press,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -111,6 +119,7 @@ def _entry_summary(device: StreamAssistantDevice) -> dict[str, Any]:
     return {
         "entry_id": device.entry.entry_id,
         "title": device.entry.title,
+        "virtual": device.virtual,
         "model": _model_info(device.model),
         "dock_connected": device.dock_connected,
         "deck_connected": device.deck_connected,
@@ -439,4 +448,91 @@ async def ws_detach(hass: HomeAssistant, connection: websocket_api.ActiveConnect
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Dock not found or not loaded")
         return
     await device.async_detach_template()
+    connection.send_result(msg["id"])
+
+
+# Dashboard card of virtual panels (all users)
+
+
+def _panel(hass: HomeAssistant, entry_id: str) -> tuple[StreamAssistantDevice, VirtualTransport] | None:
+    device = _device(hass, entry_id)
+    if device is None or not isinstance(device.transport, VirtualTransport):
+        return None
+    return device, device.transport
+
+
+def _b64(image: bytes) -> str:
+    return base64.b64encode(image).decode("ascii")
+
+
+@websocket_api.websocket_command({vol.Required("type"): "stream_assistant/panel/list"})
+@callback
+def ws_panel_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Virtual panels, for the card editor."""
+    connection.send_result(
+        msg["id"],
+        [
+            {"entry_id": d.entry.entry_id, "title": d.entry.title, "cols": d.model.cols, "rows": d.model.rows}
+            for d in _devices(hass)
+            if d.virtual and d.model
+        ],
+    )
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "stream_assistant/panel/subscribe", vol.Required("entry_id"): str}
+)
+@callback
+def ws_panel_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Send the full panel once, then every changed key image and brightness.
+
+    {"stopped": true} means the panel was reloaded or removed: subscribe again.
+    """
+    if (found := _panel(hass, msg["entry_id"])) is None:
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Virtual panel not found or not loaded")
+        return
+    device, transport = found
+    assert device.model
+
+    @callback
+    def forward(kind: str, index: int | None) -> None:
+        if kind == "image" and index is not None:
+            payload: dict[str, Any] = {"key": index, "image": _b64(transport.images[index])}
+        elif kind == "brightness":
+            payload = {"brightness": transport.brightness}
+        else:
+            payload = {"stopped": True}
+        connection.send_message(websocket_api.event_message(msg["id"], payload))
+
+    connection.subscriptions[msg["id"]] = transport.subscribe(forward)
+    connection.send_result(msg["id"])
+    connection.send_message(
+        websocket_api.event_message(
+            msg["id"],
+            {
+                "title": device.entry.title,
+                "cols": device.model.cols,
+                "rows": device.model.rows,
+                "brightness": transport.brightness,
+                "images": {str(i): _b64(img) for i, img in transport.images.items()},
+            },
+        )
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "stream_assistant/panel/press",
+        vol.Required("entry_id"): str,
+        vol.Required("key"): vol.All(int, vol.Range(min=0)),
+        vol.Required("pressed"): bool,
+    }
+)
+@callback
+def ws_panel_press(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """A key of the card went down or up; long presses come from holding it."""
+    if (found := _panel(hass, msg["entry_id"])) is None:
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Virtual panel not found or not loaded")
+        return
+    found[1].press(msg["key"], msg["pressed"])
     connection.send_result(msg["id"])

@@ -10,23 +10,29 @@ changes are picked up from two sources:
 from __future__ import annotations
 
 import logging
+import secrets
 from typing import Any
 
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_HOST, CONF_MAC
+from homeassistant.const import CONF_HOST, CONF_MAC, CONF_NAME
 from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.selector import NumberSelector, NumberSelectorConfig, NumberSelectorMode
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
+from .capabilities import MAX_COLS, MAX_ROWS
 from .const import (
+    CONF_COLS,
     CONF_DECK_PRODUCT_ID,
     CONF_DECK_SERIAL,
     CONF_DOCK_SERIAL,
     CONF_KIND,
+    CONF_ROWS,
     DOMAIN,
     KIND_PLANNER,
+    KIND_VIRTUAL,
     PLANNER_UNIQUE_ID,
 )
 from .protocol import NETWORK_DOCK_DEVICE_TYPE, ChildInfo, CoraError, DockInfo, find_model, probe
@@ -43,6 +49,16 @@ def _entry_data(
         CONF_DOCK_SERIAL: dock.serial,
         CONF_DECK_SERIAL: child.serial if child else None,
         CONF_DECK_PRODUCT_ID: child.product_id if child else None,
+    }
+
+
+def _grid_schema(cols: int, rows: int) -> dict[Any, Any]:
+    def box(maximum: int) -> NumberSelector:
+        return NumberSelector(NumberSelectorConfig(min=1, max=maximum, step=1, mode=NumberSelectorMode.BOX))
+
+    return {
+        vol.Required(CONF_COLS, default=cols): box(MAX_COLS),
+        vol.Required(CONF_ROWS, default=rows): box(MAX_ROWS),
     }
 
 
@@ -101,7 +117,46 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Add a dock, or only enable planning (templates) without hardware."""
-        return self.async_show_menu(step_id="user", menu_options=["dock", "planner"])
+        return self.async_show_menu(step_id="user", menu_options=["dock", "virtual", "planner"])
+
+    async def async_step_virtual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """A panel that only exists in Home Assistant, shown by a dashboard card."""
+        if user_input is not None:
+            # Stable id for the device and its entities, independent of the name
+            serial = f"virtual-{secrets.token_hex(4)}"
+            await self.async_set_unique_id(serial)
+            return self.async_create_entry(
+                title=user_input[CONF_NAME].strip() or "Virtual panel",
+                data={
+                    CONF_KIND: KIND_VIRTUAL,
+                    CONF_DECK_SERIAL: serial,
+                    CONF_COLS: int(user_input[CONF_COLS]),
+                    CONF_ROWS: int(user_input[CONF_ROWS]),
+                },
+            )
+        return self.async_show_form(
+            step_id="virtual",
+            data_schema=vol.Schema({vol.Required(CONF_NAME): str, **_grid_schema(5, 3)}),
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the grid of a virtual panel."""
+        entry = self._get_reconfigure_entry()
+        if entry.data.get(CONF_KIND) != KIND_VIRTUAL:
+            return self.async_abort(reason="not_reconfigurable")
+        if user_input is not None:
+            return self.async_update_reload_and_abort(
+                entry,
+                data_updates={CONF_COLS: int(user_input[CONF_COLS]), CONF_ROWS: int(user_input[CONF_ROWS])},
+            )
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(_grid_schema(entry.data[CONF_COLS], entry.data[CONF_ROWS])),
+        )
 
     async def async_step_planner(
         self, user_input: dict[str, Any] | None = None

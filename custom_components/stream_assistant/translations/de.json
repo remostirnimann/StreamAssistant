@@ -9,6 +9,7 @@
         "title": "Stream Assistant hinzufügen",
         "menu_options": {
           "dock": "Stream Deck Network Dock hinzufügen",
+          "virtual": "Virtuelles Panel hinzufügen (Dashboard-Karte)",
           "planner": "Nur planen (noch ohne Hardware)"
         }
       },
@@ -21,9 +22,31 @@
           "host": "IP-Adresse oder Hostname des Network Dock."
         }
       },
+      "virtual": {
+        "title": "Virtuelles Panel",
+        "description": "Ein Stream Deck, das nur in Home Assistant existiert: Tasten, Seiten, Vorlagen und Automationen funktionieren wie bei einem echten Deck, angezeigt wird es mit der Dashboard-Karte «Stream Assistant Panel» (Wandtablet, Handy). Das Raster ist frei wählbar.",
+        "data": {
+          "name": "Name",
+          "cols": "Spalten",
+          "rows": "Zeilen"
+        },
+        "data_description": {
+          "name": "Name des Geräts, z. B. «Küche Tablet».",
+          "cols": "Tasten pro Zeile (1–12).",
+          "rows": "Anzahl Zeilen (1–8)."
+        }
+      },
       "planner": {
         "title": "Nur planen (noch ohne Hardware)",
         "description": "Aktiviert den Stream-Assistant-Editor in der Seitenleiste ohne Dock. Plane dort Vorlagen für deine künftigen Stream Decks und weise sie zu, sobald die Hardware eingerichtet ist. Dieser Eintrag kann bleiben oder später entfernt werden."
+      },
+      "reconfigure": {
+        "title": "Raster ändern",
+        "description": "Tasten behalten ihre Zeile und Spalte. Tasten ausserhalb des neuen Rasters werden entfernt.",
+        "data": {
+          "cols": "Spalten",
+          "rows": "Zeilen"
+        }
       }
     },
     "error": {
@@ -32,7 +55,9 @@
     "abort": {
       "already_configured": "Bereits eingerichtet.",
       "cannot_connect": "Keine Verbindung zum Dock.",
-      "not_network_dock": "Dieses Gerät ist kein Stream Deck Network Dock."
+      "not_network_dock": "Dieses Gerät ist kein Stream Deck Network Dock.",
+      "reconfigure_successful": "Das Raster wurde geändert.",
+      "not_reconfigurable": "Nur virtuelle Panels lassen sich neu konfigurieren."
     }
   },
   "entity": {

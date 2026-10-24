@@ -8,7 +8,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from . import websocket
 from .const import CONF_KIND, DOMAIN, KIND_PLANNER, PLATFORMS
-from .device import StreamAssistantConfigEntry, StreamAssistantDevice
+from .device import StreamAssistantConfigEntry, StreamAssistantDevice, async_remove_layout
 from .panel import async_register_panel
 from .templates import DATA_TEMPLATES, TemplateManager
 
@@ -50,3 +50,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: StreamAssistantConfigEn
     if unloaded:
         await entry.runtime_data.async_stop()
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: StreamAssistantConfigEntry) -> None:
+    """Delete what the entry stored (layout, behaviour); runs after unloading."""
+    if not _is_planner(entry):
+        await async_remove_layout(hass, entry.entry_id)

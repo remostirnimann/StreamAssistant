@@ -1,13 +1,14 @@
 """What a deck can do, independent of manufacturer and transport.
 
 Layout, rendering, templates and the editor work only with these
-capabilities. A transport (Elgato Network Dock today; bridge and virtual
-decks later) maps its hardware to a capability profile.
+capabilities. A transport (Elgato Network Dock, virtual panel; bridge
+later) maps its hardware to a capability profile.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 IMAGE_JPEG = "jpeg"
 
@@ -40,6 +41,26 @@ CATALOG: tuple[DeckCapabilities, ...] = (
 )
 
 
+# Free grids (virtual panels, templates for them): any size within these limits
+MAX_COLS = 12
+MAX_ROWS = 8
+# Virtual panels are shown on tablets and phones, render sharp enough for high-DPI screens
+GRID_KEY_SIZE = 144
+_GRID_ID = re.compile(r"grid_(\d+)x(\d+)")
+
+
+def grid_capabilities(cols: int, rows: int) -> DeckCapabilities:
+    """Profile of a free grid, e.g. a virtual panel with 4 columns and 2 rows."""
+    if not (1 <= cols <= MAX_COLS and 1 <= rows <= MAX_ROWS):
+        raise ValueError(f"Grid {cols}x{rows} outside 1-{MAX_COLS} x 1-{MAX_ROWS}")
+    return DeckCapabilities(f"grid_{cols}x{rows}", f"{cols} × {rows}", cols, rows, GRID_KEY_SIZE)
+
+
 def find_capabilities(model_id: str | None) -> DeckCapabilities | None:
-    """Return a profile by id."""
+    """Return a profile by id: a known model or a free grid ("grid_5x3")."""
+    if model_id and (match := _GRID_ID.fullmatch(model_id)):
+        try:
+            return grid_capabilities(int(match[1]), int(match[2]))
+        except ValueError:
+            return None
     return next((caps for caps in CATALOG if caps.model_id == model_id), None)

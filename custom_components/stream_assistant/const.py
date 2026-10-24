@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.const import Platform
 
 DOMAIN = "stream_assistant"
-VERSION = "0.5.1"
+VERSION = "0.6.1"
 PANEL_URL = "stream-assistant"
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.NUMBER]
@@ -18,6 +18,10 @@ CONF_DECK_PRODUCT_ID = "deck_product_id"
 CONF_KIND = "kind"
 KIND_PLANNER = "planner"
 PLANNER_UNIQUE_ID = "planner"
+# A panel that only exists in Home Assistant (dashboard card), with a free grid
+KIND_VIRTUAL = "virtual"
+CONF_COLS = "cols"
+CONF_ROWS = "rows"
 
 LONG_PRESS_SECONDS = 0.5
 

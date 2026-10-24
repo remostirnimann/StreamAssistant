@@ -9,6 +9,7 @@
         "title": "Add Stream Assistant",
         "menu_options": {
           "dock": "Add a Stream Deck Network Dock",
+          "virtual": "Add a virtual panel (dashboard card)",
           "planner": "Only plan (no hardware yet)"
         }
       },
@@ -21,9 +22,31 @@
           "host": "IP address or hostname of the Network Dock."
         }
       },
+      "virtual": {
+        "title": "Virtual panel",
+        "description": "A Stream Deck that only exists in Home Assistant: keys, pages, templates and automations work like on a real deck, shown by the \"Stream Assistant panel\" dashboard card (wall tablet, phone). Choose any grid size.",
+        "data": {
+          "name": "Name",
+          "cols": "Columns",
+          "rows": "Rows"
+        },
+        "data_description": {
+          "name": "Name of the device, e.g. \"Kitchen tablet\".",
+          "cols": "Keys per row (1-12).",
+          "rows": "Number of rows (1-8)."
+        }
+      },
       "planner": {
         "title": "Only plan (no hardware yet)",
         "description": "Enables the Stream Assistant editor in the sidebar without a dock. Plan templates for your future Stream Decks there and assign them once the hardware is set up. You can keep this entry or remove it later."
+      },
+      "reconfigure": {
+        "title": "Change grid",
+        "description": "Keys keep their row and column. Keys outside the new grid are removed.",
+        "data": {
+          "cols": "Columns",
+          "rows": "Rows"
+        }
       }
     },
     "error": {
@@ -32,7 +55,9 @@
     "abort": {
       "already_configured": "Already configured.",
       "cannot_connect": "Cannot connect to the dock.",
-      "not_network_dock": "This device is not a Stream Deck Network Dock."
+      "not_network_dock": "This device is not a Stream Deck Network Dock.",
+      "reconfigure_successful": "The grid was changed.",
+      "not_reconfigurable": "Only virtual panels can be reconfigured."
     }
   },
   "entity": {

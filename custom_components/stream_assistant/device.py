@@ -1,4 +1,4 @@
-"""Runtime object for one dock: connection, layout, live key images, key actions."""
+"""Runtime object for one deck (behind a dock, or virtual): connection, layout, live key images, key actions."""
 
 from __future__ import annotations
 
@@ -21,15 +21,20 @@ from homeassistant.util import dt as dt_util
 from .actions import async_run_action
 from .behavior import BehaviorController
 from .const import (
+    CONF_COLS,
     CONF_DECK_PRODUCT_ID,
     CONF_DECK_SERIAL,
     CONF_DOCK_SERIAL,
+    CONF_KIND,
+    CONF_ROWS,
     DOMAIN,
     EVENT_LONG_PRESS,
     EVENT_PRESSED,
     EVENT_RELEASED,
     EVENT_SHORT_PRESS,
+    KIND_VIRTUAL,
     LONG_PRESS_SECONDS,
+    VERSION,
     signal_key,
     signal_state,
 )
@@ -47,11 +52,11 @@ from .layout import (
     remap_layout,
 )
 from .preview import RenderCache
-from .capabilities import DeckCapabilities, find_capabilities
+from .capabilities import DeckCapabilities, find_capabilities, grid_capabilities
 from .protocol import find_model
 from .render import KeyVisual
 from .templates import DATA_TEMPLATES
-from .transport import AttachedDeck, DeckTransport, NetworkDockTransport, TransportError
+from .transport import AttachedDeck, DeckTransport, NetworkDockTransport, TransportError, VirtualTransport
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,21 +80,42 @@ class LayoutStore(Store[dict[str, Any]]):
         return old_data
 
 
+def _layout_store(hass: HomeAssistant, entry_id: str) -> LayoutStore:
+    return LayoutStore(hass, STORAGE_VERSION, f"{DOMAIN}.{entry_id}")
+
+
+async def async_remove_layout(hass: HomeAssistant, entry_id: str) -> None:
+    """Delete the stored layout of a removed config entry."""
+    await _layout_store(hass, entry_id).async_remove()
+
+
 class StreamAssistantDevice:
-    """One Network Dock with (optionally) one Stream Deck attached."""
+    """One Network Dock with (optionally) one Stream Deck attached, or a virtual panel."""
 
     def __init__(self, hass: HomeAssistant, entry: StreamAssistantConfigEntry) -> None:
         """Initialize."""
         self.hass = hass
         self.entry = entry
-        self.transport: DeckTransport = NetworkDockTransport(entry.data[CONF_HOST])
-        self.dock_serial: str = entry.data[CONF_DOCK_SERIAL]
+        self.virtual = entry.data.get(CONF_KIND) == KIND_VIRTUAL
+        self.transport: DeckTransport
+        self.dock_serial: str | None
         self.deck_serial: str | None = entry.data.get(CONF_DECK_SERIAL)
-        product_id = entry.data.get(CONF_DECK_PRODUCT_ID)
         # The model is fixed per config entry so the key entities exist even while offline
-        hardware = find_model(product_id) if product_id else None
-        self.model: DeckCapabilities | None = find_capabilities(hardware.model_id) if hardware else None
-        self.brightness = DEFAULT_BRIGHTNESS
+        self.model: DeckCapabilities | None
+        if self.virtual:
+            assert self.deck_serial
+            self.model = grid_capabilities(entry.data[CONF_COLS], entry.data[CONF_ROWS])
+            self.transport = VirtualTransport(self.deck_serial, self.model, VERSION)
+            self.dock_serial = None
+            # A screen at 70 % looks broken; there is no LED wear to save
+            self.brightness = 100
+        else:
+            self.transport = NetworkDockTransport(entry.data[CONF_HOST])
+            self.dock_serial = entry.data[CONF_DOCK_SERIAL]
+            product_id = entry.data.get(CONF_DECK_PRODUCT_ID)
+            hardware = find_model(product_id) if product_id else None
+            self.model = find_capabilities(hardware.model_id) if hardware else None
+            self.brightness = DEFAULT_BRIGHTNESS
         self.templates = hass.data[DATA_TEMPLATES]
         # What the deck shows: the own layout, or the linked template's (fitted to this model)
         self.layout: dict[str, Any] = empty_layout()
@@ -104,7 +130,7 @@ class StreamAssistantDevice:
         self._revision_counter = 0
         self.current_page = ROOT_PAGE_ID
 
-        self._store = LayoutStore(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
+        self._store = _layout_store(hass, entry.entry_id)
         self._long_press_timers: dict[int, CALLBACK_TYPE] = {}
         self._short_done: set[int] = set()
         self._unsub_states: CALLBACK_TYPE | None = None
@@ -154,8 +180,16 @@ class StreamAssistantDevice:
 
     @property
     def deck_device_info(self) -> DeviceInfo:
-        """Device info of the attached deck."""
+        """Device info of the attached deck (or the virtual panel)."""
         assert self.model and self.deck_serial
+        if self.virtual:
+            return DeviceInfo(
+                identifiers={(DOMAIN, self.deck_serial)},
+                manufacturer="Stream Assistant",
+                model=f"Virtual panel {self.model.name}",
+                name=self.entry.title,
+                sw_version=VERSION,
+            )
         info = DeviceInfo(
             identifiers={(DOMAIN, self.deck_serial)},
             manufacturer="Elgato",
@@ -174,15 +208,24 @@ class StreamAssistantDevice:
         behavior = None
         if stored := await self._store.async_load():
             self._own_layout = {"pages": stored["pages"]}
+            grid = stored.get("grid")
+            if self.model and grid and grid != [self.model.cols, self.model.rows]:
+                # The grid of a virtual panel was changed: keep keys at their row and column
+                self._own_layout, dropped = remap_layout(
+                    self._own_layout, grid[0], self.model.cols, self.model.rows
+                )
+                _LOGGER.info("%s: grid changed to %s, %s keys did not fit", self.entry.title, self.model.name, dropped)
+                self._store.async_delay_save(self._data_to_store, SAVE_DELAY)
             if (template_id := stored.get("template_id")) and self.templates.get(template_id):
                 self._link(template_id)
             behavior = stored.get("behavior")
         self._update_effective_layout()
         self.behavior.async_start(behavior)
 
-        dev_reg = dr.async_get(self.hass)
-        dock = dev_reg.async_get_or_create(config_entry_id=self.entry.entry_id, **self.dock_device_info)
-        self._dock_device_id = dock.id
+        if not self.virtual:
+            dev_reg = dr.async_get(self.hass)
+            dock = dev_reg.async_get_or_create(config_entry_id=self.entry.entry_id, **self.dock_device_info)
+            self._dock_device_id = dock.id
 
         self.transport.on_hub_state = self._on_dock_state
         self.transport.on_deck_connected = self._on_deck_connected
@@ -209,6 +252,8 @@ class StreamAssistantDevice:
             **self._own_layout,
             "template_id": self.template_id,
             "behavior": self.behavior.settings,
+            # Grid the own layout was made for, to follow later grid changes
+            "grid": [self.model.cols, self.model.rows] if self.model else None,
         }
 
     # Behavior and info
@@ -235,6 +280,7 @@ class StreamAssistantDevice:
         pages = self.layout["pages"]
         deadline = self.behavior.idle_deadline
         return {
+            "virtual": self.virtual,
             "dock": {
                 "serial": self.dock_serial,
                 "firmware": hub.get("firmware"),
@@ -468,7 +514,7 @@ class StreamAssistantDevice:
             self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
             return
 
-        if deck.firmware:
+        if deck.firmware and not self.virtual:
             dr.async_get(self.hass).async_get_or_create(
                 config_entry_id=self.entry.entry_id,
                 identifiers={(DOMAIN, deck.serial)},

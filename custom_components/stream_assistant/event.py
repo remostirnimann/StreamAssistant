@@ -8,7 +8,7 @@ import voluptuous as vol
 
 from homeassistant.components.event import EventDeviceClass, EventEntity
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import config_validation as cv, entity_platform
+from homeassistant.helpers import config_validation as cv, entity_platform, entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -64,6 +64,7 @@ async def async_setup_entry(
     device = entry.runtime_data
     if device.model is None or device.deck_serial is None:
         return
+    _remove_surplus_keys(hass, entry, device)
     async_add_entities(
         StreamDeckKeyEvent(device, key) for key in range(device.model.key_count)
     )
@@ -71,6 +72,21 @@ async def async_setup_entry(
     platform = entity_platform.async_get_current_platform()
     platform.async_register_entity_service(SERVICE_SET_KEY, SET_KEY_SCHEMA, "async_set_key")
     platform.async_register_entity_service(SERVICE_CLEAR_KEY, None, "async_clear_key")
+
+
+def _remove_surplus_keys(
+    hass: HomeAssistant, entry: StreamAssistantConfigEntry, device: StreamAssistantDevice
+) -> None:
+    """Drop key entities beyond the grid (a virtual panel was made smaller)."""
+    assert device.model
+    registry = er.async_get(hass)
+    prefix = f"{device.deck_serial}_key_"
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.domain != "event" or not entity.unique_id.startswith(prefix):
+            continue
+        index = entity.unique_id.removeprefix(prefix)
+        if index.isdigit() and int(index) >= device.model.key_count:
+            registry.async_remove(entity.entity_id)
 
 
 class StreamDeckKeyEvent(StreamAssistantEntity, EventEntity):

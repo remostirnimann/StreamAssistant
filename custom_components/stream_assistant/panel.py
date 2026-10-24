@@ -1,10 +1,11 @@
-"""Sidebar panel hosting the key editor."""
+"""Sidebar panel hosting the key editor, and the dashboard card of virtual panels."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from homeassistant.components import panel_custom
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 
@@ -15,10 +16,12 @@ FRONTEND_DIR = Path(__file__).parent / "frontend"
 
 
 async def async_register_panel(hass: HomeAssistant) -> None:
-    """Serve the panel script and add the sidebar entry (admins only)."""
+    """Serve the scripts, add the sidebar entry (admins only) and load the card everywhere."""
     await hass.http.async_register_static_paths(
         [StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), cache_headers=False)]
     )
+    # Loaded on every dashboard, so the card needs no manual resource entry
+    add_extra_js_url(hass, f"{STATIC_URL}/card.js?v={VERSION}")
     await panel_custom.async_register_panel(
         hass,
         webcomponent_name="stream-assistant-panel",
