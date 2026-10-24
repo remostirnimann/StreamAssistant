@@ -18,7 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Web\*.html" />
+    <ProjectReference Include="..\StreamAssistant.Bridge.Core\StreamAssistant.Bridge.Core.csproj" />
   </ItemGroup>
 
 </Project>

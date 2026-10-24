@@ -4,8 +4,25 @@ Offers control surfaces attached to a computer (Stream Decks, later devices of
 other manufacturers) to Home Assistant over the network, without an Elgato
 Network Dock. Protocol: [docs/bridge-protocol.md](../docs/bridge-protocol.md).
 
-Status: protocol, pairing, discovery and a simulated deck are done. The Elgato
-USB driver comes next.
+Status: protocol, pairing, discovery, simulated decks and the desktop app with
+virtual decks are done. The Elgato USB driver comes next.
+
+## Projects
+
+| Project | What |
+|---|---|
+| `src/StreamAssistant.Bridge.Core` | The bridge: protocol, devices, discovery, local pages |
+| `src/StreamAssistant.Bridge` | Console program (`stream-assistant-bridge`), e.g. for servers and the HA add-on |
+| `src/StreamAssistant.Bridge.Desktop` | Desktop program with a window (`stream-assistant-bridge-desktop`, Avalonia) |
+| `tests/…` | Protocol tests and headless UI tests (xUnit v3, `dotnet test bridge`) |
+
+## Desktop app
+
+Same options as the console program. The window shows the connection to Home
+Assistant and the pairing code, and hosts **virtual decks**: choose a name,
+columns and rows; the deck appears in Home Assistant like a real Stream Deck
+(keys, pages, templates, behaviour are set up there) and is pressed in the
+window (hold for a long press). Virtual decks are stored in `bridge.json`.
 
 ## Run
 
@@ -29,6 +46,7 @@ stream-assistant-bridge [--port 5390] [--name "Office PC"] [--config-dir <dir>]
 ```bash
 dotnet test bridge
 dotnet publish bridge/src/StreamAssistant.Bridge -c Release -r win-x64 -o dist/bridge-win-x64
+dotnet publish bridge/src/StreamAssistant.Bridge.Desktop -c Release -r win-x64 -o dist/bridge-desktop-win-x64
 ```
 
 Runtime identifiers: `win-x64`, `osx-arm64`, `osx-x64`, `linux-x64`,

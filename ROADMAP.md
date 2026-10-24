@@ -56,7 +56,8 @@
 3. Bridge with neutral protocol + Elgato USB driver (several decks per computer, hot-plug)
    - done in 0.7.0 / bridge 0.1.0: protocol spec, .NET bridge (pairing, mDNS, simulated deck),
      integration side (one entry per bridge, decks appear and disappear on their own)
-   - open: Elgato USB driver (HidSharp), desktop window for virtual decks
+   - done: desktop app (Avalonia) with virtual decks of any grid, bridge 0.1.0
+   - open: Elgato USB driver (HidSharp)
 4. HA add-on and platform packages, then more manufacturers
 5. Docs + HACS beta (possibly already after step 2)
 

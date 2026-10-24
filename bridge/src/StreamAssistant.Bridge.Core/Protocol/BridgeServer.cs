@@ -34,6 +34,9 @@ public sealed class BridgeServer(
     private ClientSession? _active;
     private ITimer? _idleReset;
 
+    /// <summary>Raised (from any thread) when a client connects or disconnects.</summary>
+    public event Action? ClientChanged;
+
     public DeviceManager Devices => devices;
     public PairingService Pairing => pairing;
     public TimeProvider Time => time;
@@ -82,6 +85,7 @@ public sealed class BridgeServer(
         {
             _logger.LogInformation("{Client} connected from {Remote}", session.ClientName, session.Remote);
         }
+        ClientChanged?.Invoke();
     }
 
     internal void Deactivate(ClientSession session)
@@ -97,6 +101,7 @@ public sealed class BridgeServer(
             _idleReset = time.CreateTimer(_ => ResetIfIdle(), null, IdleResetDelay, Timeout.InfiniteTimeSpan);
         }
         _logger.LogInformation("{Client} disconnected", session.ClientName);
+        ClientChanged?.Invoke();
     }
 
     private void ResetIfIdle()

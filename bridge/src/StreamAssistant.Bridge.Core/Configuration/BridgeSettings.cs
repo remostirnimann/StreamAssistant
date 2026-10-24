@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -44,6 +45,18 @@ public sealed class PairedClient
     public DateTimeOffset Paired { get; set; }
 }
 
+/// <summary>A virtual deck of the desktop app.</summary>
+public sealed class VirtualDeckSettings
+{
+    public string Id { get; set; } = "";
+
+    public string Name { get; set; } = "";
+
+    public int Cols { get; set; } = 5;
+
+    public int Rows { get; set; } = 3;
+}
+
 /// <summary>Persistent state in bridge.json.</summary>
 public sealed class BridgeSettings
 {
@@ -53,11 +66,23 @@ public sealed class BridgeSettings
     public string? Name { get; set; }
 
     public List<PairedClient> Clients { get; set; } = [];
+
+    public List<VirtualDeckSettings> VirtualDecks { get; set; } = [];
 }
 
 [JsonSerializable(typeof(BridgeSettings))]
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower)]
-internal sealed partial class SettingsJsonContext : JsonSerializerContext;
+internal sealed partial class SettingsJsonContext : JsonSerializerContext
+{
+    /// <summary>Keeps umlauts readable in bridge.json (it is a file people look at).</summary>
+    /// Created on first use: the generated Default is not ready while static fields initialize.
+    public static SettingsJsonContext Readable => _readable ??= new(new JsonSerializerOptions(Default.Options)
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    });
+
+    private static SettingsJsonContext? _readable;
+}
 
 /// <summary>A second bridge with the same settings (and so the same id) is running.</summary>
 public sealed class AlreadyRunningException(string configDir)
@@ -133,7 +158,7 @@ public sealed class SettingsStore : IDisposable
     private void Save()
     {
         var temp = _path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(Settings, SettingsJsonContext.Default.BridgeSettings));
+        File.WriteAllText(temp, JsonSerializer.Serialize(Settings, SettingsJsonContext.Readable.BridgeSettings));
         File.Move(temp, _path, overwrite: true);
     }
 }

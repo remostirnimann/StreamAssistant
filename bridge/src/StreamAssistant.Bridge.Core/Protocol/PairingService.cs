@@ -38,6 +38,11 @@ public sealed class PairingService
 
     public string Code { get; private set; }
 
+    /// <summary>Raised (from any thread) when the pairing code or the paired clients change.</summary>
+    public event Action? Changed;
+
+    public int PairedClients => _store.Settings.Clients.Count;
+
     public void LogCode() => _logger.LogWarning("Pairing code for Home Assistant: {Code}", Code);
 
     public bool IsAuthorized(string? token)
@@ -84,6 +89,7 @@ public sealed class PairingService
         }
         _logger.LogInformation("Paired with {Client}", clientName);
         LogCode();
+        Changed?.Invoke();
         return PairingResult.Paired;
     }
 
@@ -95,6 +101,7 @@ public sealed class PairingService
             _store.Update(s => s.Clients.Clear());
         }
         _logger.LogWarning("All paired clients were removed");
+        Changed?.Invoke();
     }
 
     private static string NewCode() => RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");

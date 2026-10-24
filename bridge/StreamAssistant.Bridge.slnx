@@ -1,8 +1,11 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/StreamAssistant.Bridge.Core/StreamAssistant.Bridge.Core.csproj" />
+    <Project Path="src/StreamAssistant.Bridge.Desktop/StreamAssistant.Bridge.Desktop.csproj" />
     <Project Path="src/StreamAssistant.Bridge/StreamAssistant.Bridge.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/StreamAssistant.Bridge.Desktop.Tests/StreamAssistant.Bridge.Desktop.Tests.csproj" />
     <Project Path="tests/StreamAssistant.Bridge.Tests/StreamAssistant.Bridge.Tests.csproj" />
   </Folder>
 </Solution>

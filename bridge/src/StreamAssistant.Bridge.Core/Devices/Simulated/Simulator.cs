@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using StreamAssistant.Bridge.Configuration;
+using StreamAssistant.Bridge.Devices.Virtual;
 using StreamAssistant.Bridge.Protocol;
 
 namespace StreamAssistant.Bridge.Devices.Simulated;
@@ -15,7 +16,7 @@ public sealed class Simulator
 {
     private readonly DeviceManager _manager;
     private readonly ILogger<Simulator> _logger;
-    private readonly List<SimulatedDevice> _devices = [];
+    private readonly List<VirtualDevice> _devices = [];
 
     public Simulator(DeviceManager manager, BridgeOptions options, ILogger<Simulator> logger)
     {
@@ -35,7 +36,7 @@ public sealed class Simulator
                 Firmware: BridgeServer.Version,
                 Virtual: true,
                 Capabilities: new DeviceCapabilities(KeyGrid.Images(cols, rows, 72), Brightness: true));
-            var device = new SimulatedDevice(info);
+            var device = new VirtualDevice(info);
             device.Changed += (d, key) => Publish(key is { } k ? KeyJson(d, k) : DeviceJson(d));
             device.Identified += d => Publish(new JsonObject { ["type"] = "identify", ["device"] = d.Info.Id });
             _devices.Add(device);
@@ -45,9 +46,9 @@ public sealed class Simulator
     /// <summary>Simulator page events (JSON), for the open pages.</summary>
     public event Action<JsonObject>? PageEvent;
 
-    public IReadOnlyList<SimulatedDevice> Devices => _devices;
+    public IReadOnlyList<VirtualDevice> Devices => _devices;
 
-    public bool IsPlugged(SimulatedDevice device) => _manager.Get(device.Info.Id) == device;
+    public bool IsPlugged(VirtualDevice device) => _manager.Get(device.Info.Id) == device;
 
     /// <summary>Attach all simulated decks.</summary>
     public void Start()
@@ -171,7 +172,7 @@ public sealed class Simulator
 
     private void Publish(JsonObject message) => PageEvent?.Invoke(message);
 
-    private JsonObject DeviceJson(SimulatedDevice device)
+    private JsonObject DeviceJson(VirtualDevice device)
     {
         var grid = device.Info.Capabilities.Keys!;
         var keys = new JsonObject();
@@ -195,7 +196,7 @@ public sealed class Simulator
         };
     }
 
-    private static JsonObject KeyJson(SimulatedDevice device, int key) => new()
+    private static JsonObject KeyJson(VirtualDevice device, int key) => new()
     {
         ["type"] = "key",
         ["device"] = device.Info.Id,
@@ -203,7 +204,7 @@ public sealed class Simulator
         ["content"] = ContentJson(device.GetKey(key)),
     };
 
-    private static JsonObject? ContentJson(SimulatedDevice.KeyContent? content) => content switch
+    private static JsonObject? ContentJson(VirtualDevice.KeyContent? content) => content switch
     {
         { Image: { } image, Format: { } format } => new JsonObject { ["image"] = $"data:image/{format};base64,{Convert.ToBase64String(image)}" },
         { Color: { } color } => new JsonObject { ["color"] = color },

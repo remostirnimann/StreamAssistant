@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using StreamAssistant.Bridge.Devices.Simulated;
+using StreamAssistant.Bridge.Devices.Virtual;
 using StreamAssistant.Bridge.Protocol;
 
 namespace StreamAssistant.Bridge.Tests;
@@ -19,7 +20,7 @@ public sealed class TestBridge : WebApplicationFactory<Program>
 
     public Simulator Simulator => Services.GetRequiredService<Simulator>();
 
-    public SimulatedDevice Deck => Simulator.Devices[0];
+    public VirtualDevice Deck => Simulator.Devices[0];
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

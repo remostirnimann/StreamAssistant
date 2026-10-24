@@ -1,10 +1,11 @@
-namespace StreamAssistant.Bridge.Devices.Simulated;
+namespace StreamAssistant.Bridge.Devices.Virtual;
 
 /// <summary>
-/// A deck that only exists in the bridge, for tests and development without
-/// hardware. The simulator page shows what it displays and presses its keys.
+/// A deck that only exists in software: a virtual deck in the desktop window,
+/// or a simulated deck for tests (--simulate). Whoever shows it listens to
+/// <see cref="Changed"/> and reports presses with <see cref="Press"/>.
 /// </summary>
-public sealed class SimulatedDevice(DeviceInfo info) : IControlDevice
+public sealed class VirtualDevice(DeviceInfo info) : IControlDevice
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<int, KeyContent> _keys = [];
@@ -19,9 +20,9 @@ public sealed class SimulatedDevice(DeviceInfo info) : IControlDevice
     public event Action<IControlDevice, DeviceInput>? Input;
 
     /// <summary>Raised after every display change; the argument is the key, or null for the whole device.</summary>
-    public event Action<SimulatedDevice, int?>? Changed;
+    public event Action<VirtualDevice, int?>? Changed;
 
-    public event Action<SimulatedDevice>? Identified;
+    public event Action<VirtualDevice>? Identified;
 
     public KeyContent? GetKey(int key)
     {
