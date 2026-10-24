@@ -1,65 +1,38 @@
 # Roadmap
 
-## Next
+## Order (decided 2026-10-23)
 
-- **Documentation and HACS beta release**: user documentation (installation, setup,
-  editor, templates, actions, troubleshooting), screenshots, `info.md`/README for HACS,
-  GitHub releases with version tags, published first as a **beta** (pre-release) to
-  collect feedback while development continues.
+1. ~~Transport + capabilities layer in the integration~~ — 0.5.1
+   (`scripts/fake_dock.py` + `scripts/selftest_transport.py` test it without hardware)
+2. ~~Virtual deck in HA with dashboard card~~ — 0.6.0/0.6.1
+   (free grid of columns × rows instead of a fixed model; card `custom:stream-assistant-card`;
+   templates can use free grids too; removing an entry deletes its layouts)
+3. **Bridge with neutral protocol** — mostly done
+   - ~~protocol specification~~ [docs/bridge-protocol.md](docs/bridge-protocol.md)
+   - ~~.NET bridge~~ (pairing, mDNS, simulated decks, single-instance lock) — bridge 0.1.0
+   - ~~integration side~~ (one entry per bridge, decks appear and disappear on their own,
+     reauth when the bridge forgets the pairing) — 0.7.0
+   - ~~desktop app~~ (Avalonia) with virtual decks of any grid
+   - **open: Elgato USB driver** (HidSharp): MK.2 / Original v2 / XL first (JPEG, rotation in
+     the bridge), several decks per computer, USB hot-plug. Can be prepared now, needs the
+     real deck to verify. The Elgato app must not run at the same time (exclusive USB access).
+4. **Home Assistant add-on and platform packages**
+   - add-on with the console bridge (linux-musl, USB passthrough), pairing skipped for the
+     Supervisor network as the protocol allows
+   - packages/installers for Windows, macOS, Linux, Raspberry Pi; autostart; tray icon
+5. **Docs and HACS beta**: user documentation (installation, setup, editor, templates,
+   actions, bridge, troubleshooting), screenshots, `info.md`, GitHub releases with version
+   tags, published first as a beta (pre-release). Needs a GitHub repository (none yet).
 
-- **Stream Assistant Bridge ("virtual dock")**: software that emulates the Network Dock
-  so no extra hardware is needed. It speaks the dock's Cora TCP protocol towards Home
-  Assistant (port 5343 + a port per deck, keepalives, dock/deck info reports, mDNS
-  `_elg._tcp` with `dt=215`) and passes HID reports verbatim to a USB Stream Deck
-  (hidapi). The integration needs no changes; discovery, editor, templates and
-  behaviour work as with a real dock.
-  1. Proof of concept on Windows (deck via USB on the PC, HA sees a second "dock")
-  2. Proper bridge: service/autostart, several decks, logging, config
-  3. Home Assistant add-on with USB passthrough (deck plugged into the HA host)
-  4. Packages for Windows, macOS, Linux and Raspberry Pi, plus docs
-  Several decks per computer: one virtual dock per USB deck (own port pair and mDNS
-  record; the deck's serial is the dock serial, so each deck stays the same HA device
-  across USB ports and reboots), USB hot-plug announces/withdraws docks. Real docks
-  and bridge decks can be mixed freely.
-  Notes: the Elgato app must not run at the same time (exclusive USB access);
-  Gen1 decks (Original v1, Mini) would also need BMP image support in the integration.
+## Then
 
-- **More manufacturers** (future): Mirabox/Ajazz "Stream Dock" and Ulanzi D200 (USB HID),
+- **More manufacturers**: Mirabox/Ajazz "Stream Dock" and Ulanzi D200 (USB HID),
   Loupedeck / Razer Stream Controller (USB serial, dials, touch), MIDI controllers such
-  as Novation Launchpad / Akai APC (colour-only LED pads), DIY ESP32 decks.
-  Needs a driver layer: devices describe capabilities (image keys vs colour-only keys,
-  image size/format/rotation, dials, touch areas) instead of fixed Elgato models; the
-  renderer, editor and templates work from these capabilities. Same groundwork as
-  Stream Deck Plus (dials, touch strip).
-  Impact on the bridge: with several manufacturers planned, the bridge should speak a
-  vendor-neutral Stream Assistant protocol (device capabilities, show image/colour on
-  key N, key/dial/touch events) with the vendor drivers inside the bridge, instead of
-  only emulating the Elgato Network Dock. **Decided 2026-10-23: neutral protocol.**
-  **Bridge language: .NET (C#, .NET 10 LTS)**, published as self-contained single-file
-  builds (win-x64, osx-arm64/x64, linux-x64/arm64, linux-musl for the HA add-on);
-  HidSharp for USB HID, Avalonia for the virtual deck window. The neutral protocol is
-  written down as a language-independent specification first.
-- **Virtual Stream Deck**: a deck that exists only in software.
-  - In Home Assistant: config entry "virtual Stream Deck" with a chosen model and all
-    entities/layout/templates/behaviour like a real deck, shown as a dashboard card or a
-    full-screen page (wall tablets, phones). Needs live push of key images and scoped,
-    non-admin commands (view and press only, no configuration).
-  - In the bridge: a desktop window (Windows/macOS/Linux) acting as a bridge device.
-  - Uses: old tablet as wall panel, try before buying hardware, demos, tests without hardware.
-
-### Proposed order (2026-10-23)
-
-1. ~~Transport + capabilities layer in the integration~~ done in 0.5.1 (Network Dock
-   transport; `scripts/fake_dock.py` + `scripts/selftest_transport.py` test it without hardware)
-2. ~~Virtual deck in HA with dashboard card~~ done in 0.6.0 (free grid of columns × rows
-   instead of a fixed model; card `custom:stream-assistant-card`; templates can use free grids too)
-3. Bridge with neutral protocol + Elgato USB driver (several decks per computer, hot-plug)
-   - done in 0.7.0 / bridge 0.1.0: protocol spec, .NET bridge (pairing, mDNS, simulated deck),
-     integration side (one entry per bridge, decks appear and disappear on their own)
-   - done: desktop app (Avalonia) with virtual decks of any grid, bridge 0.1.0
-   - open: Elgato USB driver (HidSharp)
-4. HA add-on and platform packages, then more manufacturers
-5. Docs + HACS beta (possibly already after step 2)
+  as Novation Launchpad / Akai APC (colour-only LED pads), DIY ESP32 decks. Drivers live in
+  the bridge; the protocol already describes image keys, colour-only keys, dials and touch.
+  The integration still needs colour-only keys, dials and touch (skipped so far with a warning).
+- **More Elgato models**: Stream Deck Plus (dials, touch strip), Neo, Studio, Mini and
+  Original v1 (BMP images, done by the bridge)
 
 ## Done
 
@@ -70,7 +43,6 @@
 ## Later
 
 - Expose the behaviour to HA as well (e.g. a switch "fade out when idle", a "wake" button)
-
 - Library split: move `protocol/` into its own PyPI package (needed for HA core)
-- More models: Stream Deck Plus (dials, touch strip), Neo, Studio
 - Tests (pytest-homeassistant-custom-component), CI, hassfest/HACS validation
+- Bridge: TLS (`wss://`), log view in the desktop app
