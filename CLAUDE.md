@@ -50,6 +50,20 @@ cd custom_components && tar --exclude=__pycache__ -cf - stream_assistant | ssh -
 - HA cannot reach the developer PC (different subnet), so a test bridge runs on the HA host as the `linux-musl-arm64` build.
 - Stop the test bridge with `kill $(pidof stream-assistant-bridge)`. Never use `pkill -f`, which also kills the SSH session.
 
+## Branches, CI and releases
+
+- `develop` is the default branch and the target of all pull requests; `main` only holds released states.
+- Both branches are protected by a ruleset: changes only via PR, no force push, no deletion. Repository admins (the owner) may bypass it.
+- Release tags `v*` cannot be moved or deleted.
+- `.github/workflows/ci.yml` runs on every PR and push. Its jobs are required checks: *Integration*, *Bridge*, *Hassfest*, *HACS* and *Release check*.
+- Every merge into `main` runs `.github/workflows/release.yml`, which builds `stream_assistant.zip` (HACS downloads it, see `hacs.json`) and the console and desktop bridge for all platforms. It tags `vX.Y.Z` and publishes a GitHub release whose notes are the changelog section. Versions like `0.8.0b1` become pre-releases.
+- One version covers the integration and the bridge. The bridge is built with that version.
+- To release:
+  1. On `develop`, set the version in `manifest.json` and `const.py`.
+  2. Rename `[Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD`.
+  3. Open a PR `develop → main` and merge it with a merge commit (not squash).
+- `scripts/release_info.py` checks version and changelog (the *Release check* runs it on PRs into `main`).
+
 ## Integration architecture
 
 **Device = one deck.** `device.py` `StreamAssistantDevice` owns:
@@ -116,6 +130,6 @@ Integration side of the protocol: `protocol/bridge.py` holds `BridgeClient`, `fe
 ## Working conventions
 
 - The user writes Swiss German (no ß). Answer in German. Code, comments and repo docs are in English.
-- Commit and push only when the user asks. The main branch is `develop`; `origin` is the public GitHub repository `remostirnimann/StreamAssistant`, and `bitbucket` is the old Bitbucket repository, which is no longer updated.
+- Work on a branch and open a PR into `develop` (`"C:/Program Files/GitHub CLI/gh.exe"`, not on the Bash PATH). Commit, push and merge only when the user asks. The main branch is `develop`; `origin` is the public GitHub repository `remostirnimann/StreamAssistant`, and `bitbucket` is the old Bitbucket repository, which is no longer updated.
 - The developer has no physical access to the deck right now. Verify with simulations: `fake_dock.py`, `--simulate`, headless UI tests, and the camera `camera.g6_instant_high_resolution_channel` pointed at the real deck.
 - Robustness and low support effort matter to the user. Prefer self-healing behaviour (reconnects, address following via mDNS/DHCP, reauth) over quick fixes.
