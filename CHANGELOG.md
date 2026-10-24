@@ -29,6 +29,7 @@ where it changed. Nothing has been released yet.
 - `develop` and `main` are protected: changes only through pull requests. Release tags are protected.
 - HACS installs the release zip (`zip_release`) and needs Home Assistant 2026.10 or later.
 - One version for the integration and the bridge per release.
+- `manifest.json` no longer lists Pillow; Home Assistant ships it (hassfest requires this).
 - Bridge split into `StreamAssistant.Bridge.Core` (library), the console program and the
   desktop program; `BridgeHost` builds and prepares the bridge for both.
 - Bridge: `bridge.json` keeps umlauts readable.
