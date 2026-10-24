@@ -2,10 +2,14 @@
 
 All notable changes to Stream Assistant. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are those of the
-Home Assistant integration (`manifest.json`); the bridge has its own version, noted
-where it changed. Nothing has been released yet.
+Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
+the same version. Versions before 0.8.0b1 were not released.
 
 ## [Unreleased]
+
+## [0.8.0b1] - 2026-10-24
+
+First release on GitHub, as a beta (pre-release).
 
 ### Added
 - Bridge: **desktop program** (`stream-assistant-bridge-desktop`, Avalonia) with a window
