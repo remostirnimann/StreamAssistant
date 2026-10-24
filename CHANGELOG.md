@@ -26,6 +26,10 @@ where it changed. Nothing has been released yet.
 - README and roadmap describe the Network Dock, the bridge, the desktop app and virtual
   panels; the roadmap was reordered with the current status.
 
+### Removed
+- `poc/`: the Node.js proof of concept of the dock protocol; the Python client,
+  `scripts/fake_dock.py` and `scripts/live_test.py` replace it.
+
 ## [0.7.0] - 2026-10-24
 
 ### Added

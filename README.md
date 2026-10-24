@@ -98,7 +98,6 @@ automation:
 - `scripts/`: tests without hardware (`selftest_transport.py` with a simulated dock,
   `selftest_bridge.py` against the real bridge), live test against a dock, render sheet,
   WebSocket and simulator probes for the HA host
-- `poc/`: Node.js proof of concept used to validate the dock protocol
 
 Protocol knowledge based on [node-elgato-stream-deck](https://github.com/Julusian/node-elgato-stream-deck) (MIT).
 
