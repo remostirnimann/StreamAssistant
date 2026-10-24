@@ -116,6 +116,6 @@ Integration side of the protocol: `protocol/bridge.py` holds `BridgeClient`, `fe
 ## Working conventions
 
 - The user writes Swiss German (no ß). Answer in German. Code, comments and repo docs are in English.
-- Commit only when the user asks, and never push. The main branch is `develop`, and there is no GitHub remote yet.
+- Commit and push only when the user asks. The main branch is `develop`; `origin` is the public GitHub repository `remostirnimann/StreamAssistant`, and `bitbucket` is the old Bitbucket repository, which is no longer updated.
 - The developer has no physical access to the deck right now. Verify with simulations: `fake_dock.py`, `--simulate`, headless UI tests, and the camera `camera.g6_instant_high_resolution_channel` pointed at the real deck.
 - Robustness and low support effort matter to the user. Prefer self-healing behaviour (reconnects, address following via mDNS/DHCP, reauth) over quick fixes.

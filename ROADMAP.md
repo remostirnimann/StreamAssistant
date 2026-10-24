@@ -22,7 +22,7 @@
    - packages/installers for Windows, macOS, Linux, Raspberry Pi; autostart; tray icon
 5. **Docs and HACS beta**: user documentation (installation, setup, editor, templates,
    actions, bridge, troubleshooting), screenshots, `info.md`, GitHub releases with version
-   tags, published first as a beta (pre-release). Needs a GitHub repository (none yet).
+   tags, published first as a beta (pre-release) on github.com/remostirnimann/StreamAssistant.
 
 ## Then
 
