@@ -7,6 +7,10 @@ the same version. Versions before 0.8.0b1 were not released.
 
 ## [Unreleased]
 
+### Fixed
+- Release archives no longer contain native debug symbols (about 100 MB in the Windows
+  desktop zip) or the empty static web assets list.
+
 ## [0.8.0b1] - 2026-10-24
 
 First release on GitHub, as a beta (pre-release).
