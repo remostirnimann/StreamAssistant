@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bridge Simulator</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f7f9; --card: #fff; --text: #1d2125; --muted: #5f6b76; --line: #dde2e7; --accent: #0b7bd6; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #15181b; --card: #1e2226; --text: #e8eaed; --muted: #9aa4ad; --line: #30363c; --accent: #4aa8ff; } }
+  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-top: 16px; }
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .head strong { flex: 1; }
+  button.plug { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; }
+  .deck { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 8px; padding: 14px; background: #0c0c0c; border-radius: 14px; transition: filter .3s; }
+  .deck.off { opacity: .35; }
+  .deck.flash { outline: 4px solid var(--accent); }
+  .key { aspect-ratio: 1; border-radius: 12%; background: #1b1b1b; border: 0; padding: 0; overflow: hidden; cursor: pointer; touch-action: manipulation; user-select: none; }
+  .key img { width: 100%; height: 100%; display: block; pointer-events: none; }
+  .key.down { transform: scale(.94); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Simulator</h1>
+  <div class="muted">Simulated decks of this bridge. Click a key to press it, hold it for a long press. <span id="state"></span></div>
+  <div id="decks"></div>
+</main>
+<script>
+  const decks = new Map();
+  let socket;
+
+  function connect() {
+    socket = new WebSocket(`ws://${location.host}/sim/ws`);
+    socket.onopen = () => (document.getElementById("state").textContent = "");
+    socket.onclose = () => {
+      document.getElementById("state").textContent = "(bridge not reachable, retrying …)";
+      setTimeout(connect, 2000);
+    };
+    socket.onmessage = (ev) => handle(JSON.parse(ev.data));
+  }
+
+  function send(message) {
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+  }
+
+  function handle(m) {
+    if (m.type === "state") {
+      decks.clear();
+      document.getElementById("decks").replaceChildren();
+      m.devices.forEach(renderDevice);
+    } else if (m.type === "device") renderDevice(m);
+    else if (m.type === "key") setKey(m.device, m.key, m.content);
+    else if (m.type === "identify") {
+      const el = decks.get(m.device)?.querySelector(".deck");
+      el?.classList.add("flash");
+      setTimeout(() => el?.classList.remove("flash"), 2000);
+    }
+  }
+
+  function renderDevice(d) {
+    let card = decks.get(d.id);
+    if (!card) {
+      card = document.createElement("section");
+      card.className = "card";
+      document.getElementById("decks").append(card);
+      decks.set(d.id, card);
+    }
+    card.innerHTML = `<div class="head"><strong></strong><span class="muted"></span><button class="plug"></button></div>
+      <div class="deck" style="--cols:${d.cols}"></div>`;
+    card.querySelector("strong").textContent = d.name;
+    card.querySelector(".muted").textContent = `${d.id} · ${d.cols} × ${d.rows} · ${d.plugged ? `brightness ${d.brightness} %` : "unplugged"}`;
+    const plug = card.querySelector(".plug");
+    plug.textContent = d.plugged ? "Unplug" : "Plug in";
+    plug.onclick = () => send({ type: "plug", device: d.id, plugged: !d.plugged });
+    const deck = card.querySelector(".deck");
+    deck.classList.toggle("off", !d.plugged);
+    deck.style.filter = `brightness(${Math.max(d.brightness, 5) / 100})`;
+    for (let i = 0; i < d.cols * d.rows; i += 1) {
+      const key = document.createElement("button");
+      key.className = "key";
+      key.dataset.key = i;
+      key.innerHTML = "<img alt=''>";
+      const up = () => {
+        if (!key.classList.contains("down")) return;
+        key.classList.remove("down");
+        send({ type: "press", device: d.id, key: i, pressed: false });
+      };
+      key.onpointerdown = (ev) => {
+        ev.preventDefault();
+        key.setPointerCapture(ev.pointerId);
+        key.classList.add("down");
+        send({ type: "press", device: d.id, key: i, pressed: true });
+      };
+      key.onpointerup = up;
+      key.onpointercancel = up;
+      key.oncontextmenu = (ev) => ev.preventDefault();
+      deck.append(key);
+      setKey(d.id, i, d.keys[i]);
+    }
+  }
+
+  function setKey(device, index, content) {
+    const key = decks.get(device)?.querySelector(`.key[data-key="${index}"]`);
+    if (!key) return;
+    const img = key.querySelector("img");
+    if (content?.image) {
+      img.src = content.image;
+      img.hidden = false;
+      key.style.background = "";
+    } else {
+      img.removeAttribute("src");
+      img.hidden = true;
+      key.style.background = content?.color || "";
+    }
+  }
+
+  connect();
+</script>
+</body>
+</html>

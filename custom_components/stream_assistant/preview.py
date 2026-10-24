@@ -20,11 +20,12 @@ class RenderCache:
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize."""
         self.hass = hass
-        self._cache: OrderedDict[tuple[str, bool, KeyVisual], bytes] = OrderedDict()
+        self._cache: OrderedDict[tuple[str, int, bool, KeyVisual], bytes] = OrderedDict()
 
     async def async_render(self, model: DeckCapabilities, visual: KeyVisual, *, upright: bool) -> bytes:
         """JPEG of a key: upright for the editor, else as the deck expects it."""
-        cache_key = (model.model_id, upright, visual)
+        # Free grids share ids across key sizes (virtual panel 144 px, bridge deck 72 px)
+        cache_key = (model.model_id, model.key_size, upright, visual)
         if (jpeg := self._cache.get(cache_key)) is not None:
             self._cache.move_to_end(cache_key)
             return jpeg

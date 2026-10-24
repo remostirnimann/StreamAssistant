@@ -138,6 +138,9 @@ const T = {
     factDock: "Network Dock",
     factPanel: "Virtuelles Panel",
     factGrid: "Raster",
+    factBridge: "Stream Assistant Bridge",
+    factName: "Name",
+    factVersion: "Version",
     factDeck: "Stream Deck",
     factDisplay: "Anzeige",
     factLayout: "Layout",
@@ -299,6 +302,9 @@ const T = {
     factDock: "Network Dock",
     factPanel: "Virtual panel",
     factGrid: "Grid",
+    factBridge: "Stream Assistant Bridge",
+    factName: "Name",
+    factVersion: "Version",
     factDeck: "Stream Deck",
     factDisplay: "Display",
     factLayout: "Layout",
@@ -971,11 +977,29 @@ class StreamAssistantPanel extends HTMLElement {
     let brightness = `${i.brightness.current} %`;
     if (i.brightness.dimmed) brightness += ` (${t.stateDimmed})`;
     else if (i.brightness.night_active) brightness += ` (${t.stateNight})`;
+    const deckFacts = [
+      [t.factDeck, ""],
+      [t.factModel, i.deck.model || "–"],
+      [t.factSerial, i.deck.serial || "–"],
+      [t.factFirmware, i.deck.firmware || "–"],
+      [t.factConnection, yes(i.deck.connected)],
+      [t.factSince, this._fmtDate(i.deck.connected_since)],
+      [t.factKeys, i.deck.key_count ?? "–"],
+    ];
     const hardware = i.virtual
       ? [
           [t.factPanel, ""],
           [t.factGrid, i.deck.model || "–"],
           [t.factKeys, i.deck.key_count ?? "–"],
+        ]
+      : i.kind === "bridge"
+      ? [
+          [t.factBridge, ""],
+          [t.factName, i.dock.name || "–"],
+          [t.factVersion, i.dock.firmware || "–"],
+          [t.factAddress, i.dock.host],
+          [t.factConnection, yes(i.dock.connected)],
+          ...deckFacts,
         ]
       : [
           [t.factDock, ""],

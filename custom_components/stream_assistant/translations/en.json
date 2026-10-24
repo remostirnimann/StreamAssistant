@@ -9,6 +9,7 @@
         "title": "Add Stream Assistant",
         "menu_options": {
           "dock": "Add a Stream Deck Network Dock",
+          "bridge": "Add a Stream Assistant Bridge (Stream Decks on a computer)",
           "virtual": "Add a virtual panel (dashboard card)",
           "planner": "Only plan (no hardware yet)"
         }
@@ -20,6 +21,21 @@
         },
         "data_description": {
           "host": "IP address or hostname of the Network Dock."
+        }
+      },
+      "bridge": {
+        "title": "Stream Assistant Bridge",
+        "description": "Address of the computer running the Stream Assistant Bridge. Bridges in the same network are found automatically.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      },
+      "pair": {
+        "title": "Pair with {name}",
+        "description": "Enter the 6-digit pairing code the bridge at {host} shows (its window, log, or http://localhost:5390 on that computer).",
+        "data": {
+          "code": "Pairing code"
         }
       },
       "virtual": {
@@ -47,17 +63,29 @@
           "cols": "Columns",
           "rows": "Rows"
         }
+      },
+      "reauth_confirm": {
+        "title": "Pair {name} again",
+        "description": "The bridge at {host} no longer accepts Home Assistant (it was reset or the pairing was removed). Enter the pairing code it shows now.",
+        "data": {
+          "code": "Pairing code"
+        }
       }
     },
     "error": {
-      "cannot_connect": "Cannot connect to the dock. Check the address and that no other software is connected to it."
+      "cannot_connect": "Cannot connect to the dock. Check the address and that no other software is connected to it.",
+      "cannot_connect_bridge": "Cannot reach the bridge. Check the address and that the bridge is running.",
+      "invalid_code": "Wrong pairing code. After 5 wrong codes the bridge waits a minute.",
+      "wrong_bridge": "This code belongs to a different bridge."
     },
     "abort": {
       "already_configured": "Already configured.",
       "cannot_connect": "Cannot connect to the dock.",
       "not_network_dock": "This device is not a Stream Deck Network Dock.",
       "reconfigure_successful": "The grid was changed.",
-      "not_reconfigurable": "Only virtual panels can be reconfigured."
+      "not_reconfigurable": "Only virtual panels can be reconfigured.",
+      "reauth_successful": "Paired again.",
+      "cannot_connect_bridge": "Cannot reach the bridge."
     }
   },
   "entity": {
@@ -66,6 +94,9 @@
         "name": "Connected"
       },
       "deck_connected": {
+        "name": "Connected"
+      },
+      "bridge_connected": {
         "name": "Connected"
       }
     },

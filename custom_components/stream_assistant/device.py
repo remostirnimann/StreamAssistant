@@ -1,8 +1,9 @@
-"""Runtime object for one deck (behind a dock, or virtual): connection, layout, live key images, key actions."""
+"""Runtime object for one deck (behind a dock or bridge, or virtual): connection, layout, live key images, key actions."""
 
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
 from datetime import datetime
 import logging
 import secrets
@@ -32,6 +33,8 @@ from .const import (
     EVENT_PRESSED,
     EVENT_RELEASED,
     EVENT_SHORT_PRESS,
+    KIND_BRIDGE,
+    KIND_DOCK,
     KIND_VIRTUAL,
     LONG_PRESS_SECONDS,
     VERSION,
@@ -54,6 +57,7 @@ from .layout import (
 from .preview import RenderCache
 from .capabilities import DeckCapabilities, find_capabilities, grid_capabilities
 from .protocol import find_model
+from .protocol.bridge import BridgeDevice
 from .render import KeyVisual
 from .templates import DATA_TEMPLATES
 from .transport import AttachedDeck, DeckTransport, NetworkDockTransport, TransportError, VirtualTransport
@@ -66,7 +70,21 @@ DEFAULT_BRIGHTNESS = 70
 BACK_ACTION = {"type": ACTION_BACK}
 NO_ACTION = {"type": ACTION_NONE}
 
-type StreamAssistantConfigEntry = ConfigEntry[StreamAssistantDevice]
+# runtime_data: the deck of a dock or virtual panel, or the hub of a bridge (see bridge_hub.py)
+type StreamAssistantConfigEntry = ConfigEntry[Any]
+
+
+@dataclass(frozen=True, slots=True)
+class BridgeDeckSpec:
+    """A deck behind a Stream Assistant Bridge; several share one config entry."""
+
+    device: BridgeDevice
+    capabilities: DeckCapabilities
+    transport: DeckTransport
+    # Device registry id of the bridge, the deck's via_device
+    hub_device_id: str
+    # Unique per bridge and deck; prefix of the entity unique ids
+    unique_id: str
 
 
 class LayoutStore(Store[dict[str, Any]]):
@@ -80,29 +98,49 @@ class LayoutStore(Store[dict[str, Any]]):
         return old_data
 
 
-def _layout_store(hass: HomeAssistant, entry_id: str) -> LayoutStore:
-    return LayoutStore(hass, STORAGE_VERSION, f"{DOMAIN}.{entry_id}")
+def _layout_store(hass: HomeAssistant, key: str) -> LayoutStore:
+    return LayoutStore(hass, STORAGE_VERSION, f"{DOMAIN}.{key}")
 
 
-async def async_remove_layout(hass: HomeAssistant, entry_id: str) -> None:
-    """Delete the stored layout of a removed config entry."""
-    await _layout_store(hass, entry_id).async_remove()
+def deck_key(entry_id: str, bridge_device_id: str | None = None) -> str:
+    """Address of a deck: the entry id, plus the device id for bridge decks."""
+    return f"{entry_id}.{bridge_device_id}" if bridge_device_id else entry_id
+
+
+async def async_remove_layout(hass: HomeAssistant, key: str) -> None:
+    """Delete the stored layout of a removed deck."""
+    await _layout_store(hass, key).async_remove()
 
 
 class StreamAssistantDevice:
-    """One Network Dock with (optionally) one Stream Deck attached, or a virtual panel."""
+    """One deck: behind a Network Dock (which may be empty), behind a bridge, or virtual."""
 
-    def __init__(self, hass: HomeAssistant, entry: StreamAssistantConfigEntry) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry: StreamAssistantConfigEntry, bridge: BridgeDeckSpec | None = None
+    ) -> None:
         """Initialize."""
         self.hass = hass
         self.entry = entry
-        self.virtual = entry.data.get(CONF_KIND) == KIND_VIRTUAL
+        self.bridge = bridge
+        self.kind = KIND_BRIDGE if bridge else entry.data.get(CONF_KIND, KIND_DOCK)
+        self.virtual = self.kind == KIND_VIRTUAL
+        # Address in signals, storage and the editor's WebSocket API
+        self.key = deck_key(entry.entry_id, bridge.device.id if bridge else None)
         self.transport: DeckTransport
         self.dock_serial: str | None
         self.deck_serial: str | None = entry.data.get(CONF_DECK_SERIAL)
         # The model is fixed per config entry so the key entities exist even while offline
         self.model: DeckCapabilities | None
-        if self.virtual:
+        self._dock_device_id: str | None = None
+        if bridge:
+            found = bridge.device
+            self.transport = bridge.transport
+            self.dock_serial = None
+            self.deck_serial = bridge.unique_id
+            self.model = bridge.capabilities
+            self._dock_device_id = bridge.hub_device_id
+            self.brightness = 100 if found.virtual else DEFAULT_BRIGHTNESS
+        elif self.virtual:
             assert self.deck_serial
             self.model = grid_capabilities(entry.data[CONF_COLS], entry.data[CONF_ROWS])
             self.transport = VirtualTransport(self.deck_serial, self.model, VERSION)
@@ -130,18 +168,22 @@ class StreamAssistantDevice:
         self._revision_counter = 0
         self.current_page = ROOT_PAGE_ID
 
-        self._store = _layout_store(hass, entry.entry_id)
+        self._store = _layout_store(hass, self.key)
         self._long_press_timers: dict[int, CALLBACK_TYPE] = {}
         self._short_done: set[int] = set()
         self._unsub_states: CALLBACK_TYPE | None = None
         # What each key should show; a finished render is only sent if it still matches
         self._wanted: dict[int, KeyVisual] = {}
         self._renderer = RenderCache(hass)
-        self._dock_device_id: str | None = None
         self.behavior = BehaviorController(hass, self._apply_brightness)
         self.deck_connected_since: datetime | None = None
         # Keys whose press only woke the display: their release is ignored too
         self._swallowed: set[int] = set()
+
+    @property
+    def title(self) -> str:
+        """Name shown in the editor and logs."""
+        return self.bridge.device.name if self.bridge else self.entry.title
 
     @property
     def layout_revision(self) -> str:
@@ -190,13 +232,24 @@ class StreamAssistantDevice:
                 name=self.entry.title,
                 sw_version=VERSION,
             )
-        info = DeviceInfo(
-            identifiers={(DOMAIN, self.deck_serial)},
-            manufacturer="Elgato",
-            model=self.model.name,
-            name=self.model.name,
-            serial_number=self.deck_serial,
-        )
+        if self.bridge:
+            found = self.bridge.device
+            info = DeviceInfo(
+                identifiers={(DOMAIN, self.deck_serial)},
+                manufacturer=found.vendor or None,
+                model=found.model or None,
+                name=found.name,
+                serial_number=found.serial,
+                sw_version=found.firmware,
+            )
+        else:
+            info = DeviceInfo(
+                identifiers={(DOMAIN, self.deck_serial)},
+                manufacturer="Elgato",
+                model=self.model.name,
+                name=self.model.name,
+                serial_number=self.deck_serial,
+            )
         if self._dock_device_id:
             info["via_device_id"] = self._dock_device_id
         return info
@@ -214,7 +267,7 @@ class StreamAssistantDevice:
                 self._own_layout, dropped = remap_layout(
                     self._own_layout, grid[0], self.model.cols, self.model.rows
                 )
-                _LOGGER.info("%s: grid changed to %s, %s keys did not fit", self.entry.title, self.model.name, dropped)
+                _LOGGER.info("%s: grid changed to %s, %s keys did not fit", self.title, self.model.name, dropped)
                 self._store.async_delay_save(self._data_to_store, SAVE_DELAY)
             if (template_id := stored.get("template_id")) and self.templates.get(template_id):
                 self._link(template_id)
@@ -222,7 +275,7 @@ class StreamAssistantDevice:
         self._update_effective_layout()
         self.behavior.async_start(behavior)
 
-        if not self.virtual:
+        if self.kind == KIND_DOCK:
             dev_reg = dr.async_get(self.hass)
             dock = dev_reg.async_get_or_create(config_entry_id=self.entry.entry_id, **self.dock_device_info)
             self._dock_device_id = dock.id
@@ -266,7 +319,7 @@ class StreamAssistantDevice:
                 self.transport.set_brightness(self.behavior.target_brightness(self.brightness))
             except TransportError as err:
                 _LOGGER.debug("Setting brightness failed: %s", err)
-        async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
+        async_dispatcher_send(self.hass, signal_state(self.key))
 
     async def async_set_behavior(self, settings: dict[str, Any]) -> None:
         """Store new automation settings and apply them right away."""
@@ -280,9 +333,11 @@ class StreamAssistantDevice:
         pages = self.layout["pages"]
         deadline = self.behavior.idle_deadline
         return {
+            "kind": self.kind,
             "virtual": self.virtual,
             "dock": {
-                "serial": self.dock_serial,
+                "name": hub.get("name"),
+                "serial": self.dock_serial or hub.get("serial"),
                 "firmware": hub.get("firmware"),
                 "host": hub.get("host"),
                 "mac": self.entry.data.get(CONF_MAC),
@@ -339,7 +394,7 @@ class StreamAssistantDevice:
             self.current_page = ROOT_PAGE_ID
         self._track_page_entities()
         self._schedule_repaint()
-        async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
+        async_dispatcher_send(self.hass, signal_state(self.key))
 
     async def async_set_layout(self, layout: dict[str, Any]) -> None:
         """Replace the whole layout (already validated for this deck) and show it.
@@ -409,7 +464,7 @@ class StreamAssistantDevice:
         self._cancel_timers()
         self._track_page_entities()
         self._schedule_repaint()
-        async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
+        async_dispatcher_send(self.hass, signal_state(self.key))
 
     def _actions(self, index: int) -> tuple[dict[str, Any], dict[str, Any]]:
         page = self.page(self.current_page)
@@ -489,12 +544,14 @@ class StreamAssistantDevice:
         firmware = self.transport.hub_info().get("firmware")
         if connected and firmware and self._dock_device_id:
             dr.async_get(self.hass).async_update_device(self._dock_device_id, sw_version=firmware)
-        async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
+        async_dispatcher_send(self.hass, signal_state(self.key))
 
     @callback
     def _on_deck_connected(self, deck: AttachedDeck) -> None:
         caps = deck.capabilities
-        if deck.serial != self.deck_serial or self.model is None or caps.model_id != self.model.model_id:
+        if self.kind == KIND_DOCK and (
+            deck.serial != self.deck_serial or self.model is None or caps.model_id != self.model.model_id
+        ):
             # Another deck was plugged in: store it and rebuild the entities
             _LOGGER.info(
                 "Dock %s: now has %s (%s) attached, reloading",
@@ -514,7 +571,7 @@ class StreamAssistantDevice:
             self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
             return
 
-        if deck.firmware and not self.virtual:
+        if deck.firmware and self.kind == KIND_DOCK:
             dr.async_get(self.hass).async_get_or_create(
                 config_entry_id=self.entry.entry_id,
                 identifiers={(DOMAIN, deck.serial)},
@@ -534,7 +591,7 @@ class StreamAssistantDevice:
         self._cancel_timers()
         self._swallowed.clear()
         self.deck_connected_since = None
-        async_dispatcher_send(self.hass, signal_state(self.entry.entry_id))
+        async_dispatcher_send(self.hass, signal_state(self.key))
 
     def _cancel_timers(self) -> None:
         for cancel in self._long_press_timers.values():
@@ -554,7 +611,7 @@ class StreamAssistantDevice:
             self._swallowed.discard(key)
             return
 
-        signal = signal_key(self.entry.entry_id, key)
+        signal = signal_key(self.key, key)
         short, long = self._actions(key)
 
         if pressed:
@@ -609,7 +666,7 @@ class StreamAssistantDevice:
 
         # A test press counts as activity (wakes the display) but always runs
         self.behavior.async_activity()
-        signal = signal_key(self.entry.entry_id, index)
+        signal = signal_key(self.key, index)
         async_dispatcher_send(self.hass, signal, EVENT_PRESSED)
         if long_press:
             async_dispatcher_send(self.hass, signal, EVENT_LONG_PRESS)

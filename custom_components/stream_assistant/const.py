@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.const import Platform
 
 DOMAIN = "stream_assistant"
-VERSION = "0.6.1"
+VERSION = "0.7.0"
 PANEL_URL = "stream-assistant"
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.NUMBER]
@@ -18,6 +18,14 @@ CONF_DECK_PRODUCT_ID = "deck_product_id"
 CONF_KIND = "kind"
 KIND_PLANNER = "planner"
 PLANNER_UNIQUE_ID = "planner"
+KIND_DOCK = "dock"
+# A Stream Assistant Bridge with any number of decks (docs/bridge-protocol.md)
+KIND_BRIDGE = "bridge"
+CONF_PORT = "port"
+CONF_BRIDGE_ID = "bridge_id"
+CONF_TOKEN = "token"
+# Devices seen on a bridge, so their entities exist while it is offline
+CONF_DEVICES = "devices"
 # A panel that only exists in Home Assistant (dashboard card), with a free grid
 KIND_VIRTUAL = "virtual"
 CONF_COLS = "cols"
@@ -41,11 +49,21 @@ ATTR_FONT_SIZE = "font_size"
 ATTR_IMAGE = "image"
 
 
-def signal_state(entry_id: str) -> str:
-    """Dispatcher signal for connection state changes."""
-    return f"{DOMAIN}_{entry_id}_state"
+def signal_state(deck: str) -> str:
+    """Dispatcher signal for state changes of one deck (see StreamAssistantDevice.key)."""
+    return f"{DOMAIN}_{deck}_state"
 
 
-def signal_key(entry_id: str, key: int) -> str:
-    """Dispatcher signal for events of one key."""
-    return f"{DOMAIN}_{entry_id}_key_{key}"
+def signal_key(deck: str, key: int) -> str:
+    """Dispatcher signal for events of one key of a deck."""
+    return f"{DOMAIN}_{deck}_key_{key}"
+
+
+def signal_new_device(entry_id: str) -> str:
+    """Dispatcher signal: a bridge entry got a new deck (argument: the device)."""
+    return f"{DOMAIN}_{entry_id}_new_device"
+
+
+def signal_hub_state(entry_id: str) -> str:
+    """Dispatcher signal for connection changes of a bridge."""
+    return f"{DOMAIN}_{entry_id}_hub_state"

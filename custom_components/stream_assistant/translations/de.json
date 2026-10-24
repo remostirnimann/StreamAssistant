@@ -9,6 +9,7 @@
         "title": "Stream Assistant hinzufügen",
         "menu_options": {
           "dock": "Stream Deck Network Dock hinzufügen",
+          "bridge": "Stream Assistant Bridge hinzufügen (Stream Decks an einem Computer)",
           "virtual": "Virtuelles Panel hinzufügen (Dashboard-Karte)",
           "planner": "Nur planen (noch ohne Hardware)"
         }
@@ -20,6 +21,21 @@
         },
         "data_description": {
           "host": "IP-Adresse oder Hostname des Network Dock."
+        }
+      },
+      "bridge": {
+        "title": "Stream Assistant Bridge",
+        "description": "Adresse des Computers, auf dem die Stream Assistant Bridge läuft. Bridges im selben Netz werden automatisch gefunden.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      },
+      "pair": {
+        "title": "Mit {name} koppeln",
+        "description": "Gib den 6-stelligen Kopplungscode ein, den die Bridge unter {host} anzeigt (Fenster, Log oder http://localhost:5390 auf jenem Computer).",
+        "data": {
+          "code": "Kopplungscode"
         }
       },
       "virtual": {
@@ -47,17 +63,29 @@
           "cols": "Spalten",
           "rows": "Zeilen"
         }
+      },
+      "reauth_confirm": {
+        "title": "{name} neu koppeln",
+        "description": "Die Bridge unter {host} akzeptiert Home Assistant nicht mehr (zurückgesetzt oder Kopplung entfernt). Gib den Kopplungscode ein, den sie jetzt anzeigt.",
+        "data": {
+          "code": "Kopplungscode"
+        }
       }
     },
     "error": {
-      "cannot_connect": "Keine Verbindung zum Dock. Prüfe die Adresse und ob eine andere Software damit verbunden ist."
+      "cannot_connect": "Keine Verbindung zum Dock. Prüfe die Adresse und ob eine andere Software damit verbunden ist.",
+      "cannot_connect_bridge": "Bridge nicht erreichbar. Prüfe die Adresse und ob die Bridge läuft.",
+      "invalid_code": "Falscher Kopplungscode. Nach 5 falschen Codes wartet die Bridge eine Minute.",
+      "wrong_bridge": "Dieser Code gehört zu einer anderen Bridge."
     },
     "abort": {
       "already_configured": "Bereits eingerichtet.",
       "cannot_connect": "Keine Verbindung zum Dock.",
       "not_network_dock": "Dieses Gerät ist kein Stream Deck Network Dock.",
       "reconfigure_successful": "Das Raster wurde geändert.",
-      "not_reconfigurable": "Nur virtuelle Panels lassen sich neu konfigurieren."
+      "not_reconfigurable": "Nur virtuelle Panels lassen sich neu konfigurieren.",
+      "reauth_successful": "Neu gekoppelt.",
+      "cannot_connect_bridge": "Bridge nicht erreichbar."
     }
   },
   "entity": {
@@ -66,6 +94,9 @@
         "name": "Verbunden"
       },
       "deck_connected": {
+        "name": "Verbunden"
+      },
+      "bridge_connected": {
         "name": "Verbunden"
       }
     },

@@ -24,7 +24,7 @@ from .const import (
     signal_key,
 )
 from .device import StreamAssistantConfigEntry, StreamAssistantDevice
-from .entity import StreamAssistantEntity
+from .entity import StreamAssistantEntity, async_setup_decks
 
 PARALLEL_UPDATES = 0
 DEFAULT_BACKGROUND = "#000000"
@@ -60,14 +60,16 @@ async def async_setup_entry(
     entry: StreamAssistantConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Create one event entity per key of the attached deck."""
-    device = entry.runtime_data
-    if device.model is None or device.deck_serial is None:
-        return
-    _remove_surplus_keys(hass, entry, device)
-    async_add_entities(
-        StreamDeckKeyEvent(device, key) for key in range(device.model.key_count)
-    )
+    """Create one event entity per key of every deck."""
+
+    @callback
+    def add(device: StreamAssistantDevice) -> None:
+        if device.model is None or device.deck_serial is None:
+            return
+        _remove_surplus_keys(hass, entry, device)
+        async_add_entities(StreamDeckKeyEvent(device, key) for key in range(device.model.key_count))
+
+    async_setup_decks(hass, entry, add)
 
     platform = entity_platform.async_get_current_platform()
     platform.async_register_entity_service(SERVICE_SET_KEY, SET_KEY_SCHEMA, "async_set_key")
@@ -114,7 +116,7 @@ class StreamDeckKeyEvent(StreamAssistantEntity, EventEntity):
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
-                signal_key(self.device.entry.entry_id, self.key),
+                signal_key(self.device.key, self.key),
                 self._on_key_event,
             )
         )

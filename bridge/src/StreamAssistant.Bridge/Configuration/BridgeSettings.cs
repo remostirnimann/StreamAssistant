@@ -1,0 +1,139 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace StreamAssistant.Bridge.Configuration;
+
+/// <summary>Command line / environment options (read through IConfiguration).</summary>
+public sealed record BridgeOptions(int Port, string ConfigDir, string? Name, IReadOnlyList<(int Cols, int Rows)> Simulate, bool Mdns)
+{
+    public const int DefaultPort = 5390;
+
+    // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,8x4 --mdns false
+    public static BridgeOptions From(IConfiguration config)
+    {
+        var simulate = new List<(int, int)>();
+        foreach (var part in (config["simulate"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var size = part.Split('x');
+            if (size.Length != 2 || !int.TryParse(size[0], out var cols) || !int.TryParse(size[1], out var rows)
+                || cols is < 1 or > 16 || rows is < 1 or > 16)
+            {
+                throw new ArgumentException($"--simulate expects sizes like 5x3, got '{part}'");
+            }
+            simulate.Add((cols, rows));
+        }
+        var configDir = config["config-dir"];
+        if (string.IsNullOrWhiteSpace(configDir))
+        {
+            configDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.Create),
+                "stream-assistant-bridge");
+        }
+        return new BridgeOptions(config.GetValue("port", DefaultPort), configDir, config["name"], simulate, config.GetValue("mdns", true));
+    }
+}
+
+public sealed class PairedClient
+{
+    public string Name { get; set; } = "";
+
+    /// <summary>SHA-256 of the token (hex); the token itself is never stored.</summary>
+    public string TokenHash { get; set; } = "";
+
+    public DateTimeOffset Paired { get; set; }
+}
+
+/// <summary>Persistent state in bridge.json.</summary>
+public sealed class BridgeSettings
+{
+    /// <summary>Stable bridge id, generated once.</summary>
+    public string Id { get; set; } = "";
+
+    public string? Name { get; set; }
+
+    public List<PairedClient> Clients { get; set; } = [];
+}
+
+[JsonSerializable(typeof(BridgeSettings))]
+[JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower)]
+internal sealed partial class SettingsJsonContext : JsonSerializerContext;
+
+/// <summary>A second bridge with the same settings (and so the same id) is running.</summary>
+public sealed class AlreadyRunningException(string configDir)
+    : Exception($"Another bridge is already running with the settings in {configDir}");
+
+/// <summary>Loads and saves bridge.json atomically. Holds a lock so only one bridge uses the folder.</summary>
+public sealed class SettingsStore : IDisposable
+{
+    private readonly Lock _lock = new();
+    private readonly string _path;
+    private readonly ILogger<SettingsStore> _logger;
+    private readonly FileStream _instanceLock;
+
+    public SettingsStore(BridgeOptions options, ILogger<SettingsStore> logger)
+    {
+        _logger = logger;
+        Directory.CreateDirectory(options.ConfigDir);
+        try
+        {
+            // FileShare.None is an OS lock (flock on Linux/macOS): released when the process ends, even on a crash
+            _instanceLock = new FileStream(
+                Path.Combine(options.ConfigDir, "bridge.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        }
+        catch (IOException)
+        {
+            throw new AlreadyRunningException(options.ConfigDir);
+        }
+        _path = Path.Combine(options.ConfigDir, "bridge.json");
+        Settings = Load();
+        if (string.IsNullOrEmpty(Settings.Id))
+        {
+            Settings.Id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8));
+            Save();
+        }
+    }
+
+    public BridgeSettings Settings { get; }
+
+    public void Dispose() => _instanceLock.Dispose();
+
+    public string FilePath => _path;
+
+    /// <summary>Change settings and write them, under one lock.</summary>
+    public void Update(Action<BridgeSettings> change)
+    {
+        lock (_lock)
+        {
+            change(Settings);
+            Save();
+        }
+    }
+
+    private BridgeSettings Load()
+    {
+        if (!File.Exists(_path))
+        {
+            return new BridgeSettings();
+        }
+        try
+        {
+            return JsonSerializer.Deserialize(File.ReadAllText(_path), SettingsJsonContext.Default.BridgeSettings) ?? new BridgeSettings();
+        }
+        catch (JsonException err)
+        {
+            // Keep the broken file for inspection, start fresh (clients must pair again)
+            var backup = _path + ".broken";
+            File.Copy(_path, backup, overwrite: true);
+            _logger.LogError(err, "{Path} is unreadable, saved as {Backup} and starting with new settings", _path, backup);
+            return new BridgeSettings();
+        }
+    }
+
+    private void Save()
+    {
+        var temp = _path + ".tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(Settings, SettingsJsonContext.Default.BridgeSettings));
+        File.Move(temp, _path, overwrite: true);
+    }
+}

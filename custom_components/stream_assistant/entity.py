@@ -1,17 +1,41 @@
-"""Base entity for Stream Assistant."""
+"""Base entity for Stream Assistant, and how platforms find the decks of an entry."""
 
 from __future__ import annotations
 
-from homeassistant.core import callback
+from collections.abc import Callable
+
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity
 
-from .const import signal_state
-from .device import StreamAssistantDevice
+from .const import signal_new_device, signal_state
+from .device import StreamAssistantConfigEntry, StreamAssistantDevice
+
+
+def entry_devices(entry: StreamAssistantConfigEntry) -> list[StreamAssistantDevice]:
+    """Decks of a loaded entry: one for a dock or virtual panel, any number for a bridge."""
+    data = entry.runtime_data
+    if data is None:
+        return []
+    if isinstance(data, StreamAssistantDevice):
+        return [data]
+    return list(data.devices.values())
+
+
+@callback
+def async_setup_decks(
+    hass: HomeAssistant,
+    entry: StreamAssistantConfigEntry,
+    add: Callable[[StreamAssistantDevice], None],
+) -> None:
+    """Call add for every deck of the entry now, and for decks a bridge reports later."""
+    for device in entry_devices(entry):
+        add(device)
+    entry.async_on_unload(async_dispatcher_connect(hass, signal_new_device(entry.entry_id), add))
 
 
 class StreamAssistantEntity(Entity):
-    """Entity that follows the connection state of its dock."""
+    """Entity that follows the connection state of its deck."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
@@ -24,9 +48,7 @@ class StreamAssistantEntity(Entity):
         """Subscribe to connection state changes."""
         await super().async_added_to_hass()
         self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, signal_state(self.device.entry.entry_id), self._on_state
-            )
+            async_dispatcher_connect(self.hass, signal_state(self.device.key), self._on_state)
         )
 
     @callback

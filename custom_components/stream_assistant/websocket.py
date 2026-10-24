@@ -1,7 +1,8 @@
 """WebSocket API used by the Stream Assistant panel.
 
-Layout commands address either a dock (`entry_id`) or a template
-(`template_id`, a planned deck without hardware).
+Layout commands address either a deck (`entry_id`: the deck's key, the
+config entry id for docks and virtual panels, "<entry id>.<device id>" for
+bridge decks) or a template (`template_id`, a planned deck without hardware).
 
 All editor commands are admin-only, like the panel: they expose addresses,
 serial numbers and the layout (entity ids), or change things.
@@ -30,6 +31,7 @@ from .behavior import BEHAVIOR_SCHEMA
 from .const import DOMAIN
 from .device import StreamAssistantDevice
 from .display import page_key_slot
+from .entity import entry_devices
 from .layout import ACTION_CALL, ACTION_DEFAULT, PAGE_SCHEMA, validate_layout
 from .capabilities import CATALOG, DeckCapabilities, find_capabilities
 from .render import ASSETS
@@ -74,16 +76,18 @@ class Target:
     template_id: str | None = None
 
 
-def _device(hass: HomeAssistant, entry_id: str) -> StreamAssistantDevice | None:
-    entry = hass.config_entries.async_get_entry(entry_id)
-    if entry is None or entry.domain != DOMAIN or entry.state is not ConfigEntryState.LOADED:
-        return None
-    return entry.runtime_data
-
-
 def _devices(hass: HomeAssistant) -> list[StreamAssistantDevice]:
-    devices = [_device(hass, e.entry_id) for e in hass.config_entries.async_entries(DOMAIN)]
-    return [d for d in devices if d is not None]
+    """All decks of all loaded entries."""
+    return [
+        device
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if entry.state is ConfigEntryState.LOADED
+        for device in entry_devices(entry)
+    ]
+
+
+def _device(hass: HomeAssistant, key: str) -> StreamAssistantDevice | None:
+    return next((d for d in _devices(hass) if d.key == key), None)
 
 
 def _templates(hass: HomeAssistant) -> TemplateManager:
@@ -117,8 +121,9 @@ def _model_info(model: DeckCapabilities | None) -> dict[str, Any] | None:
 
 def _entry_summary(device: StreamAssistantDevice) -> dict[str, Any]:
     return {
-        "entry_id": device.entry.entry_id,
-        "title": device.entry.title,
+        "entry_id": device.key,
+        "title": device.title,
+        "kind": device.kind,
         "virtual": device.virtual,
         "model": _model_info(device.model),
         "dock_connected": device.dock_connected,
@@ -131,7 +136,7 @@ def _entry_summary(device: StreamAssistantDevice) -> dict[str, Any]:
 
 
 def _template_summary(hass: HomeAssistant, template: dict[str, Any]) -> dict[str, Any]:
-    linked = [d.entry.title for d in _devices(hass) if d.template_id == template["id"]]
+    linked = [d.title for d in _devices(hass) if d.template_id == template["id"]]
     return {
         "template_id": template["id"],
         "title": template["name"],
@@ -472,7 +477,7 @@ def ws_panel_list(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
     connection.send_result(
         msg["id"],
         [
-            {"entry_id": d.entry.entry_id, "title": d.entry.title, "cols": d.model.cols, "rows": d.model.rows}
+            {"entry_id": d.key, "title": d.title, "cols": d.model.cols, "rows": d.model.rows}
             for d in _devices(hass)
             if d.virtual and d.model
         ],
@@ -510,7 +515,7 @@ def ws_panel_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConn
         websocket_api.event_message(
             msg["id"],
             {
-                "title": device.entry.title,
+                "title": device.title,
                 "cols": device.model.cols,
                 "rows": device.model.rows,
                 "brightness": transport.brightness,

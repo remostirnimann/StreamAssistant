@@ -1,7 +1,10 @@
 """Config flow for Stream Assistant.
 
-The dock is identified by its serial number, never by its address. Address
-changes are picked up from two sources:
+Docks and bridges are identified by their serial number / bridge id, never by
+their address. Bridges announce themselves via mDNS (_stream-assistant._tcp)
+and are paired once with the code they show.
+
+Dock address changes are picked up from two sources:
 
 - mDNS (_elg._tcp): the dock announces serial, MAC and current IP
 - DHCP: for docks whose MAC is known, Home Assistant reports new leases
@@ -11,12 +14,14 @@ from __future__ import annotations
 
 import logging
 import secrets
+from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_MAC, CONF_NAME
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.selector import NumberSelector, NumberSelectorConfig, NumberSelectorMode
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
@@ -24,17 +29,24 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .capabilities import MAX_COLS, MAX_ROWS
 from .const import (
+    CONF_BRIDGE_ID,
     CONF_COLS,
     CONF_DECK_PRODUCT_ID,
     CONF_DECK_SERIAL,
+    CONF_DEVICES,
     CONF_DOCK_SERIAL,
     CONF_KIND,
+    CONF_PORT,
     CONF_ROWS,
+    CONF_TOKEN,
     DOMAIN,
+    KIND_BRIDGE,
     KIND_PLANNER,
     KIND_VIRTUAL,
     PLANNER_UNIQUE_ID,
+    VERSION as CLIENT_VERSION,
 )
+from .protocol.bridge import DEFAULT_PORT as BRIDGE_PORT, SERVICE_TYPE as BRIDGE_SERVICE, BridgeError, BridgeInfo, fetch_info, pair
 from .protocol import NETWORK_DOCK_DEVICE_TYPE, ChildInfo, CoraError, DockInfo, find_model, probe
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,6 +85,8 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
         self._mac: str | None = None
         self._dock: DockInfo | None = None
         self._child: ChildInfo | None = None
+        self._port = BRIDGE_PORT
+        self._bridge: BridgeInfo | None = None
 
     async def _probe(self, host: str) -> str | None:
         """Read dock info, return an error key on failure."""
@@ -116,8 +130,114 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Add a dock, or only enable planning (templates) without hardware."""
-        return self.async_show_menu(step_id="user", menu_options=["dock", "virtual", "planner"])
+        """Add a dock, a bridge or a virtual panel, or only enable planning (templates)."""
+        return self.async_show_menu(step_id="user", menu_options=["dock", "bridge", "virtual", "planner"])
+
+    # Bridge
+
+    async def async_step_bridge(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manual bridge setup by address."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            host = user_input[CONF_HOST].strip()
+            port = int(user_input[CONF_PORT])
+            try:
+                self._bridge = await fetch_info(async_get_clientsession(self.hass), host, port)
+            except BridgeError:
+                errors["base"] = "cannot_connect_bridge"
+            else:
+                await self.async_set_unique_id(self._bridge.id)
+                self._abort_if_unique_id_configured(updates={CONF_HOST: host, CONF_PORT: port})
+                self._host, self._port = host, port
+                return await self.async_step_pair()
+        return self.async_show_form(
+            step_id="bridge",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_HOST): str, vol.Required(CONF_PORT, default=BRIDGE_PORT): vol.All(vol.Coerce(int), vol.Range(1, 65535))}
+            ),
+            errors=errors,
+        )
+
+    async def _async_pair(self, code: str) -> tuple[BridgeInfo, str] | str:
+        """Pair; returns info and token, or an error key."""
+        assert self._host
+        try:
+            return await pair(async_get_clientsession(self.hass), self._host, self._port, code.strip(), CLIENT_VERSION)
+        except BridgeError as err:
+            return "invalid_code" if err.code == "invalid_code" else "cannot_connect_bridge"
+
+    async def async_step_pair(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Enter the pairing code the bridge shows."""
+        assert self._bridge
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            result = await self._async_pair(user_input["code"])
+            if isinstance(result, str):
+                errors["base"] = result
+            else:
+                info, token = result
+                return self.async_create_entry(
+                    title=info.name or self._bridge.name,
+                    data={
+                        CONF_KIND: KIND_BRIDGE,
+                        CONF_HOST: self._host,
+                        CONF_PORT: self._port,
+                        CONF_BRIDGE_ID: info.id or self._bridge.id,
+                        CONF_TOKEN: token,
+                        CONF_DEVICES: {},
+                    },
+                )
+        return self.async_show_form(
+            step_id="pair",
+            data_schema=vol.Schema({vol.Required("code"): str}),
+            description_placeholders={"name": self._bridge.name, "host": f"{self._host}:{self._port}"},
+            errors=errors,
+        )
+
+    async def _async_step_bridge_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
+        properties = discovery_info.properties
+        bridge_id = properties.get("id")
+        if not bridge_id:
+            return self.async_abort(reason="cannot_connect_bridge")
+        host, port = discovery_info.host, discovery_info.port or BRIDGE_PORT
+        await self.async_set_unique_id(bridge_id)
+        # Known bridge: follow its address (reloads the entry if it changed)
+        self._abort_if_unique_id_configured(updates={CONF_HOST: host, CONF_PORT: port})
+        self._host, self._port = host, port
+        self._bridge = BridgeInfo(bridge_id, properties.get("name") or host, properties.get("version") or "")
+        self.context["title_placeholders"] = {"name": self._bridge.name}
+        return await self.async_step_pair()
+
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
+        """The bridge refused the token (e.g. it was reset): pair again."""
+        self._host = entry_data[CONF_HOST]
+        self._port = entry_data[CONF_PORT]
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Enter a new pairing code."""
+        entry = self._get_reauth_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            result = await self._async_pair(user_input["code"])
+            if isinstance(result, str):
+                errors["base"] = result
+            elif result[0].id and result[0].id != entry.data[CONF_BRIDGE_ID]:
+                errors["base"] = "wrong_bridge"
+            else:
+                return self.async_update_reload_and_abort(entry, data_updates={CONF_TOKEN: result[1]})
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({vol.Required("code"): str}),
+            description_placeholders={"name": entry.title, "host": f"{self._host}:{self._port}"},
+            errors=errors,
+        )
 
     async def async_step_virtual(
         self, user_input: dict[str, Any] | None = None
@@ -192,7 +312,9 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_zeroconf(
         self, discovery_info: ZeroconfServiceInfo
     ) -> ConfigFlowResult:
-        """A dock announced itself via mDNS (_elg._tcp)."""
+        """A dock (_elg._tcp) or a bridge (_stream-assistant._tcp) announced itself via mDNS."""
+        if discovery_info.type == BRIDGE_SERVICE:
+            return await self._async_step_bridge_zeroconf(discovery_info)
         properties = discovery_info.properties
         if str(properties.get("dt")) != str(NETWORK_DOCK_DEVICE_TYPE):
             # Decks behind a dock announce themselves too, they are handled via the dock

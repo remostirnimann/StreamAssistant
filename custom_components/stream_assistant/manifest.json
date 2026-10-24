@@ -1,15 +1,31 @@
 {
   "domain": "stream_assistant",
   "name": "Stream Assistant",
-  "codeowners": ["@remostirnimann"],
+  "codeowners": [
+    "@remostirnimann"
+  ],
   "config_flow": true,
-  "dependencies": ["frontend", "http", "panel_custom", "websocket_api"],
-  "dhcp": [{ "registered_devices": true }],
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "websocket_api"
+  ],
+  "dhcp": [
+    {
+      "registered_devices": true
+    }
+  ],
   "documentation": "https://github.com/remostirnimann/StreamAssistant",
   "integration_type": "hub",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/remostirnimann/StreamAssistant/issues",
-  "requirements": ["Pillow>=10.1.0"],
-  "version": "0.6.1",
-  "zeroconf": ["_elg._tcp.local."]
+  "requirements": [
+    "Pillow>=10.1.0"
+  ],
+  "version": "0.7.0",
+  "zeroconf": [
+    "_elg._tcp.local.",
+    "_stream-assistant._tcp.local."
+  ]
 }

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from homeassistant.components.number import NumberMode, RestoreNumber
 from homeassistant.const import PERCENTAGE, EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .device import StreamAssistantConfigEntry, StreamAssistantDevice
-from .entity import StreamAssistantEntity
+from .entity import StreamAssistantEntity, async_setup_decks
 
 PARALLEL_UPDATES = 0
 
@@ -18,11 +18,14 @@ async def async_setup_entry(
     entry: StreamAssistantConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add the brightness entity."""
-    device = entry.runtime_data
-    if device.model is None or device.deck_serial is None:
-        return
-    async_add_entities([StreamDeckBrightness(device)])
+    """Add a brightness entity per deck."""
+
+    @callback
+    def add(device: StreamAssistantDevice) -> None:
+        if device.model is not None and device.deck_serial is not None:
+            async_add_entities([StreamDeckBrightness(device)])
+
+    async_setup_decks(hass, entry, add)
 
 
 class StreamDeckBrightness(StreamAssistantEntity, RestoreNumber):

@@ -54,6 +54,9 @@
 2. ~~Virtual deck in HA with dashboard card~~ done in 0.6.0 (free grid of columns × rows
    instead of a fixed model; card `custom:stream-assistant-card`; templates can use free grids too)
 3. Bridge with neutral protocol + Elgato USB driver (several decks per computer, hot-plug)
+   - done in 0.7.0 / bridge 0.1.0: protocol spec, .NET bridge (pairing, mDNS, simulated deck),
+     integration side (one entry per bridge, decks appear and disappear on their own)
+   - open: Elgato USB driver (HidSharp), desktop window for virtual decks
 4. HA add-on and platform packages, then more manufacturers
 5. Docs + HACS beta (possibly already after step 2)
 

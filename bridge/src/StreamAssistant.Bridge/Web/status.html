@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stream Assistant Bridge</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f7f9; --card: #fff; --text: #1d2125; --muted: #5f6b76; --line: #dde2e7; --accent: #0b7bd6; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #15181b; --card: #1e2226; --text: #e8eaed; --muted: #9aa4ad; --line: #30363c; --accent: #4aa8ff; } }
+  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin-top: 16px; }
+  .code { font: 600 34px/1.2 ui-monospace, monospace; letter-spacing: 6px; color: var(--accent); }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  ul { margin: 0; padding-left: 20px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="name">Stream Assistant Bridge</h1>
+  <div class="muted" id="sub"></div>
+  <section class="card" id="pairing" hidden>
+    <div class="muted">Pairing code for Home Assistant</div>
+    <div class="code" id="code"></div>
+    <div class="muted">Enter it when adding this bridge in Home Assistant. It changes after each pairing.</div>
+  </section>
+  <section class="card">
+    <dl>
+      <dt>Home Assistant</dt><dd id="client"></dd>
+      <dt>Bridge id</dt><dd id="id"></dd>
+      <dt>Port</dt><dd id="port"></dd>
+      <dt>Settings</dt><dd id="config"></dd>
+    </dl>
+  </section>
+  <section class="card">
+    <strong>Devices</strong>
+    <ul id="devices"></ul>
+    <p id="sim" hidden><a href="/sim">Open the simulator</a></p>
+  </section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  async function refresh() {
+    try {
+      const s = await (await fetch("/api/status")).json();
+      $("name").textContent = s.bridge.name;
+      $("sub").textContent = `Stream Assistant Bridge ${s.bridge.version} · ${s.bridge.platform}`;
+      $("pairing").hidden = !s.pairing_code;
+      $("code").textContent = s.pairing_code || "";
+      $("client").textContent = s.client ? `connected (${s.client})` : "not connected";
+      $("id").textContent = s.bridge.id;
+      $("port").textContent = s.port;
+      $("config").textContent = s.config_dir || "–";
+      $("devices").replaceChildren(...(s.devices.length ? s.devices : [null]).map((d) => {
+        const li = document.createElement("li");
+        li.textContent = d ? `${d.name} (${d.model}, ${d.id})` : "none";
+        return li;
+      }));
+      $("sim").hidden = !s.devices.some((d) => d.virtual);
+    } catch {
+      $("sub").textContent = "Bridge not reachable";
+    }
+  }
+  refresh();
+  setInterval(refresh, 3000);
+</script>
+</body>
+</html>

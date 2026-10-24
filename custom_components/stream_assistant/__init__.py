@@ -1,4 +1,4 @@
-"""Stream Assistant: Elgato Stream Deck Network Dock, driven directly by Home Assistant."""
+"""Stream Assistant: Stream Decks driven directly by Home Assistant (Network Dock, bridge, virtual panels)."""
 
 from __future__ import annotations
 
@@ -7,8 +7,9 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from . import websocket
-from .const import CONF_KIND, DOMAIN, KIND_PLANNER, PLATFORMS
-from .device import StreamAssistantConfigEntry, StreamAssistantDevice, async_remove_layout
+from .bridge_hub import BridgeHub
+from .const import CONF_DEVICES, CONF_KIND, DOMAIN, KIND_BRIDGE, KIND_PLANNER, PLATFORMS
+from .device import StreamAssistantConfigEntry, StreamAssistantDevice, async_remove_layout, deck_key
 from .panel import async_register_panel
 from .templates import DATA_TEMPLATES, TemplateManager
 
@@ -25,26 +26,30 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-def _is_planner(entry: StreamAssistantConfigEntry) -> bool:
-    return entry.data.get(CONF_KIND) == KIND_PLANNER
+def _kind(entry: StreamAssistantConfigEntry) -> str | None:
+    return entry.data.get(CONF_KIND)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: StreamAssistantConfigEntry) -> bool:
-    """Set up a dock from a config entry."""
-    if _is_planner(entry):
+    """Set up a dock, bridge or virtual panel."""
+    if _kind(entry) == KIND_PLANNER:
         # Nothing to connect to: the entry only makes HA load the editor (async_setup)
-        entry.runtime_data = None  # type: ignore[assignment]
+        entry.runtime_data = None
         return True
-    device = StreamAssistantDevice(hass, entry)
-    entry.runtime_data = device
-    await device.async_start()
+    runtime: StreamAssistantDevice | BridgeHub
+    if _kind(entry) == KIND_BRIDGE:
+        runtime = BridgeHub(hass, entry)
+    else:
+        runtime = StreamAssistantDevice(hass, entry)
+    entry.runtime_data = runtime
+    await runtime.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: StreamAssistantConfigEntry) -> bool:
     """Unload a config entry."""
-    if _is_planner(entry):
+    if _kind(entry) == KIND_PLANNER:
         return True
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
@@ -53,6 +58,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: StreamAssistantConfigEn
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: StreamAssistantConfigEntry) -> None:
-    """Delete what the entry stored (layout, behaviour); runs after unloading."""
-    if not _is_planner(entry):
-        await async_remove_layout(hass, entry.entry_id)
+    """Delete what the entry stored (layouts, behaviour); runs after unloading."""
+    if _kind(entry) == KIND_PLANNER:
+        return
+    if _kind(entry) == KIND_BRIDGE:
+        for device_id in entry.data.get(CONF_DEVICES, {}):
+            await async_remove_layout(hass, deck_key(entry.entry_id, device_id))
+        return
+    await async_remove_layout(hass, entry.entry_id)
