@@ -1,0 +1,125 @@
+# Every merge into main is a release: builds the integration zip and the
+# bridge files, tags vX.Y.Z and publishes a GitHub release with the changelog
+# section. Versions with a, b or rc (e.g. 0.8.0b1) become pre-releases.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.info.outputs.version }}
+      tag: ${{ steps.info.outputs.tag }}
+      numeric: ${{ steps.info.outputs.numeric }}
+      prerelease: ${{ steps.info.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version and changelog
+        id: info
+        run: python3 scripts/release_info.py >> "$GITHUB_OUTPUT"
+      - name: The tag must not exist yet
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.info.outputs.tag }}" > /dev/null; then
+            echo "::error::Tag ${{ steps.info.outputs.tag }} exists already, raise the version"
+            exit 1
+          fi
+
+  integration:
+    name: Integration zip
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Zip (HACS downloads this file, see hacs.json)
+        run: |
+          mkdir -p out
+          cd custom_components/stream_assistant
+          zip -r -X ../../out/stream_assistant.zip . -x '__pycache__/*' '*.pyc'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: integration
+          path: out/
+
+  bridge:
+    name: ${{ matrix.name }} ${{ matrix.rid }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { name: stream-assistant-bridge, project: StreamAssistant.Bridge, rid: win-x64 }
+          - { name: stream-assistant-bridge, project: StreamAssistant.Bridge, rid: linux-x64 }
+          - { name: stream-assistant-bridge, project: StreamAssistant.Bridge, rid: linux-arm64 }
+          - { name: stream-assistant-bridge, project: StreamAssistant.Bridge, rid: linux-musl-x64 }
+          - { name: stream-assistant-bridge, project: StreamAssistant.Bridge, rid: linux-musl-arm64 }
+          - { name: stream-assistant-bridge, project: StreamAssistant.Bridge, rid: osx-x64 }
+          - { name: stream-assistant-bridge, project: StreamAssistant.Bridge, rid: osx-arm64 }
+          - { name: stream-assistant-bridge-desktop, project: StreamAssistant.Bridge.Desktop, rid: win-x64 }
+          - { name: stream-assistant-bridge-desktop, project: StreamAssistant.Bridge.Desktop, rid: linux-x64 }
+          - { name: stream-assistant-bridge-desktop, project: StreamAssistant.Bridge.Desktop, rid: linux-arm64 }
+          - { name: stream-assistant-bridge-desktop, project: StreamAssistant.Bridge.Desktop, rid: osx-x64 }
+          - { name: stream-assistant-bridge-desktop, project: StreamAssistant.Bridge.Desktop, rid: osx-arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Publish
+        run: >
+          dotnet publish bridge/src/${{ matrix.project }} -c Release -r ${{ matrix.rid }} -o publish
+          -p:Version=${{ needs.prepare.outputs.numeric }}
+          -p:InformationalVersion=${{ needs.prepare.outputs.version }}
+          -p:DebugType=none
+      - name: Package
+        run: |
+          mkdir -p out
+          base="${{ matrix.name }}-${{ needs.prepare.outputs.version }}-${{ matrix.rid }}"
+          cp LICENSE publish/
+          if [[ "${{ matrix.rid }}" == win-* ]]; then
+            (cd publish && zip -r -X "../out/$base.zip" .)
+          else
+            tar -czf "out/$base.tar.gz" -C publish .
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-${{ matrix.rid }}
+          path: out/
+
+  release:
+    name: Publish release
+    needs: [prepare, integration, bridge]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt
+      - name: Release notes
+        run: python3 scripts/release_info.py --notes > notes.md
+      - name: Tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          if [[ "${{ needs.prepare.outputs.prerelease }}" == true ]]; then flags+=(--prerelease); else flags+=(--latest); fi
+          gh release create "${{ needs.prepare.outputs.tag }}" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "Stream Assistant ${{ needs.prepare.outputs.version }}" \
+            --notes-file notes.md \
+            "${flags[@]}"

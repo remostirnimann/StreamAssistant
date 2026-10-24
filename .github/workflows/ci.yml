@@ -1,0 +1,91 @@
+# Checks every pull request and every push to develop and main.
+# The job names are required status checks in the branch ruleset.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    name: Integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Install Python packages
+        run: pip install Pillow aiohttp
+      - name: Compile
+        run: python -m py_compile custom_components/stream_assistant/*.py custom_components/stream_assistant/protocol/*.py scripts/*.py
+      - name: Check frontend scripts
+        run: |
+          node --check custom_components/stream_assistant/frontend/panel.js
+          node --check custom_components/stream_assistant/frontend/card.js
+      - name: Self test against a simulated Network Dock
+        run: python scripts/selftest_transport.py
+      - name: Self test against the bridge
+        run: |
+          dotnet build bridge/src/StreamAssistant.Bridge
+          python scripts/selftest_bridge.py
+
+  bridge:
+    name: Bridge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Test
+        run: dotnet test bridge
+
+  hassfest:
+    name: Hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # The logo in home-assistant/brands comes with the move to the default HACS list
+          ignore: brands
+
+  release-check:
+    name: Release check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Version and changelog
+        id: info
+        # Only a pull request into main must be releasable; elsewhere this is informational
+        continue-on-error: ${{ github.base_ref != 'main' }}
+        run: python scripts/release_info.py >> "$GITHUB_OUTPUT"
+      - name: The tag must not exist yet
+        if: github.base_ref == 'main'
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.info.outputs.tag }}" > /dev/null; then
+            echo "::error::Tag ${{ steps.info.outputs.tag }} exists already, raise the version"
+            exit 1
+          fi
