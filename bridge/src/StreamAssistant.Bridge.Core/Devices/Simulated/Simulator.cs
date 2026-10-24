@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -180,7 +181,7 @@ public sealed class Simulator
         {
             if (ContentJson(device.GetKey(key)) is { } content)
             {
-                keys[key.ToString()] = content;
+                keys[key.ToString(CultureInfo.InvariantCulture)] = content;
             }
         }
         return new JsonObject

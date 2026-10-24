@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using StreamAssistant.Bridge.Configuration;
@@ -104,7 +105,7 @@ public sealed class PairingService
         Changed?.Invoke();
     }
 
-    private static string NewCode() => RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+    private static string NewCode() => RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6", CultureInfo.InvariantCulture);
 
     private static string Hash(string token) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 

@@ -58,7 +58,7 @@ public sealed class DesktopFixture : IDisposable
         var frame = Window.CaptureRenderedFrame();
         var dir = Path.Combine(AppContext.BaseDirectory, "screenshots");
         Directory.CreateDirectory(dir);
-        frame?.Save(Path.Combine(dir, name + ".png"));
+        frame?.Save(Path.Combine(dir, name + ".png"), new PngBitmapEncoderOptions());
     }
 
     public void Dispose()
@@ -90,7 +90,7 @@ public sealed class WindowTests
             context.DrawText(formatted, new Point((144 - formatted.Width) / 2, (144 - formatted.Height) / 2));
         }
         using var stream = new MemoryStream();
-        target.Save(stream);
+        target.Save(stream, new PngBitmapEncoderOptions());
         return stream.ToArray();
     }
 

@@ -55,3 +55,8 @@ __pycache__/
 
 # Fake dock output
 fake_dock_out/
+
+# Test coverage output
+.coverage
+coverage.xml
+TestResults/

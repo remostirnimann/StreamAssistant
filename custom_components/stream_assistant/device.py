@@ -9,6 +9,8 @@ import logging
 import secrets
 from typing import Any
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_MAC
 from homeassistant.core import CALLBACK_TYPE, Event, EventStateChangedData, HomeAssistant, callback
@@ -53,6 +55,7 @@ from .layout import (
     merge_into_template,
     migrate_v1,
     remap_layout,
+    validate_layout,
 )
 from .preview import RenderCache
 from .capabilities import DeckCapabilities, find_capabilities, grid_capabilities
@@ -260,7 +263,12 @@ class StreamAssistantDevice:
         """Load the layout and start connecting."""
         behavior = None
         if stored := await self._store.async_load():
-            self._own_layout = {"pages": stored["pages"]}
+            try:
+                self._own_layout = validate_layout({"pages": stored["pages"]}, None)
+            except (vol.Invalid, KeyError, TypeError) as err:
+                # Damaged or from an incompatible version: start empty instead of failing later
+                _LOGGER.warning("%s: stored layout is invalid (%s), starting with an empty one", self.title, err)
+                self._own_layout = empty_layout()
             grid = stored.get("grid")
             if self.model and grid and grid != [self.model.cols, self.model.rows]:
                 # The grid of a virtual panel was changed: keep keys at their row and column

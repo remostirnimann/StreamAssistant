@@ -134,12 +134,15 @@ async def fetch_info(session: aiohttp.ClientSession, host: str, port: int = DEFA
 
 
 async def _handshake(
-    session: aiohttp.ClientSession, host: str, port: int, first: dict[str, Any]
+    session: aiohttp.ClientSession, host: str, port: int, first: dict[str, Any], *, heartbeat: float | None = None
 ) -> tuple[aiohttp.ClientWebSocketResponse, dict[str, Any], str | None]:
-    """Open a connection and send hello or pair; returns welcome (and a new token)."""
+    """Open a connection and send hello or pair; returns welcome (and a new token).
+
+    Only the lasting session needs a heartbeat; the pairing connection is closed right away.
+    """
     try:
         async with asyncio.timeout(CONNECT_TIMEOUT):
-            ws = await session.ws_connect(_url(host, port, "/ws", "ws"), heartbeat=HEARTBEAT, max_msg_size=4 * 1024 * 1024)
+            ws = await session.ws_connect(_url(host, port, "/ws", "ws"), heartbeat=heartbeat, max_msg_size=4 * 1024 * 1024)
     except (aiohttp.ClientError, TimeoutError) as err:
         raise BridgeError("cannot_connect", str(err)) from err
     token = None
@@ -272,6 +275,7 @@ class BridgeClient:
                         "client_version": self._client_version,
                         "token": self._token,
                     },
+                    heartbeat=HEARTBEAT,
                 )
                 self.info = _info(welcome)
                 backoff = BACKOFF_MIN
