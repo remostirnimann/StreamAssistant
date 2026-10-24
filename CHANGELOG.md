@@ -2,10 +2,14 @@
 
 All notable changes to Stream Assistant. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are those of the
-Home Assistant integration (`manifest.json`); the bridge has its own version, noted
-where it changed. Nothing has been released yet.
+Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
+the same version. Versions before 0.8.0b1 were not released.
 
 ## [Unreleased]
+
+## [0.8.0b1] - 2026-10-24
+
+First release on GitHub, as a beta (pre-release).
 
 ### Added
 - Bridge: **desktop program** (`stream-assistant-bridge-desktop`, Avalonia) with a window
@@ -16,9 +20,20 @@ where it changed. Nothing has been released yet.
 - Bridge: headless UI tests that also save screenshots.
 - `CHANGELOG.md` and `CLAUDE.md` (commands and architecture for Claude Code).
 - MIT license (`LICENSE`); the bundled fonts stay under Apache 2.0.
+- CI on every pull request: integration checks with both self tests, bridge tests,
+  hassfest, HACS validation, and a release check for pull requests into `main`.
+- Release pipeline. Every merge into `main` builds the integration zip and the console
+  and desktop bridge for Windows, macOS and Linux, tags `vX.Y.Z` and publishes a GitHub
+  release with the changelog section and SHA-256 checksums. `a`/`b`/`rc` versions become
+  pre-releases.
+- `scripts/release_info.py`: checks that `manifest.json`, `const.py` and `CHANGELOG.md` agree.
 
 ### Changed
 - The repository moved from Bitbucket to GitHub (`remostirnimann/StreamAssistant`), with its full history.
+- `develop` and `main` are protected: changes only through pull requests. Release tags are protected.
+- HACS installs the release zip (`zip_release`) and needs Home Assistant 2026.10 or later.
+- One version for the integration and the bridge per release.
+- `manifest.json` no longer lists Pillow; Home Assistant ships it (hassfest requires this).
 - Bridge split into `StreamAssistant.Bridge.Core` (library), the console program and the
   desktop program; `BridgeHost` builds and prepares the bridge for both.
 - Bridge: `bridge.json` keeps umlauts readable.
