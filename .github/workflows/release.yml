@@ -87,6 +87,8 @@ jobs:
         run: |
           mkdir -p out
           base="${{ matrix.name }}-${{ needs.prepare.outputs.version }}-${{ matrix.rid }}"
+          # Native debug symbols (SkiaSharp, HarfBuzz) and the empty static web assets list are not needed
+          find publish \( -name '*.pdb' -o -name '*.staticwebassets.endpoints.json' \) -delete
           cp LICENSE publish/
           if [[ "${{ matrix.rid }}" == win-* ]]; then
             (cd publish && zip -r -X "../out/$base.zip" .)
