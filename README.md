@@ -101,3 +101,7 @@ automation:
 - `poc/`: Node.js proof of concept used to validate the dock protocol
 
 Protocol knowledge based on [node-elgato-stream-deck](https://github.com/Julusian/node-elgato-stream-deck) (MIT).
+
+## License
+
+MIT, see [LICENSE](LICENSE). The bundled fonts are licensed under Apache 2.0.

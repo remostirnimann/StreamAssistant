@@ -15,8 +15,10 @@ where it changed. Nothing has been released yet.
 - Bridge: virtual decks are stored in `bridge.json` and come back after a restart.
 - Bridge: headless UI tests that also save screenshots.
 - `CHANGELOG.md` and `CLAUDE.md` (commands and architecture for Claude Code).
+- MIT license (`LICENSE`); the bundled fonts stay under Apache 2.0.
 
 ### Changed
+- The repository moved from Bitbucket to GitHub (`remostirnimann/StreamAssistant`), with its full history.
 - Bridge split into `StreamAssistant.Bridge.Core` (library), the console program and the
   desktop program; `BridgeHost` builds and prepares the bridge for both.
 - Bridge: `bridge.json` keeps umlauts readable.
