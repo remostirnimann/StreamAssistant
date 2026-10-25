@@ -5,6 +5,13 @@ from __future__ import annotations
 from ipaddress import ip_address
 from unittest.mock import patch
 
+from homeassistant.config_entries import SOURCE_DHCP, SOURCE_RECONFIGURE, SOURCE_USER, SOURCE_ZEROCONF
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
 from custom_components.stream_assistant.const import (
     CONF_BRIDGE_ID,
     CONF_COLS,
@@ -20,12 +27,6 @@ from custom_components.stream_assistant.const import (
 )
 from custom_components.stream_assistant.protocol import CoraError
 from custom_components.stream_assistant.protocol.bridge import BridgeInfo
-from homeassistant.config_entries import SOURCE_DHCP, SOURCE_RECONFIGURE, SOURCE_USER, SOURCE_ZEROCONF
-from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
-from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from .common import DECK_SERIAL, DOCK_PORT, DOCK_SERIAL, FakeDock, bridge_entry, virtual_entry
 from .fake_bridge import BRIDGE_ID, FakeBridge
@@ -248,5 +249,7 @@ async def test_virtual_entries_do_not_clash(hass: HomeAssistant) -> None:
     virtual_entry().add_to_hass(hass)
     result = await _menu(hass, "virtual")
     with SKIP_SETUP:
-        result = await hass.config_entries.flow.async_configure(result["flow_id"], {"name": "Second", CONF_COLS: 2, CONF_ROWS: 2})
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"name": "Second", CONF_COLS: 2, CONF_ROWS: 2}
+        )
     assert result["type"] is FlowResultType.CREATE_ENTRY

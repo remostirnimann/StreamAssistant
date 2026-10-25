@@ -8,6 +8,8 @@ from pathlib import Path
 import sys
 from typing import Any
 
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.stream_assistant.const import (
@@ -26,15 +28,12 @@ from custom_components.stream_assistant.const import (
     KIND_VIRTUAL,
 )
 
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
-
 from .fake_bridge import BRIDGE_ID, BRIDGE_NAME, FakeBridge
 
 # The simulated dock lives in scripts/ so it can also run on its own
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from fake_dock import DECK_SERIAL, DOCK_SERIAL, MK2_PID, FakeDock  # noqa: E402
+from fake_dock import DECK_SERIAL, DOCK_SERIAL, MK2_PID, FakeDock
 
 DOCK_PORT = 5343
 
@@ -94,7 +93,9 @@ def virtual_entry(cols: int = 4, rows: int = 2, title: str = "Wall panel") -> Mo
     )
 
 
-def bridge_entry(bridge: FakeBridge, token: str = "known-token", devices: dict[str, Any] | None = None) -> MockConfigEntry:
+def bridge_entry(
+    bridge: FakeBridge, token: str = "known-token", devices: dict[str, Any] | None = None
+) -> MockConfigEntry:
     """Entry for the fake bridge."""
     return MockConfigEntry(
         domain=DOMAIN,

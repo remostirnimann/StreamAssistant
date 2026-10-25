@@ -16,10 +16,10 @@ from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.storage import Store
 from homeassistant.util.hass_dict import HassKey
 
+from .capabilities import DeckCapabilities, find_capabilities
 from .const import DOMAIN
 from .layout import empty_layout
 from .preview import RenderCache
-from .capabilities import DeckCapabilities, find_capabilities
 
 STORAGE_VERSION = 1
 SAVE_DELAY = 2
@@ -49,9 +49,7 @@ class TemplateManager:
             self._templates = {t["id"]: t for t in stored.get("templates", [])}
 
     def _schedule_save(self) -> None:
-        self._store.async_delay_save(
-            lambda: {"templates": list(self._templates.values())}, SAVE_DELAY
-        )
+        self._store.async_delay_save(lambda: {"templates": list(self._templates.values())}, SAVE_DELAY)
 
     def list(self) -> list[dict[str, Any]]:
         """All templates, sorted by name."""

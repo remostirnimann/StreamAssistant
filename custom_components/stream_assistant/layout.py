@@ -42,9 +42,8 @@ import copy
 import secrets
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.helpers import config_validation as cv
+import voluptuous as vol
 
 ROOT_PAGE_ID = "main"
 BACK_KEY = 0
@@ -162,9 +161,7 @@ def migrate_v1(old: dict[str, Any]) -> dict[str, Any]:
     return layout
 
 
-def remap_layout(
-    layout: dict[str, Any], from_cols: int, to_cols: int, to_rows: int
-) -> tuple[dict[str, Any], int]:
+def remap_layout(layout: dict[str, Any], from_cols: int, to_cols: int, to_rows: int) -> tuple[dict[str, Any], int]:
     """Move keys to another grid size, keeping row and column.
 
     Returns the new layout and how many keys did not fit.

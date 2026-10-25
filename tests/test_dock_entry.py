@@ -5,17 +5,17 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import patch
 
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
+from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
 
 from custom_components.stream_assistant.const import DOMAIN
 from custom_components.stream_assistant.device import StreamAssistantDevice
 from custom_components.stream_assistant.layout import empty_layout, validate_layout
-from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import ATTR_ENTITY_ID
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
-from homeassistant.util import dt as dt_util
 
 from .common import DECK_SERIAL, DOCK_SERIAL, FakeDock, SetupEntry, dock_entry, entity_id, wait_for
 
@@ -119,10 +119,10 @@ async def test_entity_changes_repaint(hass: HomeAssistant, setup_entry: SetupEnt
     device = await _setup(hass, setup_entry, fake_dock)
     hass.states.async_set("light.buero", "off")
     await device.async_set_layout(_layout(k5={"entity_id": "light.buero"}))
-    await wait_for(lambda: device._wanted[5].background == "#2b2b2b")  # noqa: SLF001
+    await wait_for(lambda: device._wanted[5].background == "#2b2b2b")
     hass.states.async_set("light.buero", "on")
     await hass.async_block_till_done()
-    await wait_for(lambda: device._wanted[5].background == "#f2b134")  # noqa: SLF001
+    await wait_for(lambda: device._wanted[5].background == "#f2b134")
 
 
 async def test_services_set_and_clear_key(hass: HomeAssistant, setup_entry: SetupEntry, fake_dock: FakeDock) -> None:
@@ -131,13 +131,21 @@ async def test_services_set_and_clear_key(hass: HomeAssistant, setup_entry: Setu
     await hass.services.async_call(
         DOMAIN,
         "set_key",
-        {ATTR_ENTITY_ID: key3, "text": "Hallo", "background_color": [255, 0, 0], "text_color": "white", "font_size": 20},
+        {
+            ATTR_ENTITY_ID: key3,
+            "text": "Hallo",
+            "background_color": [255, 0, 0],
+            "text_color": "white",
+            "font_size": 20,
+        },
         blocking=True,
     )
     key = device.layout["pages"][0]["keys"]["3"]
     assert (key["title"], key["on_color"], key["text_color"], key["font_size"]) == ("Hallo", "#ff0000", "#ffffff", 20)
     with pytest.raises(Exception, match="colour"):
-        await hass.services.async_call(DOMAIN, "set_key", {ATTR_ENTITY_ID: key3, "background_color": "nope"}, blocking=True)
+        await hass.services.async_call(
+            DOMAIN, "set_key", {ATTR_ENTITY_ID: key3, "background_color": "nope"}, blocking=True
+        )
     await hass.services.async_call(DOMAIN, "clear_key", {ATTR_ENTITY_ID: key3}, blocking=True)
     assert "3" not in device.layout["pages"][0]["keys"]
 
@@ -158,7 +166,9 @@ async def test_reconnect_after_dock_restart(hass: HomeAssistant, setup_entry: Se
 
 async def test_other_deck_reloads_the_entry(hass: HomeAssistant, setup_entry: SetupEntry, fake_dock: FakeDock) -> None:
     entry = dock_entry()
-    entry = entry.__class__(domain=DOMAIN, title=entry.title, unique_id=entry.unique_id, data={**entry.data, "deck_serial": "OLDDECK"})
+    entry = entry.__class__(
+        domain=DOMAIN, title=entry.title, unique_id=entry.unique_id, data={**entry.data, "deck_serial": "OLDDECK"}
+    )
     with patch.object(hass.config_entries, "async_schedule_reload") as reload:
         await setup_entry(entry)
         await wait_for(lambda: reload.called)

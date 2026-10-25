@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator, Callable, Coroutine
-from pathlib import Path
-import sys
-from typing import Any
+from collections.abc import AsyncGenerator
 
+from homeassistant.core import HomeAssistant
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.stream_assistant.protocol import bridge as bridge_protocol, dock as dock_protocol
-from homeassistant.core import HomeAssistant
 
 from .common import DOCK_PORT, FakeDock, SetupEntry
 from .fake_bridge import FakeBridge
+
 
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:

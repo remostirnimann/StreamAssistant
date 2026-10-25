@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant.components import frontend
+from homeassistant.core import HomeAssistant
+from homeassistant.setup import async_setup_component
 import pytest
 from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.stream_assistant.const import DOMAIN
 from custom_components.stream_assistant.layout import empty_layout
-from homeassistant.components import frontend
-from homeassistant.core import HomeAssistant
-from homeassistant.setup import async_setup_component
 
 from .common import SetupEntry, entity_id, virtual_entry, wait_for
 
@@ -50,10 +50,16 @@ async def test_layout_save_get_and_conflicts(hass: HomeAssistant, ws) -> None:
     current = (await call(ws, type="stream_assistant/layout/get", entry_id=ws.entry_id))["result"]
     assert current["model"]["key_count"] == 8
     saved = await call(
-        ws, type="stream_assistant/layout/save", entry_id=ws.entry_id, layout=_layout(k1={"title": "a"}), revision=current["revision"]
+        ws,
+        type="stream_assistant/layout/save",
+        entry_id=ws.entry_id,
+        layout=_layout(k1={"title": "a"}),
+        revision=current["revision"],
     )
     assert saved["success"] and saved["result"]["layout"]["pages"][0]["keys"]["1"]["title"] == "a"
-    stale = await call(ws, type="stream_assistant/layout/save", entry_id=ws.entry_id, layout=_layout(), revision=current["revision"])
+    stale = await call(
+        ws, type="stream_assistant/layout/save", entry_id=ws.entry_id, layout=_layout(), revision=current["revision"]
+    )
     assert stale["error"]["code"] == "conflict"
     invalid = await call(ws, type="stream_assistant/layout/save", entry_id=ws.entry_id, layout=_layout(k9={}))
     assert invalid["error"]["code"] == "invalid_format"
@@ -82,17 +88,24 @@ async def test_preview_show_page_press(hass: HomeAssistant, ws) -> None:
 
     shown = await call(ws, type="stream_assistant/show_page", entry_id=ws.entry_id, page_id="main")
     assert shown["result"] == {"current_page": "main"}
-    assert (await call(ws, type="stream_assistant/show_page", entry_id="nope", page_id="main"))["error"]["code"] == "not_found"
+    assert (await call(ws, type="stream_assistant/show_page", entry_id="nope", page_id="main"))["error"][
+        "code"
+    ] == "not_found"
 
 
 async def test_info_and_behavior(ws) -> None:
     info = (await call(ws, type="stream_assistant/info", entry_id=ws.entry_id))["result"]
     assert info["virtual"] and not info["behavior"]["night"]["enabled"]
     updated = await call(
-        ws, type="stream_assistant/behavior/set", entry_id=ws.entry_id, behavior={"night": {"enabled": True, "mode": "sun"}}
+        ws,
+        type="stream_assistant/behavior/set",
+        entry_id=ws.entry_id,
+        behavior={"night": {"enabled": True, "mode": "sun"}},
     )
     assert updated["result"]["behavior"]["night"]["enabled"]
-    invalid = await call(ws, type="stream_assistant/behavior/set", entry_id=ws.entry_id, behavior={"idle": {"timeout": 1}})
+    invalid = await call(
+        ws, type="stream_assistant/behavior/set", entry_id=ws.entry_id, behavior={"idle": {"timeout": 1}}
+    )
     assert invalid["error"]["code"] == "invalid_format"
     for command in ("info", "behavior/set", "detach"):
         extra = {"behavior": {}} if command == "behavior/set" else {}
@@ -104,7 +117,9 @@ async def test_templates(hass: HomeAssistant, ws) -> None:
     created = (await call(ws, type="stream_assistant/template/create", name="Büro", model="grid_5x3"))["result"]
     template_id = created["template_id"]
     assert created["model"]["key_count"] == 15
-    assert (await call(ws, type="stream_assistant/template/create", name="x", model="nope"))["error"]["code"] == "invalid_format"
+    assert (await call(ws, type="stream_assistant/template/create", name="x", model="nope"))["error"][
+        "code"
+    ] == "invalid_format"
 
     # Template layout with a key outside the 4x2 panel (row 2)
     saved = await call(
@@ -114,7 +129,9 @@ async def test_templates(hass: HomeAssistant, ws) -> None:
         layout=_layout(k0={"title": "inside"}, k12={"title": "outside"}),
     )
     assert saved["success"]
-    preview = await call(ws, type="stream_assistant/preview", template_id=template_id, page=saved["result"]["layout"]["pages"][0])
+    preview = await call(
+        ws, type="stream_assistant/preview", template_id=template_id, page=saved["result"]["layout"]["pages"][0]
+    )
     assert len(preview["result"]["images"]) == 15
     assert (await call(ws, type="stream_assistant/press", template_id=template_id, key=0))["success"]
 
@@ -130,7 +147,9 @@ async def test_templates(hass: HomeAssistant, ws) -> None:
     assert template["linked"] == ["Wall panel"]
 
     assert (await call(ws, type="stream_assistant/template/rename", template_id=template_id, name="Neu"))["success"]
-    assert (await call(ws, type="stream_assistant/template/rename", template_id="nope", name="x"))["error"]["code"] == "not_found"
+    assert (await call(ws, type="stream_assistant/template/rename", template_id="nope", name="x"))["error"][
+        "code"
+    ] == "not_found"
 
     # Detach keeps a copy
     assert (await call(ws, type="stream_assistant/detach", entry_id=ws.entry_id))["success"]
@@ -138,13 +157,17 @@ async def test_templates(hass: HomeAssistant, ws) -> None:
     assert deck["template_id"] is None and set(deck["layout"]["pages"][0]["keys"]) == {"1"}
 
     # Save as template from the deck links it again; deleting the template leaves a copy
-    copied = (await call(ws, type="stream_assistant/template/create", name="Kopie", from_entry_id=ws.entry_id))["result"]
+    copied = (await call(ws, type="stream_assistant/template/create", name="Kopie", from_entry_id=ws.entry_id))[
+        "result"
+    ]
     assert copied["linked"] == ["Wall panel"]
     assert (await call(ws, type="stream_assistant/template/delete", template_id=copied["template_id"]))["success"]
     deck = (await call(ws, type="stream_assistant/layout/get", entry_id=ws.entry_id))["result"]
     assert deck["template_id"] is None and set(deck["layout"]["pages"][0]["keys"]) == {"1"}
     assert (await call(ws, type="stream_assistant/template/delete", template_id="nope"))["error"]["code"] == "not_found"
-    assert (await call(ws, type="stream_assistant/link", entry_id=ws.entry_id, template_id="nope"))["error"]["code"] == "not_found"
+    assert (await call(ws, type="stream_assistant/link", entry_id=ws.entry_id, template_id="nope"))["error"][
+        "code"
+    ] == "not_found"
     bad = await call(ws, type="stream_assistant/template/create", name="x", from_entry_id="nope")
     assert bad["error"]["code"] == "not_found"
 
@@ -174,7 +197,9 @@ async def test_editor_is_admin_only_card_is_not(
 
     missing = await call(user, type="stream_assistant/panel/subscribe", entry_id="nope")
     assert missing["error"]["code"] == "not_found"
-    assert (await call(user, type="stream_assistant/panel/press", entry_id="nope", key=0, pressed=True))["error"]["code"] == "not_found"
+    assert (await call(user, type="stream_assistant/panel/press", entry_id="nope", key=0, pressed=True))["error"][
+        "code"
+    ] == "not_found"
 
     # Reloading the panel tells open cards to subscribe again
     await user.send_json_auto_id({"type": "stream_assistant/panel/subscribe", "entry_id": entry.entry_id})

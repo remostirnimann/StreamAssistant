@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 
+from homeassistant.core import HomeAssistant, State
 from PIL import Image
 import pytest
 
@@ -28,7 +29,6 @@ from custom_components.stream_assistant.display import (
 from custom_components.stream_assistant.layout import KEY_SCHEMA
 from custom_components.stream_assistant.preview import RenderCache
 from custom_components.stream_assistant.render import KeyVisual, icon_exists, render_key, render_preview
-from homeassistant.core import HomeAssistant, State
 
 
 def test_catalog_and_grids() -> None:

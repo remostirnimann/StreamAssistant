@@ -13,7 +13,17 @@ Stream Assistant drives Elgato Stream Decks directly from Home Assistant, with a
 
 ## Commands
 
-The integration has no build step and no pytest suite yet. Hardware-free checks use the local venv (`.venv`, Python 3.13 with Pillow, zeroconf and aiohttp):
+Integration tests use pytest-homeassistant-custom-component (`requirements_test.txt`, Python 3.14 like HA 2026.10). Home Assistant does not run on Windows, so they run in WSL Ubuntu with the venv `~/.venvs/streamassistant`. From Git Bash, set `MSYS_NO_PATHCONV=1`, or paths get rewritten. Coverage must stay at 90 % or more (`pyproject.toml`), and ruff must pass:
+
+```bash
+wsl.exe -d Ubuntu -- bash -lc 'cd /mnt/d/Projekte/StreamAssistant && ~/.venvs/streamassistant/bin/pytest'
+wsl.exe -d Ubuntu -- bash -lc 'cd /mnt/d/Projekte/StreamAssistant && ~/.venvs/streamassistant/bin/pytest tests/test_layout.py -k remap --no-cov'
+wsl.exe -d Ubuntu -- bash -lc 'cd /mnt/d/Projekte/StreamAssistant && ~/.venvs/streamassistant/bin/ruff check --fix . && ~/.venvs/streamassistant/bin/ruff format .'
+```
+
+The tests run the simulated dock (`scripts/fake_dock.py`, fixed port 5343) and `tests/fake_bridge.py` as real servers on 127.0.0.1. `tests/common.py` holds the entry helpers and `wait_for`.
+
+Quick checks without HA use the Windows venv (`.venv`, Python 3.13 with Pillow, zeroconf and aiohttp):
 
 ```bash
 .venv/Scripts/python.exe -m py_compile custom_components/stream_assistant/*.py custom_components/stream_assistant/protocol/*.py
@@ -22,11 +32,14 @@ The integration has no build step and no pytest suite yet. Hardware-free checks 
 node --check custom_components/stream_assistant/frontend/panel.js
 ```
 
-Bridge (`bridge/global.json` selects Microsoft.Testing.Platform; the tests use xUnit v3, pinned to 3.2.2 because Avalonia.Headless.XUnit needs it):
+Bridge (`bridge/global.json` selects Microsoft.Testing.Platform; the tests use xUnit v3, pinned to 3.2.2 because Avalonia.Headless.XUnit needs it, and the coverage extension is pinned to 18.0.4 for the same platform version). Analyzer warnings are errors (`bridge/Directory.Build.props`, `bridge/.editorconfig`), and `dotnet format` must leave no changes:
 
 ```bash
 dotnet test bridge
 dotnet test --project bridge/tests/StreamAssistant.Bridge.Tests --filter-method "*Key_presses_are_reported"
+dotnet format bridge --verify-no-changes
+dotnet test bridge --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
+MSYS_NO_PATHCONV=1 .venv/Scripts/python.exe scripts/check_coverage.py --exclude /tests/ --exclude /obj/ bridge/tests/*/bin/Debug/net10.0/TestResults/coverage.cobertura.xml
 dotnet run --project bridge/src/StreamAssistant.Bridge -- --simulate 5x3 --config-dir <dir>
 dotnet publish bridge/src/StreamAssistant.Bridge -c Release -r linux-musl-arm64 -o dist/bridge-linux-musl-arm64
 dotnet publish bridge/src/StreamAssistant.Bridge.Desktop -c Release -r win-x64 -o dist/bridge-desktop-win-x64
@@ -55,7 +68,7 @@ cd custom_components && tar --exclude=__pycache__ -cf - stream_assistant | ssh -
 - `develop` is the default branch and the target of all pull requests; `main` only holds released states.
 - Both branches are protected by a ruleset: changes only via PR, no force push, no deletion. Repository admins (the owner) may bypass it.
 - Release tags `v*` cannot be moved or deleted.
-- `.github/workflows/ci.yml` runs on every PR and push. Its jobs are required checks: *Integration*, *Bridge*, *Hassfest*, *HACS* and *Release check*.
+- `.github/workflows/ci.yml` runs on every PR and push. Its jobs are required checks: *Integration*, *Tests*, *Lint*, *Bridge*, *Hassfest*, *HACS* and *Release check*.
 - Every merge into `main` runs `.github/workflows/release.yml`, which builds `stream_assistant.zip` (HACS downloads it, see `hacs.json`) and the console and desktop bridge for all platforms. It tags `vX.Y.Z` and publishes a GitHub release whose notes are the changelog section. Versions like `0.8.0b1` become pre-releases.
 - One version covers the integration and the bridge. The bridge is built with that version.
 - To release:

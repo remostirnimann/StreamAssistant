@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+import contextlib
 from dataclasses import dataclass
 import logging
 import random
@@ -90,13 +91,9 @@ class CoraConnection:
         """Open the socket and wait for the first keepalive."""
         try:
             async with asyncio.timeout(CONNECT_TIMEOUT):
-                self._reader, self._writer = await asyncio.open_connection(
-                    self.host, self.port
-                )
+                self._reader, self._writer = await asyncio.open_connection(self.host, self.port)
                 self._last_received = time.monotonic()
-                self._read_task = asyncio.create_task(
-                    self._read_loop(), name=f"cora-read-{self.name}"
-                )
+                self._read_task = asyncio.create_task(self._read_loop(), name=f"cora-read-{self.name}")
                 await self._ready.wait()
         except (OSError, TimeoutError) as err:
             await self.close()
@@ -104,9 +101,7 @@ class CoraConnection:
                 f"{self.name}: cannot connect to {self.host}:{self.port} ({err!r}). "
                 "Is another client (Companion, Stream Deck app) connected?"
             ) from err
-        self._watchdog_task = asyncio.create_task(
-            self._watchdog(), name=f"cora-watchdog-{self.name}"
-        )
+        self._watchdog_task = asyncio.create_task(self._watchdog(), name=f"cora-watchdog-{self.name}")
 
     async def close(self) -> None:
         """Close the connection. Safe to call more than once."""
@@ -123,10 +118,8 @@ class CoraConnection:
         self._pending.clear()
         if self._writer:
             self._writer.close()
-            try:
+            with contextlib.suppress(OSError):
                 await self._writer.wait_closed()
-            except OSError:
-                pass
         if self.on_closed:
             self.on_closed()
 
@@ -214,9 +207,7 @@ class CoraConnection:
     def _send(self, flags: int, hid_op: int, message_id: int, payload: bytes) -> None:
         if self._closed or not self._writer:
             raise CoraError(f"{self.name}: not connected")
-        self._writer.write(
-            HEADER.pack(CORA_MAGIC, flags, hid_op, message_id, len(payload)) + payload
-        )
+        self._writer.write(HEADER.pack(CORA_MAGIC, flags, hid_op, message_id, len(payload)) + payload)
 
     async def drain(self) -> None:
         """Wait until the socket buffer is flushed."""

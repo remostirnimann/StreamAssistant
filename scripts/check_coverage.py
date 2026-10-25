@@ -42,7 +42,9 @@ def main() -> None:
     files = merge(args.reports, args.exclude)
     covered = sum(sum(lines.values()) for lines in files.values())
     total = sum(len(lines) for lines in files.values())
-    rows = sorted(((sum(lines.values()) / len(lines) * 100, name, len(lines)) for name, lines in files.items() if lines))
+    rows = sorted(
+        ((sum(lines.values()) / len(lines) * 100, name, len(lines)) for name, lines in files.items() if lines)
+    )
     for percent, name, count in rows:
         print(f"{percent:6.1f} %  {count:5d} lines  {name}")
     result = covered / total * 100 if total else 0.0

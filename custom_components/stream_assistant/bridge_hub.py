@@ -179,7 +179,9 @@ class BridgeHub:
 
     async def _async_add_device(self, found: BridgeDevice, *, announce: bool) -> StreamAssistantDevice | None:
         if found.cols < 1 or found.rows < 1 or found.key_size < 1 or "jpeg" not in found.formats:
-            _LOGGER.warning("%s: %s (%s) has no JPEG image keys, not supported yet", self.entry.title, found.name, found.id)
+            _LOGGER.warning(
+                "%s: %s (%s) has no JPEG image keys, not supported yet", self.entry.title, found.name, found.id
+            )
             return None
         assert self.hub_device_id
         # Free grid as far as layouts and templates are concerned, at the deck's image size
@@ -207,8 +209,12 @@ class BridgeHub:
         known[found.id] = data
         self.hass.config_entries.async_update_entry(self.entry, data={**self.entry.data, CONF_DEVICES: known})
         current = self.devices.get(found.id)
-        if old and current and current.model and (current.model.cols, current.model.rows, current.model.key_size) != (
-            found.cols, found.rows, found.key_size
+        if (
+            old
+            and current
+            and current.model
+            and (current.model.cols, current.model.rows, current.model.key_size)
+            != (found.cols, found.rows, found.key_size)
         ):
             _LOGGER.info("%s: %s changed its keys, reloading", self.entry.title, found.name)
             self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
@@ -224,7 +230,9 @@ class BridgeHub:
             self._pending[found.id] = found
             return
         self._pending[found.id] = found
-        self.entry.async_create_background_task(self.hass, self._async_new_device(found.id), "stream_assistant bridge deck")
+        self.entry.async_create_background_task(
+            self.hass, self._async_new_device(found.id), "stream_assistant bridge deck"
+        )
 
     async def _async_new_device(self, device_id: str) -> None:
         found = self._pending[device_id]

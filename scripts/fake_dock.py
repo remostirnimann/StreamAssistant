@@ -155,7 +155,9 @@ class _Connection:
 class FakeDock:
     """The simulated dock: two TCP servers plus the state of the simulated deck."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 5343, child_port: int = 20002, out: Path | None = None) -> None:
+    def __init__(
+        self, host: str = "127.0.0.1", port: int = 5343, child_port: int = 20002, out: Path | None = None
+    ) -> None:
         self.host = host
         self.port = port
         self.child_port = child_port
@@ -266,10 +268,10 @@ class FakeDock:
 
 
 async def _announce(dock: FakeDock):  # pragma: no cover - manual use only
+    import socket
+
     from zeroconf import IPVersion, ServiceInfo
     from zeroconf.asyncio import AsyncZeroconf
-
-    import socket
 
     address = socket.gethostbyname(socket.gethostname()) if dock.host in ("0.0.0.0", "") else dock.host
     info = ServiceInfo(

@@ -7,7 +7,26 @@ the same version. Versions before 0.8.0b1 were not released.
 
 ## [Unreleased]
 
+### Added
+- Unit tests for the integration (pytest-homeassistant-custom-component, 91 tests, 94 %
+  coverage) with a fake bridge and the simulated dock as real local servers.
+- More bridge tests: mDNS packets and announcement, status and simulator pages, idle
+  reset, driver failures and capability checks (47 tests, 93 % coverage).
+- Quality checks in CI, required for every pull request: tests with at least 90 %
+  coverage for the integration and the bridge, ruff (lint and format), .NET analyzers
+  with warnings as errors and `dotnet format`.
+
+### Changed
+- mDNS packet code moved into `MdnsService`, separate from the socket handling.
+- Line endings are LF everywhere (`.gitattributes`).
+
 ### Fixed
+- The pairing connection to a bridge left a heartbeat timer running.
+- Stored layouts are validated when loaded; a damaged one starts empty instead of failing
+  later.
+- Bridge on Windows: an unreachable mDNS asker no longer stops the announcements.
+- Bridge simulator page: closing the page's connection is confirmed properly.
+- Bridge: the pairing code and simulator key ids are formatted culture independent.
 - Release archives no longer contain native debug symbols (about 100 MB in the Windows
   desktop zip) or the empty static web assets list.
 

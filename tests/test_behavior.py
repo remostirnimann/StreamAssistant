@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import time, timedelta
 
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.stream_assistant.behavior import BehaviorController, default_behavior, in_window
-from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
 
 
 def test_in_window() -> None:

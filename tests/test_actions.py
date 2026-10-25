@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from homeassistant.core import HomeAssistant
 import pytest
 from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.stream_assistant.actions import async_run_action
-from homeassistant.core import HomeAssistant
 
 
 @pytest.mark.parametrize(

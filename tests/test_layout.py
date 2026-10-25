@@ -22,7 +22,12 @@ def _layout(*pages: dict) -> dict:
 
 
 def _page(page_id: str = ROOT_PAGE_ID, parent: str | None = None, **keys: dict) -> dict:
-    return {"id": page_id, "name": page_id.title(), "parent": parent, "keys": {k.lstrip("k"): v for k, v in keys.items()}}
+    return {
+        "id": page_id,
+        "name": page_id.title(),
+        "parent": parent,
+        "keys": {k.lstrip("k"): v for k, v in keys.items()},
+    }
 
 
 def test_empty_layout_and_defaults() -> None:

@@ -114,6 +114,9 @@ public sealed class Simulator
                 var result = await socket.ReceiveAsync(buffer, cancellationToken);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
+                    // Confirm the close, as the WebSocket protocol asks
+                    await sendLock.WaitAsync(cancellationToken);
+                    await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, cancellationToken);
                     break;
                 }
                 HandlePageMessage(Encoding.UTF8.GetString(buffer, 0, result.Count));

@@ -5,16 +5,16 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import patch
 
+from homeassistant.config_entries import SOURCE_REAUTH
+from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.stream_assistant.bridge_hub import BridgeHub
 from custom_components.stream_assistant.const import CONF_COLS, CONF_DEVICES, DOMAIN
 from custom_components.stream_assistant.layout import empty_layout
 from custom_components.stream_assistant.transport import VirtualTransport
-from homeassistant.config_entries import SOURCE_REAUTH
-from homeassistant.const import ATTR_ENTITY_ID
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .common import SetupEntry, bridge_entry, entity_id, virtual_entry, wait_for
 from .fake_bridge import BRIDGE_ID, FakeBridge, deck
@@ -44,7 +44,9 @@ async def test_virtual_panel(hass: HomeAssistant, setup_entry: SetupEntry) -> No
     registered = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, "virtual-test"), entry.entry_id)
     assert registered.model == "Virtual panel 4 × 2" and registered.name == "Wall panel"
     # No connection sensors for a panel that is always there
-    assert not [e for e in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id) if e.domain == "binary_sensor"]
+    assert not [
+        e for e in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id) if e.domain == "binary_sensor"
+    ]
     assert device.info()["kind"] == "virtual"
 
 
@@ -65,7 +67,7 @@ async def test_virtual_grid_change_keeps_row_and_column(
     registry = er.async_get(hass)
     registry.async_get_or_create("event", DOMAIN, "virtual-test_key_7", config_entry=entry)
     hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_COLS: 3})
-    hass.config_entries._entries.pop(entry.entry_id)  # noqa: SLF001 - re-added by setup_entry
+    hass.config_entries._entries.pop(entry.entry_id)
     await setup_entry(entry)
     keys = entry.runtime_data.layout["pages"][0]["keys"]
     assert set(keys) == {"4"}
@@ -123,7 +125,9 @@ async def test_bridge_decks_appear_and_work(
     assert any(c["type"] == "set_brightness" for c in fake_bridge.commands)
 
 
-async def test_known_decks_exist_while_offline(hass: HomeAssistant, setup_entry: SetupEntry, fake_bridge: FakeBridge) -> None:
+async def test_known_decks_exist_while_offline(
+    hass: HomeAssistant, setup_entry: SetupEntry, fake_bridge: FakeBridge
+) -> None:
     await fake_bridge.stop()
     entry = await setup_entry(bridge_entry(fake_bridge, devices={"old": deck("old", 2, 2)}))
     hub: BridgeHub = entry.runtime_data
@@ -131,7 +135,9 @@ async def test_known_decks_exist_while_offline(hass: HomeAssistant, setup_entry:
     assert hass.states.get(entity_id(hass, "event", f"{BRIDGE_ID}-old_key_3")).state == "unavailable"
 
 
-async def test_unsupported_and_changed_decks(hass: HomeAssistant, setup_entry: SetupEntry, fake_bridge: FakeBridge) -> None:
+async def test_unsupported_and_changed_decks(
+    hass: HomeAssistant, setup_entry: SetupEntry, fake_bridge: FakeBridge
+) -> None:
     colour_only = deck("pads", capabilities={"keys": {"cols": 8, "rows": 8, "colors": True}})
     fake_bridge.devices["pads"] = colour_only
     with patch.object(hass.config_entries, "async_schedule_reload") as reload:
@@ -143,9 +149,13 @@ async def test_unsupported_and_changed_decks(hass: HomeAssistant, setup_entry: S
     assert entry.data[CONF_DEVICES]["sim-1"]["capabilities"]["keys"]["cols"] == 5
 
 
-async def test_refused_token_starts_reauth(hass: HomeAssistant, setup_entry: SetupEntry, fake_bridge: FakeBridge) -> None:
+async def test_refused_token_starts_reauth(
+    hass: HomeAssistant, setup_entry: SetupEntry, fake_bridge: FakeBridge
+) -> None:
     entry = await setup_entry(bridge_entry(fake_bridge, token="revoked"))
-    await wait_for(lambda: any(f["context"]["source"] == SOURCE_REAUTH for f in hass.config_entries.flow.async_progress()))
+    await wait_for(
+        lambda: any(f["context"]["source"] == SOURCE_REAUTH for f in hass.config_entries.flow.async_progress())
+    )
     flow = next(f for f in hass.config_entries.flow.async_progress() if f["context"]["source"] == SOURCE_REAUTH)
     assert flow["context"]["entry_id"] == entry.entry_id
 

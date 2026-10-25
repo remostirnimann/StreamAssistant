@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
@@ -41,6 +41,36 @@ jobs:
           dotnet build bridge/src/StreamAssistant.Bridge
           python scripts/selftest_bridge.py
 
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements_test.txt
+      - name: Install test requirements
+        run: pip install -r requirements_test.txt
+      - name: Tests with coverage (minimum 90 %, see pyproject.toml)
+        run: pytest --timeout=120
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install ruff
+        run: pip install "$(grep '^ruff==' requirements_test.txt)"
+      - name: Lint
+        run: ruff check --output-format github .
+      - name: Format
+        run: ruff format --check .
+
   bridge:
     name: Bridge
     runs-on: ubuntu-latest
@@ -49,8 +79,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
-      - name: Test
-        run: dotnet test bridge
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Format
+        run: dotnet format bridge --verify-no-changes
+      - name: Tests with coverage
+        run: dotnet test bridge --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
+      - name: Coverage (minimum 90 %)
+        run: python scripts/check_coverage.py --min 90 --exclude /tests/ --exclude /obj/ bridge/tests/*/bin/Debug/net10.0/TestResults/coverage.cobertura.xml
 
   hassfest:
     name: Hassfest

@@ -18,9 +18,8 @@ _pkg.__path__ = [str(ROOT / "custom_components" / "stream_assistant")]
 sys.modules["sa"] = _pkg
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from PIL import Image, ImageChops  # noqa: E402
-
 from fake_dock import FakeDock  # noqa: E402
+from PIL import Image, ImageChops  # noqa: E402
 from sa.render import KeyVisual, render_key, render_preview  # noqa: E402
 from sa.transport import AttachedDeck, NetworkDockTransport  # noqa: E402
 
@@ -48,7 +47,7 @@ async def main() -> None:
 
     transport = NetworkDockTransport("127.0.0.1")
     # The real dock always uses 5343; point the client at the fake's random port
-    transport._client.port = dock.port  # noqa: SLF001
+    transport._client.port = dock.port
     hub_states: list[bool] = []
     decks: list[AttachedDeck] = []
     keys: list[tuple[int, bool]] = []
@@ -69,13 +68,19 @@ async def main() -> None:
     check(await wait_for(lambda: dock.brightness == 42), "brightness reaches the deck")
 
     caps = deck.capabilities
-    visuals = [KeyVisual(f"Taste {i + 1}", "Test", "lightbulb", "#2f6fb0" if i % 2 else "#f2b134") for i in range(caps.key_count)]
+    visuals = [
+        KeyVisual(f"Taste {i + 1}", "Test", "lightbulb", "#2f6fb0" if i % 2 else "#f2b134")
+        for i in range(caps.key_count)
+    ]
     for index, visual in enumerate(visuals):
         transport.set_key_image(index, render_key(caps, visual))
     check(await wait_for(lambda: len(dock.images) == caps.key_count), f"all {caps.key_count} key images received")
 
     # What the deck got, turned back upright, must look like the editor preview
-    with Image.open(io.BytesIO(dock.images[0])) as got, Image.open(io.BytesIO(render_preview(caps.key_size, visuals[0]))) as want:
+    with (
+        Image.open(io.BytesIO(dock.images[0])) as got,
+        Image.open(io.BytesIO(render_preview(caps.key_size, visuals[0]))) as want,
+    ):
         diff = ImageChops.difference(got.convert("RGB").rotate(180), want.convert("RGB"))
         worst = max(channel[1] for channel in diff.getextrema())
     check(worst < 60, f"image orientation matches the preview (max pixel diff {worst})")

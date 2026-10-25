@@ -18,7 +18,7 @@ exclude_also = [
 ]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py313"
 line-length = 120
 extend-exclude = [".venv", "bridge", "dist"]
 
@@ -40,6 +40,13 @@ ignore = [
     "RUF002",
     "RUF003",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests and dev scripts poll on purpose and keep related checks on one line
+"tests/**" = ["PT018", "ASYNC109", "ASYNC110"]
+"scripts/**" = ["ASYNC109", "ASYNC110", "ASYNC220"]
+# pytest style rules are for tests only
+"custom_components/**" = ["PT"]
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
