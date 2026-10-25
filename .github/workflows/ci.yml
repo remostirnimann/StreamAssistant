@@ -85,7 +85,9 @@ jobs:
       - name: Format
         run: dotnet format bridge --verify-no-changes
       - name: Tests with coverage
-        run: dotnet test bridge --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
+        # bridge/global.json (Microsoft.Testing.Platform) only applies inside bridge/
+        working-directory: bridge
+        run: dotnet test --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
       - name: Coverage (minimum 90 %)
         run: python scripts/check_coverage.py --min 90 --exclude /tests/ --exclude /obj/ bridge/tests/*/bin/Debug/net10.0/TestResults/coverage.cobertura.xml
 
