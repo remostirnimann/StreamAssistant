@@ -6,11 +6,11 @@ using System.Text.Json.Serialization;
 namespace StreamAssistant.Bridge.Configuration;
 
 /// <summary>Command line / environment options (read through IConfiguration).</summary>
-public sealed record BridgeOptions(int Port, string ConfigDir, string? Name, IReadOnlyList<(int Cols, int Rows)> Simulate, bool Mdns)
+public sealed record BridgeOptions(int Port, string ConfigDir, string? Name, IReadOnlyList<(int Cols, int Rows)> Simulate, bool Mdns, bool Usb = true)
 {
     public const int DefaultPort = 5390;
 
-    // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,8x4 --mdns false
+    // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,8x4 --mdns false --usb false
     public static BridgeOptions From(IConfiguration config)
     {
         var simulate = new List<(int, int)>();
@@ -31,7 +31,8 @@ public sealed record BridgeOptions(int Port, string ConfigDir, string? Name, IRe
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.Create),
                 "stream-assistant-bridge");
         }
-        return new BridgeOptions(config.GetValue("port", DefaultPort), configDir, config["name"], simulate, config.GetValue("mdns", true));
+        return new BridgeOptions(config.GetValue("port", DefaultPort), configDir, config["name"], simulate, config.GetValue("mdns", true),
+            config.GetValue("usb", true));
     }
 }
 

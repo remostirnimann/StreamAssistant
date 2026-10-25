@@ -4,7 +4,8 @@ using StreamAssistant.Bridge.Hosting;
 // to Home Assistant (docs/bridge-protocol.md).
 //
 //   stream-assistant-bridge [--port 5390] [--name "Office PC"] [--config-dir <dir>]
-//                           [--simulate 5x3[,8x4...]] [--mdns false] [--unpair-all]
+//                           [--simulate 5x3[,8x4...]] [--mdns false] [--usb false]
+//                           [--unpair-all]
 
 var app = BridgeHost.Build(args);
 if (!BridgeHost.Prepare(app))

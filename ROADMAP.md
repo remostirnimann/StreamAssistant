@@ -13,9 +13,10 @@
    - ~~integration side~~ (one entry per bridge, decks appear and disappear on their own,
      reauth when the bridge forgets the pairing) — 0.7.0
    - ~~desktop app~~ (Avalonia) with virtual decks of any grid
-   - **open: Elgato USB driver** (HidSharp): MK.2 / Original v2 / XL first (JPEG, rotation in
-     the bridge), several decks per computer, USB hot-plug. Can be prepared now, needs the
-     real deck to verify. The Elgato app must not run at the same time (exclusive USB access).
+   - ~~Elgato USB driver~~ (HidSharp): MK.2 / Original v2 / XL (JPEG, rotation in the bridge),
+     several decks per computer, USB hot-plug
+   - **open: verify the USB driver with a real deck** (the Elgato app must not run at the
+     same time)
 4. **Home Assistant add-on and platform packages**
    - add-on with the console bridge (linux-musl, USB passthrough), pairing skipped for the
      Supervisor network as the protocol allows
