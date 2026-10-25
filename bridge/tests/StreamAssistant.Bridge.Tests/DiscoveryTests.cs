@@ -134,32 +134,35 @@ public sealed class DiscoveryTests
             using var client = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
             var query = Query(MdnsService.ServiceType, MdnsService.TypePtr, id: 0x4242);
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            UdpReceiveResult answer;
-            while (true)
+            // The advertiser listens only after its first announcement: ask until it answers,
+            // with one receive kept open so no answer lands in an abandoned receive
+            var receive = ReceiveAnswerAsync(client, timeout.Token);
+            while (await Task.WhenAny(receive, Task.Delay(500, timeout.Token)) != receive)
             {
-                // The advertiser starts in the background: ask until it answers
                 await client.SendAsync(query, new IPEndPoint(IPAddress.Loopback, advertiser.Port), timeout.Token);
-                var receive = client.ReceiveAsync(timeout.Token).AsTask();
-                if (await Task.WhenAny(receive, Task.Delay(500, timeout.Token)) != receive)
-                {
-                    continue;
-                }
-                try
-                {
-                    answer = await receive;
-                    break;
-                }
-                catch (SocketException err) when (err.SocketErrorCode == SocketError.ConnectionReset)
-                {
-                    // Windows: the query reached the port before the advertiser listened
-                }
             }
+            var answer = await receive;
             Assert.Equal(0x4242, BinaryPrimitives.ReadUInt16BigEndian(answer.Buffer));
             Assert.Contains(Parse(answer.Buffer), a => a.Type == MdnsService.TypePtr && a.Name == MdnsService.ServiceType);
         }
         finally
         {
             await advertiser.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task<UdpReceiveResult> ReceiveAnswerAsync(UdpClient client, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            try
+            {
+                return await client.ReceiveAsync(cancellationToken);
+            }
+            catch (SocketException err) when (err.SocketErrorCode == SocketError.ConnectionReset)
+            {
+                // Windows: a query reached the port before the advertiser listened
+            }
         }
     }
 
