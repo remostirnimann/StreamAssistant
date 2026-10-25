@@ -20,6 +20,7 @@ public sealed class MdnsAdvertiser(BridgeServer server, BridgeOptions options, I
 
     private UdpClient? _udp;
     private MdnsService? _service;
+    private bool _multicastFailed;
 
     /// <summary>mDNS port; tests use another one.</summary>
     public int Port { get; init; } = 5353;
@@ -44,9 +45,9 @@ public sealed class MdnsAdvertiser(BridgeServer server, BridgeOptions options, I
         try
         {
             // Two announcements, as RFC 6762 asks for
-            await AnnounceAsync(ttlScale: 1);
+            await TryMulticastAsync(() => AnnounceAsync(ttlScale: 1));
             await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
-            await AnnounceAsync(ttlScale: 1);
+            await TryMulticastAsync(() => AnnounceAsync(ttlScale: 1));
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -65,7 +66,8 @@ public sealed class MdnsAdvertiser(BridgeServer server, BridgeOptions options, I
                     continue;
                 }
                 var response = _service.BuildResponse(1, MdnsService.PickAddresses(LocalAddresses(), received.RemoteEndPoint.Address));
-                await _udp.SendAsync(response, new IPEndPoint(MdnsGroup, Port), stoppingToken);
+                var udp = _udp;
+                await TryMulticastAsync(async () => await udp.SendAsync(response, new IPEndPoint(MdnsGroup, Port), stoppingToken));
                 if (received.RemoteEndPoint.Port != Port)
                 {
                     // Legacy unicast query (RFC 6762 section 6.7): answer the sender directly
@@ -80,6 +82,26 @@ public sealed class MdnsAdvertiser(BridgeServer server, BridgeOptions options, I
         catch (SocketException err)
         {
             logger.LogWarning("mDNS stopped: {Error}", err.Message);
+        }
+    }
+
+    /// <summary>
+    /// Multicast can fail (no multicast route, e.g. in some containers): log it once
+    /// and keep answering unicast queries instead of stopping.
+    /// </summary>
+    private async Task TryMulticastAsync(Func<Task> send)
+    {
+        try
+        {
+            await send();
+        }
+        catch (SocketException err)
+        {
+            if (!_multicastFailed)
+            {
+                _multicastFailed = true;
+                logger.LogWarning("mDNS multicast failed ({Error}); only direct queries are answered", err.Message);
+            }
         }
     }
 

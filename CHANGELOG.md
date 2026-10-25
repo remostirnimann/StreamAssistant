@@ -25,6 +25,8 @@ the same version. Versions before 0.8.0b1 were not released.
 - Stored layouts are validated when loaded; a damaged one starts empty instead of failing
   later.
 - Bridge on Windows: an unreachable mDNS asker no longer stops the announcements.
+- Bridge: when mDNS multicast fails (no multicast route, e.g. in containers), direct
+  queries are still answered instead of stopping mDNS.
 - Bridge simulator page: closing the page's connection is confirmed properly.
 - Bridge: the pairing code and simulator key ids are formatted culture independent.
 - Release archives no longer contain native debug symbols (about 100 MB in the Windows
