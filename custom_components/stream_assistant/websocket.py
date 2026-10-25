@@ -20,20 +20,19 @@ from functools import cache
 import json
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
+import voluptuous as vol
 
 from .actions import async_run_action
 from .behavior import BEHAVIOR_SCHEMA
+from .capabilities import CATALOG, DeckCapabilities, find_capabilities
 from .const import DOMAIN
 from .device import StreamAssistantDevice
 from .display import page_key_slot
 from .entity import entry_devices
 from .layout import ACTION_CALL, ACTION_DEFAULT, PAGE_SCHEMA, validate_layout
-from .capabilities import CATALOG, DeckCapabilities, find_capabilities
 from .render import ASSETS
 from .templates import DATA_TEMPLATES, TemplateManager
 from .transport import VirtualTransport
@@ -99,9 +98,8 @@ def _target(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
     if "entry_id" in msg:
         if (device := _device(hass, msg["entry_id"])) is not None:
             return Target(model=device.model, device=device)
-    elif "template_id" in msg:
-        if _templates(hass).get(msg["template_id"]) is not None:
-            return Target(model=_templates(hass).model(msg["template_id"]), template_id=msg["template_id"])
+    elif "template_id" in msg and _templates(hass).get(msg["template_id"]) is not None:
+        return Target(model=_templates(hass).model(msg["template_id"]), template_id=msg["template_id"])
     connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Dock or template not found")
     return None
 
@@ -242,9 +240,7 @@ async def ws_preview(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         return
     renderer = _templates(hass).renderer
     images = await renderer.async_page_preview(target.model, page)
-    connection.send_result(
-        msg["id"], {"images": [base64.b64encode(img).decode("ascii") for img in images]}
-    )
+    connection.send_result(msg["id"], {"images": [base64.b64encode(img).decode("ascii") for img in images]})
 
 
 @websocket_api.require_admin
@@ -330,7 +326,9 @@ async def ws_icons(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
     }
 )
 @websocket_api.async_response
-async def ws_template_create(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+async def ws_template_create(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
     """Create a template: empty for a model, or from a dock's layout."""
     manager = _templates(hass)
     layout = None
@@ -362,7 +360,9 @@ async def ws_template_create(hass: HomeAssistant, connection: websocket_api.Acti
     }
 )
 @websocket_api.async_response
-async def ws_template_rename(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+async def ws_template_rename(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
     """Rename a template."""
     manager = _templates(hass)
     if manager.get(msg["template_id"]) is None:
@@ -377,7 +377,9 @@ async def ws_template_rename(hass: HomeAssistant, connection: websocket_api.Acti
     {vol.Required("type"): "stream_assistant/template/delete", vol.Required("template_id"): str}
 )
 @websocket_api.async_response
-async def ws_template_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+async def ws_template_delete(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
     """Delete a template; linked decks keep a copy of its layout."""
     manager = _templates(hass)
     if manager.get(msg["template_id"]) is None:
@@ -443,9 +445,7 @@ async def ws_set_behavior(hass: HomeAssistant, connection: websocket_api.ActiveC
 
 
 @websocket_api.require_admin
-@websocket_api.websocket_command(
-    {vol.Required("type"): "stream_assistant/detach", vol.Required("entry_id"): str}
-)
+@websocket_api.websocket_command({vol.Required("type"): "stream_assistant/detach", vol.Required("entry_id"): str})
 @websocket_api.async_response
 async def ws_detach(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Give a dock its own copy of the template layout and stop following it."""

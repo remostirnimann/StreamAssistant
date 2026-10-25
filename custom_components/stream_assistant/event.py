@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.components.event import EventDeviceClass, EventEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv, entity_platform, entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+import voluptuous as vol
 
 from .const import (
     ATTR_BACKGROUND_COLOR,
@@ -37,7 +36,7 @@ def _color(value: Any) -> str:
         r, g, b = vol.Schema(vol.ExactSequence([cv.byte, cv.byte, cv.byte]))(list(value))
         return f"#{r:02x}{g:02x}{b:02x}"
     value = cv.string(value)
-    from PIL import ImageColor  # noqa: PLC0415
+    from PIL import ImageColor
 
     try:
         r, g, b = ImageColor.getrgb(value)[:3]
@@ -76,9 +75,7 @@ async def async_setup_entry(
     platform.async_register_entity_service(SERVICE_CLEAR_KEY, None, "async_clear_key")
 
 
-def _remove_surplus_keys(
-    hass: HomeAssistant, entry: StreamAssistantConfigEntry, device: StreamAssistantDevice
-) -> None:
+def _remove_surplus_keys(hass: HomeAssistant, entry: StreamAssistantConfigEntry, device: StreamAssistantDevice) -> None:
     """Drop key entities beyond the grid (a virtual panel was made smaller)."""
     assert device.model
     registry = er.async_get(hass)

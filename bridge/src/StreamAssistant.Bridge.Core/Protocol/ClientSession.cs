@@ -250,50 +250,50 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
         switch (type)
         {
             case "set_brightness":
-            {
-                var device = Device(command);
-                if (!device.Info.Capabilities.Brightness)
                 {
-                    throw new ProtocolError("unsupported", "The device has no adjustable brightness");
+                    var device = Device(command);
+                    if (!device.Info.Capabilities.Brightness)
+                    {
+                        throw new ProtocolError("unsupported", "The device has no adjustable brightness");
+                    }
+                    return device.SetBrightnessAsync(Range(command, "percent", 0, 100), cancellationToken);
                 }
-                return device.SetBrightnessAsync(Range(command, "percent", 0, 100), cancellationToken);
-            }
             case "set_key_image":
-            {
-                var device = Device(command);
-                var grid = Keys(device);
-                if (!grid.HasImages)
                 {
-                    throw new ProtocolError("unsupported", "The keys of this device only show colours");
+                    var device = Device(command);
+                    var grid = Keys(device);
+                    if (!grid.HasImages)
+                    {
+                        throw new ProtocolError("unsupported", "The keys of this device only show colours");
+                    }
+                    var key = Range(command, "key", 0, grid.Count - 1);
+                    var format = Str(command, "format");
+                    if (format is null || !grid.Formats.Contains(format))
+                    {
+                        throw new ProtocolError("invalid_message", $"format must be one of {string.Join(", ", grid.Formats)}");
+                    }
+                    if (payload.IsEmpty)
+                    {
+                        throw new ProtocolError("invalid_message", "set_key_image is sent as a binary envelope with the image");
+                    }
+                    return device.SetKeyImageAsync(key, format, payload, cancellationToken);
                 }
-                var key = Range(command, "key", 0, grid.Count - 1);
-                var format = Str(command, "format");
-                if (format is null || !grid.Formats.Contains(format))
-                {
-                    throw new ProtocolError("invalid_message", $"format must be one of {string.Join(", ", grid.Formats)}");
-                }
-                if (payload.IsEmpty)
-                {
-                    throw new ProtocolError("invalid_message", "set_key_image is sent as a binary envelope with the image");
-                }
-                return device.SetKeyImageAsync(key, format, payload, cancellationToken);
-            }
             case "set_key_color":
-            {
-                var device = Device(command);
-                var key = Range(command, "key", 0, Keys(device).Count - 1);
-                var color = Str(command, "color");
-                if (color is null || !ColorPattern().IsMatch(color))
                 {
-                    throw new ProtocolError("invalid_message", "color must look like #rrggbb");
+                    var device = Device(command);
+                    var key = Range(command, "key", 0, Keys(device).Count - 1);
+                    var color = Str(command, "color");
+                    if (color is null || !ColorPattern().IsMatch(color))
+                    {
+                        throw new ProtocolError("invalid_message", "color must look like #rrggbb");
+                    }
+                    return device.SetKeyColorAsync(key, color.ToLowerInvariant(), cancellationToken);
                 }
-                return device.SetKeyColorAsync(key, color.ToLowerInvariant(), cancellationToken);
-            }
             case "clear_key":
-            {
-                var device = Device(command);
-                return device.ClearKeyAsync(Range(command, "key", 0, Keys(device).Count - 1), cancellationToken);
-            }
+                {
+                    var device = Device(command);
+                    return device.ClearKeyAsync(Range(command, "key", 0, Keys(device).Count - 1), cancellationToken);
+                }
             case "reset":
                 return Device(command).ResetAsync(cancellationToken);
             case "identify":

@@ -164,7 +164,7 @@ public sealed class MainWindow : Window
         return control;
     }
 
-    private static Control Labeled(string label, Control control) => new StackPanel
+    private static StackPanel Labeled(string label, Control control) => new()
     {
         Margin = new Thickness(0, 0, 16, 8),
         Spacing = 4,

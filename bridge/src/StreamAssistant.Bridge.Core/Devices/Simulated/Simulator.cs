@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -113,6 +114,9 @@ public sealed class Simulator
                 var result = await socket.ReceiveAsync(buffer, cancellationToken);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
+                    // Confirm the close, as the WebSocket protocol asks
+                    await sendLock.WaitAsync(cancellationToken);
+                    await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, cancellationToken);
                     break;
                 }
                 HandlePageMessage(Encoding.UTF8.GetString(buffer, 0, result.Count));
@@ -180,7 +184,7 @@ public sealed class Simulator
         {
             if (ContentJson(device.GetKey(key)) is { } content)
             {
-                keys[key.ToString()] = content;
+                keys[key.ToString(CultureInfo.InvariantCulture)] = content;
             }
         }
         return new JsonObject

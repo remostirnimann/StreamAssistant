@@ -5,11 +5,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+import voluptuous as vol
 
 from .layout import ACTION_CALL, ACTION_DEFAULT
 
@@ -50,16 +49,12 @@ def _default_call(hass: HomeAssistant, entity_id: str) -> tuple[str, str]:
     return "homeassistant", "toggle"
 
 
-async def async_run_action(
-    hass: HomeAssistant, action: dict[str, Any], context: Context | None = None
-) -> None:
+async def async_run_action(hass: HomeAssistant, action: dict[str, Any], context: Context | None = None) -> None:
     """Run a 'default' or 'action' key action. Navigation is handled by the device."""
     try:
         if action["type"] == ACTION_DEFAULT:
             domain, service = _default_call(hass, action["entity_id"])
-            await hass.services.async_call(
-                domain, service, {ATTR_ENTITY_ID: action["entity_id"]}, context=context
-            )
+            await hass.services.async_call(domain, service, {ATTR_ENTITY_ID: action["entity_id"]}, context=context)
         elif action["type"] == ACTION_CALL:
             domain, service = action["action"].split(".", 1)
             await hass.services.async_call(

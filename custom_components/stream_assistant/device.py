@@ -18,9 +18,11 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
+import voluptuous as vol
 
 from .actions import async_run_action
 from .behavior import BehaviorController
+from .capabilities import DeckCapabilities, find_capabilities, grid_capabilities
 from .const import (
     CONF_COLS,
     CONF_DECK_PRODUCT_ID,
@@ -53,9 +55,9 @@ from .layout import (
     merge_into_template,
     migrate_v1,
     remap_layout,
+    validate_layout,
 )
 from .preview import RenderCache
-from .capabilities import DeckCapabilities, find_capabilities, grid_capabilities
 from .protocol import find_model
 from .protocol.bridge import BridgeDevice
 from .render import KeyVisual
@@ -260,13 +262,16 @@ class StreamAssistantDevice:
         """Load the layout and start connecting."""
         behavior = None
         if stored := await self._store.async_load():
-            self._own_layout = {"pages": stored["pages"]}
+            try:
+                self._own_layout = validate_layout({"pages": stored["pages"]}, None)
+            except (vol.Invalid, KeyError, TypeError) as err:
+                # Damaged or from an incompatible version: start empty instead of failing later
+                _LOGGER.warning("%s: stored layout is invalid (%s), starting with an empty one", self.title, err)
+                self._own_layout = empty_layout()
             grid = stored.get("grid")
             if self.model and grid and grid != [self.model.cols, self.model.rows]:
                 # The grid of a virtual panel was changed: keep keys at their row and column
-                self._own_layout, dropped = remap_layout(
-                    self._own_layout, grid[0], self.model.cols, self.model.rows
-                )
+                self._own_layout, dropped = remap_layout(self._own_layout, grid[0], self.model.cols, self.model.rows)
                 _LOGGER.info("%s: grid changed to %s, %s keys did not fit", self.title, self.model.name, dropped)
                 self._store.async_delay_save(self._data_to_store, SAVE_DELAY)
             if (template_id := stored.get("template_id")) and self.templates.get(template_id):
@@ -487,9 +492,7 @@ class StreamAssistantDevice:
             return
         entities = {k["entity_id"] for k in page["keys"].values() if k.get("entity_id")}
         if entities:
-            self._unsub_states = async_track_state_change_event(
-                self.hass, sorted(entities), self._on_state_change
-            )
+            self._unsub_states = async_track_state_change_event(self.hass, sorted(entities), self._on_state_change)
 
     @callback
     def _on_state_change(self, event: Event[EventStateChangedData]) -> None:
@@ -508,9 +511,7 @@ class StreamAssistantDevice:
             # Painted on the next connect
             return
         indices = range(self.model.key_count) if keys is None else keys
-        self.entry.async_create_background_task(
-            self.hass, self._async_paint(list(indices)), "stream_assistant paint"
-        )
+        self.entry.async_create_background_task(self.hass, self._async_paint(list(indices)), "stream_assistant paint")
 
     async def _async_paint(self, keys: list[int]) -> None:
         if not self.model:
@@ -632,9 +633,7 @@ class StreamAssistantDevice:
 
             if cancel := self._long_press_timers.pop(key, None):
                 cancel()
-            self._long_press_timers[key] = async_call_later(
-                self.hass, LONG_PRESS_SECONDS, _long_press
-            )
+            self._long_press_timers[key] = async_call_later(self.hass, LONG_PRESS_SECONDS, _long_press)
             return
 
         async_dispatcher_send(self.hass, signal, EVENT_RELEASED)
@@ -646,9 +645,7 @@ class StreamAssistantDevice:
                 self._run(short)
         self._short_done.discard(key)
 
-    async def async_simulate_press(
-        self, index: int, long_press: bool, page: dict[str, Any] | None = None
-    ) -> None:
+    async def async_simulate_press(self, index: int, long_press: bool, page: dict[str, Any] | None = None) -> None:
         """Behave as if a key was pressed: key events plus its action.
 
         `page` is the editor's (possibly unsaved) page; default is the page shown.

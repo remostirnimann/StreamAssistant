@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+import contextlib
 from dataclasses import dataclass
 import json
 import logging
@@ -128,18 +129,25 @@ async def fetch_info(session: aiohttp.ClientSession, host: str, port: int = DEFA
                 response.raise_for_status()
                 data = await response.json(content_type=None)
         bridge = data["bridge"]
-        return BridgeInfo(str(bridge["id"]), str(bridge["name"]), str(bridge.get("version", "")), str(bridge.get("platform", "")))
+        return BridgeInfo(
+            str(bridge["id"]), str(bridge["name"]), str(bridge.get("version", "")), str(bridge.get("platform", ""))
+        )
     except (aiohttp.ClientError, TimeoutError, KeyError, TypeError, ValueError) as err:
         raise BridgeError("cannot_connect", str(err)) from err
 
 
 async def _handshake(
-    session: aiohttp.ClientSession, host: str, port: int, first: dict[str, Any]
+    session: aiohttp.ClientSession, host: str, port: int, first: dict[str, Any], *, heartbeat: float | None = None
 ) -> tuple[aiohttp.ClientWebSocketResponse, dict[str, Any], str | None]:
-    """Open a connection and send hello or pair; returns welcome (and a new token)."""
+    """Open a connection and send hello or pair; returns welcome (and a new token).
+
+    Only the lasting session needs a heartbeat; the pairing connection is closed right away.
+    """
     try:
         async with asyncio.timeout(CONNECT_TIMEOUT):
-            ws = await session.ws_connect(_url(host, port, "/ws", "ws"), heartbeat=HEARTBEAT, max_msg_size=4 * 1024 * 1024)
+            ws = await session.ws_connect(
+                _url(host, port, "/ws", "ws"), heartbeat=heartbeat, max_msg_size=4 * 1024 * 1024
+            )
     except (aiohttp.ClientError, TimeoutError) as err:
         raise BridgeError("cannot_connect", str(err)) from err
     token = None
@@ -172,7 +180,12 @@ async def _receive_json(ws: aiohttp.ClientWebSocketResponse) -> dict[str, Any]:
 
 def _info(welcome: dict[str, Any]) -> BridgeInfo:
     bridge = welcome.get("bridge") or {}
-    return BridgeInfo(str(bridge.get("id", "")), str(bridge.get("name", "")), str(bridge.get("version", "")), str(bridge.get("platform", "")))
+    return BridgeInfo(
+        str(bridge.get("id", "")),
+        str(bridge.get("name", "")),
+        str(bridge.get("version", "")),
+        str(bridge.get("platform", "")),
+    )
 
 
 async def pair(
@@ -183,7 +196,13 @@ async def pair(
         session,
         host,
         port,
-        {"type": "pair", "protocol": PROTOCOL_VERSION, "client": "Home Assistant", "client_version": client_version, "code": code},
+        {
+            "type": "pair",
+            "protocol": PROTOCOL_VERSION,
+            "client": "Home Assistant",
+            "client_version": client_version,
+            "code": code,
+        },
     )
     await ws.close()
     assert token
@@ -197,9 +216,7 @@ class BridgeClient:
     arrives through on_devices; the owner then sends brightness and all images.
     """
 
-    def __init__(
-        self, session: aiohttp.ClientSession, host: str, port: int, token: str, client_version: str
-    ) -> None:
+    def __init__(self, session: aiohttp.ClientSession, host: str, port: int, token: str, client_version: str) -> None:
         """Initialize."""
         self.host = host
         self.port = port
@@ -226,16 +243,16 @@ class BridgeClient:
     def start(self) -> None:
         """Connect and keep reconnecting until stopped."""
         if self._task is None:
-            self._task = asyncio.get_running_loop().create_task(self._run(), name=f"stream_assistant bridge {self.host}")
+            self._task = asyncio.get_running_loop().create_task(
+                self._run(), name=f"stream_assistant bridge {self.host}"
+            )
 
     async def stop(self) -> None:
         """Disconnect for good."""
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         if self._ws:
             await self._ws.close()
@@ -272,6 +289,7 @@ class BridgeClient:
                         "client_version": self._client_version,
                         "token": self._token,
                     },
+                    heartbeat=HEARTBEAT,
                 )
                 self.info = _info(welcome)
                 backoff = BACKOFF_MIN

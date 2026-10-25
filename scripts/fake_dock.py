@@ -155,7 +155,9 @@ class _Connection:
 class FakeDock:
     """The simulated dock: two TCP servers plus the state of the simulated deck."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 5343, child_port: int = 20002, out: Path | None = None) -> None:
+    def __init__(
+        self, host: str = "127.0.0.1", port: int = 5343, child_port: int = 20002, out: Path | None = None
+    ) -> None:
         self.host = host
         self.port = port
         self.child_port = child_port
@@ -184,7 +186,12 @@ class FakeDock:
             conn.writer.close()
         for server in self._servers:
             server.close()
-            await server.wait_closed()
+            try:
+                # Since Python 3.12 this also waits for open client connections
+                async with asyncio.timeout(2):
+                    await server.wait_closed()
+            except TimeoutError:
+                _LOGGER.info("clients still connected while stopping")
 
     async def _accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, *, child: bool) -> None:
         conn = _Connection(self, reader, writer, child)
@@ -249,12 +256,22 @@ class FakeDock:
         await asyncio.sleep(hold)
         self.set_key(index, False)
 
+    def set_attached(self, attached: bool) -> None:
+        """Plug the deck in or out: the dock announces it, an unplugged deck drops its connection."""
+        self.deck_attached = attached
+        for conn in [c for c in self.connections if not c.child]:
+            # Unsolicited "device 2 info", like the real dock on hot-plug
+            conn.send(0, OP_GET_REPORT, 0, bytes([0x01, 0x0B]) + bytes(126))
+        if not attached:
+            for conn in self._deck_connections():
+                conn.writer.close()
+
 
 async def _announce(dock: FakeDock):  # pragma: no cover - manual use only
+    import socket
+
     from zeroconf import IPVersion, ServiceInfo
     from zeroconf.asyncio import AsyncZeroconf
-
-    import socket
 
     address = socket.gethostbyname(socket.gethostname()) if dock.host in ("0.0.0.0", "") else dock.host
     info = ServiceInfo(

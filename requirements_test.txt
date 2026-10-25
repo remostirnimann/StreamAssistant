@@ -1,0 +1,4 @@
+# Test and quality tooling for the integration (Python 3.14, like Home Assistant 2026.10)
+pytest-homeassistant-custom-component==0.13.373
+home-assistant-frontend==20260930.4
+ruff==0.17.2

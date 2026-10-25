@@ -17,9 +17,7 @@ FRONTEND_DIR = Path(__file__).parent / "frontend"
 
 async def async_register_panel(hass: HomeAssistant) -> None:
     """Serve the scripts, add the sidebar entry (admins only) and load the card everywhere."""
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), cache_headers=False)]
-    )
+    await hass.http.async_register_static_paths([StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), cache_headers=False)])
     # Loaded on every dashboard, so the card needs no manual resource entry
     add_extra_js_url(hass, f"{STATIC_URL}/card.js?v={VERSION}")
     await panel_custom.async_register_panel(

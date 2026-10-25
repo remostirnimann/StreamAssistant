@@ -37,10 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: StreamAssistantConfigEnt
         entry.runtime_data = None
         return True
     runtime: StreamAssistantDevice | BridgeHub
-    if _kind(entry) == KIND_BRIDGE:
-        runtime = BridgeHub(hass, entry)
-    else:
-        runtime = StreamAssistantDevice(hass, entry)
+    runtime = BridgeHub(hass, entry) if _kind(entry) == KIND_BRIDGE else StreamAssistantDevice(hass, entry)
     entry.runtime_data = runtime
     await runtime.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

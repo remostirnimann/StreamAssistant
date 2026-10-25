@@ -29,7 +29,11 @@ def connect(port):
 
 def send(sock, message):
     data = json.dumps(message).encode()
-    header = bytearray([0x81, 0x80 | len(data)]) if len(data) < 126 else bytearray([0x81, 0x80 | 126]) + struct.pack(">H", len(data))
+    header = (
+        bytearray([0x81, 0x80 | len(data)])
+        if len(data) < 126
+        else bytearray([0x81, 0x80 | 126]) + struct.pack(">H", len(data))
+    )
     mask = os.urandom(4)
     sock.sendall(bytes(header) + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
 
@@ -69,8 +73,10 @@ def main():
     if command[0] == "state":
         for device in state["devices"]:
             keys = {int(k): ("image" if "image" in v else v.get("color")) for k, v in device["keys"].items()}
-            print(f"{device['id']}: plugged={device['plugged']} brightness={device['brightness']} "
-                  f"keys with content={sorted(keys)} ({len(keys)} of {device['cols'] * device['rows']})")
+            print(
+                f"{device['id']}: plugged={device['plugged']} brightness={device['brightness']} "
+                f"keys with content={sorted(keys)} ({len(keys)} of {device['cols'] * device['rows']})"
+            )
     elif command[0] == "press":
         send(sock, {"type": "press", "device": command[1], "key": int(command[2]), "pressed": True})
         time.sleep(float(command[3]) if len(command) > 3 else 0.1)

@@ -58,7 +58,9 @@ def _contrast(background: tuple[int, int, int]) -> tuple[int, int, int]:
     return (26, 26, 26) if luminance > 0.55 else (242, 242, 242)
 
 
-def _fit_text(draw: ImageDraw.ImageDraw, text: str, size: int, max_width: int) -> tuple[str, ImageFont.ImageFont | ImageFont.FreeTypeFont]:
+def _fit_text(
+    draw: ImageDraw.ImageDraw, text: str, size: int, max_width: int
+) -> tuple[str, ImageFont.ImageFont | ImageFont.FreeTypeFont]:
     """Shrink the font until the text fits, then cut it with an ellipsis."""
     for font_size in range(size, max(7, size - 6) - 1, -1):
         font = _text_font(font_size)
@@ -129,7 +131,7 @@ def _draw(size: int, visual: KeyVisual) -> Image.Image:
     else:
         y = (size - text_height) / 2
 
-    for (text, font), height in zip(lines, line_heights):
+    for (text, font), height in zip(lines, line_heights, strict=False):
         width = draw.textlength(text, font=font)
         draw.text(((size - width) / 2, y), text, font=font, fill=foreground)
         y += height + 2

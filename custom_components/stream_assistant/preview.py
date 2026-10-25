@@ -7,8 +7,8 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 
-from .display import page_key_visual
 from .capabilities import DeckCapabilities
+from .display import page_key_visual
 from .render import KeyVisual, render_key, render_preview
 
 CACHE_SIZE = 256

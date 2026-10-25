@@ -40,7 +40,9 @@ def version() -> str:
 
 def notes(release: str) -> str:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    match = re.search(rf"^## \[{re.escape(release)}\] - \d{{4}}-\d{{2}}-\d{{2}}\n(.*?)(?=^## \[|\Z)", changelog, re.M | re.S)
+    match = re.search(
+        rf"^## \[{re.escape(release)}\] - \d{{4}}-\d{{2}}-\d{{2}}\n(.*?)(?=^## \[|\Z)", changelog, re.M | re.S
+    )
     if not match:
         fail(f"CHANGELOG.md has no section '## [{release}] - YYYY-MM-DD'; move the [Unreleased] entries there")
     return match[1].strip() + "\n"
