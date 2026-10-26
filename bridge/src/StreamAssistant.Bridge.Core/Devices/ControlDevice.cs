@@ -103,6 +103,25 @@ public sealed record DialPressInput(int Dial, bool Pressed) : DeviceInput
         new() { ["type"] = "dial_press", ["device"] = deviceId, ["dial"] = Dial, ["pressed"] = Pressed };
 }
 
+/// <summary>A touch display was tapped, held or swiped (pixels from the top left).</summary>
+public sealed record TouchInput(string Kind, int X, int Y, int? X2 = null, int? Y2 = null) : DeviceInput
+{
+    public const string Tap = "tap";
+    public const string Hold = "long";
+    public const string Swipe = "swipe";
+
+    public override JsonObject ToJson(string deviceId)
+    {
+        var json = new JsonObject { ["type"] = "touch", ["device"] = deviceId, ["kind"] = Kind, ["x"] = X, ["y"] = Y };
+        if (X2 is { } x2 && Y2 is { } y2)
+        {
+            json["x2"] = x2;
+            json["y2"] = y2;
+        }
+        return json;
+    }
+}
+
 /// <summary>A failure the client gets told about, with a protocol error code (section 8).</summary>
 public sealed class DeviceException(string code, string message) : Exception(message)
 {
@@ -127,6 +146,9 @@ public interface IControlDevice
     Task SetKeyImageAsync(int key, string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken);
 
     Task SetKeyColorAsync(int key, string color, CancellationToken cancellationToken);
+
+    /// <summary>Show an upright image on an area of the touch display (already checked against its size).</summary>
+    Task SetTouchImageAsync(int x, int y, int width, int height, string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken);
 
     Task ClearKeyAsync(int key, CancellationToken cancellationToken);
 

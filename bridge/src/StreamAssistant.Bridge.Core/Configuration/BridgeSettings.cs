@@ -5,25 +5,42 @@ using System.Text.Json.Serialization;
 
 namespace StreamAssistant.Bridge.Configuration;
 
+/// <summary>A simulated deck: keys, and dials with a touch strip above them (200×100 pixels per dial).</summary>
+public sealed record SimulatedDeck(int Cols, int Rows, int Dials = 0, int KeySize = 72)
+{
+    public const int SegmentWidth = 200;
+    public const int StripHeight = 100;
+
+    /// <summary>"5x3", "4x2:4" (with 4 dials) or "plus" (like a Stream Deck +).</summary>
+    public static SimulatedDeck Parse(string text)
+    {
+        if (text.Equals("plus", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SimulatedDeck(4, 2, 4, 120);
+        }
+        var parts = text.Split(':');
+        var size = parts[0].Split('x');
+        var dials = 0;
+        if (parts.Length > 2 || size.Length != 2 || !int.TryParse(size[0], out var cols) || !int.TryParse(size[1], out var rows)
+            || cols is < 1 or > 16 || rows is < 1 or > 16 || (parts.Length == 2 && (!int.TryParse(parts[1], out dials) || dials is < 1 or > 8)))
+        {
+            throw new ArgumentException($"--simulate expects decks like 5x3, 4x2:4 or plus, got '{text}'");
+        }
+        return new SimulatedDeck(cols, rows, dials);
+    }
+}
+
 /// <summary>Command line / environment options (read through IConfiguration).</summary>
-public sealed record BridgeOptions(int Port, string ConfigDir, string? Name, IReadOnlyList<(int Cols, int Rows)> Simulate, bool Mdns, bool Usb = true)
+public sealed record BridgeOptions(int Port, string ConfigDir, string? Name, IReadOnlyList<SimulatedDeck> Simulate, bool Mdns, bool Usb = true)
 {
     public const int DefaultPort = 5390;
 
-    // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,8x4 --mdns false --usb false
+    // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,4x2:4,plus --mdns false --usb false
     public static BridgeOptions From(IConfiguration config)
     {
-        var simulate = new List<(int, int)>();
-        foreach (var part in (config["simulate"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var size = part.Split('x');
-            if (size.Length != 2 || !int.TryParse(size[0], out var cols) || !int.TryParse(size[1], out var rows)
-                || cols is < 1 or > 16 || rows is < 1 or > 16)
-            {
-                throw new ArgumentException($"--simulate expects sizes like 5x3, got '{part}'");
-            }
-            simulate.Add((cols, rows));
-        }
+        var simulate = (config["simulate"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(SimulatedDeck.Parse)
+            .ToList();
         var configDir = config["config-dir"];
         if (string.IsNullOrWhiteSpace(configDir))
         {
@@ -56,6 +73,9 @@ public sealed class VirtualDeckSettings
     public int Cols { get; set; } = 5;
 
     public int Rows { get; set; } = 3;
+
+    /// <summary>Dials below the keys, each with its part of a touch strip.</summary>
+    public int Dials { get; set; }
 }
 
 /// <summary>Persistent state in bridge.json.</summary>

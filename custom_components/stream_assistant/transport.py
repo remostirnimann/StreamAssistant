@@ -4,7 +4,7 @@ The device (layout, rendering, behaviour, entities) only uses DeckTransport.
 Implementations:
 - NetworkDockTransport: Elgato Stream Deck Network Dock (Cora over TCP)
 - VirtualTransport: a panel that only exists in Home Assistant (dashboard card)
-- later: bridge (vendor-neutral protocol)
+- BridgeDeckTransport (bridge_hub.py): a deck behind a Stream Assistant Bridge
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from typing import Any
 
 from .capabilities import DeckCapabilities, find_capabilities
 from .protocol import CoraError, DeckInfo, DockClient
+from .protocol.bridge import TouchEvent
 
 
 class TransportError(Exception):
@@ -42,6 +43,9 @@ class DeckTransport(ABC):
         self.on_deck_connected: Callable[[AttachedDeck], None] | None = None
         self.on_deck_disconnected: Callable[[], None] | None = None
         self.on_key: Callable[[int, bool], None] | None = None
+        self.on_dial: Callable[[int, int], None] | None = None
+        self.on_dial_press: Callable[[int, bool], None] | None = None
+        self.on_touch: Callable[[TouchEvent], None] | None = None
 
     @property
     @abstractmethod
@@ -77,6 +81,10 @@ class DeckTransport(ABC):
     @abstractmethod
     def set_key_image(self, index: int, image: bytes) -> None:
         """Show an image (already encoded for the deck's capabilities) on a key."""
+
+    def set_touch_image(self, x: int, y: int, width: int, height: int, image: bytes) -> None:
+        """Show an upright JPEG on an area of the touch strip."""
+        raise TransportError("This deck has no touch strip")
 
 
 class NetworkDockTransport(DeckTransport):

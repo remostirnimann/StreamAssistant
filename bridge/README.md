@@ -23,13 +23,16 @@ Same options as the console program. The window shows the connection to Home
 Assistant and the pairing code, and hosts **virtual decks**: choose a name,
 columns and rows; the deck appears in Home Assistant like a real Stream Deck
 (keys, pages, templates, behaviour are set up there) and is pressed in the
-window (hold for a long press). Virtual decks are stored in `bridge.json`.
+window (hold for a long press). A deck can also have dials with a touch strip
+above them, like a Stream Deck +: the arrows or the mouse wheel turn a dial, the
+knob pushes it, and the strip is tapped, held or swiped with the mouse. Virtual
+decks are stored in `bridge.json`.
 
 ## Run
 
 ```text
 stream-assistant-bridge [--port 5390] [--name "Office PC"] [--config-dir <dir>]
-                        [--simulate 5x3[,8x4...]] [--mdns false] [--usb false]
+                        [--simulate 5x3[,4x2:4,plus...]] [--mdns false] [--usb false]
                         [--unpair-all]
 ```
 
@@ -37,7 +40,8 @@ stream-assistant-bridge [--port 5390] [--name "Office PC"] [--config-dir <dir>]
   the computer itself). Home Assistant finds the bridge via mDNS; enter the
   code when adding it.
 - `--simulate 5x3` adds a simulated deck; `http://localhost:5390/sim` shows
-  it, presses keys (hold for a long press) and plugs it in and out.
+  it, presses keys (hold for a long press) and plugs it in and out. `4x2:4`
+  adds 4 dials with a touch strip, `plus` is shaped like a Stream Deck +.
 - Settings (bridge id, paired clients) live in `bridge.json` in the config
   folder (default: `%APPDATA%\stream-assistant-bridge` on Windows,
   `~/.config/stream-assistant-bridge` elsewhere). Only one bridge can use a folder.

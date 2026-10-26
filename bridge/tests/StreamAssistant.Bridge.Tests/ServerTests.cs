@@ -35,6 +35,8 @@ internal sealed class StubDevice(DeviceInfo info) : IControlDevice
 
     public Task SetKeyColorAsync(int key, string color, CancellationToken cancellationToken) => Call("color");
 
+    public Task SetTouchImageAsync(int x, int y, int width, int height, string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken) => Call("touch");
+
     public Task ClearKeyAsync(int key, CancellationToken cancellationToken) => Call("clear");
 
     public Task ResetAsync(CancellationToken cancellationToken) => Call("reset");
@@ -190,11 +192,11 @@ public sealed class ServerTests
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["simulate"] = "5x3, 8x4",
+            ["simulate"] = "5x3, 8x4:2, plus",
             ["port"] = "6000",
         }).Build();
         var options = BridgeOptions.From(config);
-        Assert.Equal([(5, 3), (8, 4)], options.Simulate);
+        Assert.Equal([new SimulatedDeck(5, 3), new SimulatedDeck(8, 4, 2), new SimulatedDeck(4, 2, 4, 120)], options.Simulate);
         Assert.Equal(6000, options.Port);
         Assert.True(options.Mdns);
         Assert.EndsWith("stream-assistant-bridge", options.ConfigDir);

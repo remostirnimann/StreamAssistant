@@ -38,6 +38,17 @@ EVENT_RELEASED = "released"
 EVENT_SHORT_PRESS = "short_press"
 EVENT_LONG_PRESS = "long_press"
 KEY_EVENT_TYPES = [EVENT_PRESSED, EVENT_RELEASED, EVENT_SHORT_PRESS, EVENT_LONG_PRESS]
+EVENT_ROTATE_LEFT = "rotate_left"
+EVENT_ROTATE_RIGHT = "rotate_right"
+DIAL_EVENT_TYPES = [EVENT_ROTATE_LEFT, EVENT_ROTATE_RIGHT, *KEY_EVENT_TYPES]
+EVENT_TAP = "tap"
+EVENT_SWIPE_LEFT = "swipe_left"
+EVENT_SWIPE_RIGHT = "swipe_right"
+TOUCH_EVENT_TYPES = [EVENT_TAP, EVENT_LONG_PRESS, EVENT_SWIPE_LEFT, EVENT_SWIPE_RIGHT]
+# Dial detents collected into one adjustment
+DIAL_SETTLE_SECONDS = 0.1
+# How long the value of the last adjustment counts while the entity catches up
+DIAL_BASE_SECONDS = 2.0
 
 SERVICE_SET_KEY = "set_key"
 SERVICE_CLEAR_KEY = "clear_key"
@@ -57,6 +68,16 @@ def signal_state(deck: str) -> str:
 def signal_key(deck: str, key: int) -> str:
     """Dispatcher signal for events of one key of a deck."""
     return f"{DOMAIN}_{deck}_key_{key}"
+
+
+def signal_dial(deck: str, dial: int) -> str:
+    """Dispatcher signal for events of one dial of a deck."""
+    return f"{DOMAIN}_{deck}_dial_{dial}"
+
+
+def signal_touch(deck: str) -> str:
+    """Dispatcher signal for events of the touch strip of a deck."""
+    return f"{DOMAIN}_{deck}_touch"
 
 
 def signal_new_device(entry_id: str) -> str:

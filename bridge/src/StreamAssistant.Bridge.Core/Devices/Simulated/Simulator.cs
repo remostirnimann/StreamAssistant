@@ -24,21 +24,24 @@ public sealed class Simulator
         _manager = manager;
         _logger = logger;
         var number = 0;
-        foreach (var (cols, rows) in options.Simulate)
+        foreach (var deck in options.Simulate)
         {
             number++;
             var id = $"sim-{number}";
+            var dials = deck.Dials > 0 ? new DialSet(deck.Dials, Press: true) : null;
+            var touch = deck.Dials > 0 ? new TouchArea(deck.Dials * SimulatedDeck.SegmentWidth, SimulatedDeck.StripHeight) : null;
             var info = new DeviceInfo(
                 Id: id,
                 Vendor: "Stream Assistant",
-                Model: $"Simulated deck {cols}×{rows}",
+                Model: $"Simulated deck {deck.Cols}×{deck.Rows}" + (deck.Dials > 0 ? $" with {deck.Dials} dials" : ""),
                 Name: $"Simulated deck {number}",
                 Serial: id,
                 Firmware: BridgeServer.Version,
                 Virtual: true,
-                Capabilities: new DeviceCapabilities(KeyGrid.Images(cols, rows, 72), Brightness: true));
+                Capabilities: new DeviceCapabilities(KeyGrid.Images(deck.Cols, deck.Rows, deck.KeySize), Brightness: true, dials, touch));
             var device = new VirtualDevice(info);
             device.Changed += (d, key) => Publish(key is { } k ? KeyJson(d, k) : DeviceJson(d));
+            device.TouchChanged += (d, image) => Publish(new JsonObject { ["type"] = "touch", ["device"] = d.Info.Id, ["image"] = TouchJson(image) });
             device.Identified += d => Publish(new JsonObject { ["type"] = "identify", ["device"] = d.Info.Id });
             _devices.Add(device);
         }
@@ -167,6 +170,20 @@ public sealed class Simulator
             case "press" when IsPlugged(device):
                 device.Press(message["key"]?.GetValue<int>() ?? -1, message["pressed"]?.GetValue<bool>() ?? false);
                 break;
+            case "turn" when IsPlugged(device):
+                device.Turn(message["dial"]?.GetValue<int>() ?? -1, message["delta"]?.GetValue<int>() ?? 0);
+                break;
+            case "dial_press" when IsPlugged(device):
+                device.PressDial(message["dial"]?.GetValue<int>() ?? -1, message["pressed"]?.GetValue<bool>() ?? false);
+                break;
+            case "touch" when IsPlugged(device):
+                device.Touch(
+                    message["kind"]?.GetValue<string>() ?? "",
+                    message["x"]?.GetValue<int>() ?? 0,
+                    message["y"]?.GetValue<int>() ?? 0,
+                    message["x2"]?.GetValue<int>(),
+                    message["y2"]?.GetValue<int>());
+                break;
             case "plug":
                 _logger.LogInformation("Simulator: {Id} {Action}", device.Info.Id, message["plugged"]?.GetValue<bool>() == true ? "plugged in" : "unplugged");
                 SetPlugged(device.Info.Id, message["plugged"]?.GetValue<bool>() ?? true);
@@ -197,6 +214,15 @@ public sealed class Simulator
             ["plugged"] = IsPlugged(device),
             ["brightness"] = device.Brightness,
             ["keys"] = keys,
+            ["dials"] = device.Info.Capabilities.Dials?.Count ?? 0,
+            ["touch"] = device.Info.Capabilities.Touch is { } touch
+                ? new JsonObject
+                {
+                    ["width"] = touch.Width,
+                    ["height"] = touch.Height,
+                    ["images"] = new JsonArray(device.TouchImages.Select(i => (JsonNode)TouchJson(i)).ToArray()),
+                }
+                : null,
         };
     }
 
@@ -206,6 +232,15 @@ public sealed class Simulator
         ["device"] = device.Info.Id,
         ["key"] = key,
         ["content"] = ContentJson(device.GetKey(key)),
+    };
+
+    private static JsonObject TouchJson(VirtualDevice.TouchImage image) => new()
+    {
+        ["x"] = image.X,
+        ["y"] = image.Y,
+        ["width"] = image.Width,
+        ["height"] = image.Height,
+        ["src"] = $"data:image/{image.Format};base64,{Convert.ToBase64String(image.Image)}",
     };
 
     private static JsonObject? ContentJson(VirtualDevice.KeyContent? content) => content switch

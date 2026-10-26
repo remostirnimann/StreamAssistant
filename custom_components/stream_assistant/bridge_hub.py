@@ -17,7 +17,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .capabilities import DeckCapabilities
+from .capabilities import DeckCapabilities, grid_id
 from .const import (
     CONF_BRIDGE_ID,
     CONF_DEVICES,
@@ -29,7 +29,7 @@ from .const import (
     signal_new_device,
 )
 from .device import BridgeDeckSpec, StreamAssistantConfigEntry, StreamAssistantDevice
-from .protocol.bridge import BridgeClient, BridgeDevice
+from .protocol.bridge import BridgeClient, BridgeDevice, TouchEvent
 from .transport import AttachedDeck, DeckTransport
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,6 +83,10 @@ class BridgeDeckTransport(DeckTransport):
         """Send a key image (JPEG, upright: the bridge rotates if needed)."""
         self._client.send_image(self.device_id, index, image)
 
+    def set_touch_image(self, x: int, y: int, width: int, height: int, image: bytes) -> None:
+        """Send an image for an area of the touch strip (JPEG, upright)."""
+        self._client.send_touch_image(self.device_id, x, y, width, height, image)
+
     # Fed by the hub
 
     @callback
@@ -113,6 +117,24 @@ class BridgeDeckTransport(DeckTransport):
         """A key went down or up."""
         if self._present and self.on_key:
             self.on_key(index, pressed)
+
+    @callback
+    def dial(self, index: int, delta: int) -> None:
+        """A dial was turned."""
+        if self._present and self.on_dial:
+            self.on_dial(index, delta)
+
+    @callback
+    def dial_press(self, index: int, pressed: bool) -> None:
+        """A dial was pushed or released."""
+        if self._present and self.on_dial_press:
+            self.on_dial_press(index, pressed)
+
+    @callback
+    def touch(self, event: TouchEvent) -> None:
+        """The touch strip was tapped, held or swiped."""
+        if self._present and self.on_touch:
+            self.on_touch(event)
 
 
 class BridgeHub:
@@ -166,6 +188,9 @@ class BridgeHub:
         self.client.on_device_added = self._on_device_added
         self.client.on_device_removed = self._on_device_removed
         self.client.on_key = self._on_key
+        self.client.on_dial = self._on_dial
+        self.client.on_dial_press = self._on_dial_press
+        self.client.on_touch = self._on_touch
         self.client.on_unauthorized = self._on_unauthorized
         self.client.start()
 
@@ -184,8 +209,17 @@ class BridgeHub:
             )
             return None
         assert self.hub_device_id
-        # Free grid as far as layouts and templates are concerned, at the deck's image size
-        caps = DeckCapabilities(f"grid_{found.cols}x{found.rows}", found.model, found.cols, found.rows, found.key_size)
+        # Free grid as far as layouts and templates are concerned, at the deck's image and strip size
+        caps = DeckCapabilities(
+            grid_id(found.cols, found.rows, found.dials),
+            found.model,
+            found.cols,
+            found.rows,
+            found.key_size,
+            dials=found.dials,
+            touch_width=found.touch_width,
+            touch_height=found.touch_height,
+        )
         transport = BridgeDeckTransport(self.client, found, caps)
         device = StreamAssistantDevice(
             self.hass,
@@ -213,10 +247,17 @@ class BridgeHub:
             old
             and current
             and current.model
-            and (current.model.cols, current.model.rows, current.model.key_size)
-            != (found.cols, found.rows, found.key_size)
+            and (
+                current.model.cols,
+                current.model.rows,
+                current.model.key_size,
+                current.model.dials,
+                current.model.touch_width,
+                current.model.touch_height,
+            )
+            != (found.cols, found.rows, found.key_size, found.dials, found.touch_width, found.touch_height)
         ):
-            _LOGGER.info("%s: %s changed its keys, reloading", self.entry.title, found.name)
+            _LOGGER.info("%s: %s changed its controls, reloading", self.entry.title, found.name)
             self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
 
     @callback
@@ -277,6 +318,21 @@ class BridgeHub:
     def _on_key(self, device_id: str, index: int, pressed: bool) -> None:
         if transport := self._transports.get(device_id):
             transport.key(index, pressed)
+
+    @callback
+    def _on_dial(self, device_id: str, index: int, delta: int) -> None:
+        if transport := self._transports.get(device_id):
+            transport.dial(index, delta)
+
+    @callback
+    def _on_dial_press(self, device_id: str, index: int, pressed: bool) -> None:
+        if transport := self._transports.get(device_id):
+            transport.dial_press(index, pressed)
+
+    @callback
+    def _on_touch(self, device_id: str, event: TouchEvent) -> None:
+        if transport := self._transports.get(device_id):
+            transport.touch(event)
 
     @callback
     def _on_unauthorized(self) -> None:

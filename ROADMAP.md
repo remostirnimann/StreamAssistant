@@ -31,9 +31,11 @@
   Loupedeck / Razer Stream Controller (USB serial, dials, touch), MIDI controllers such
   as Novation Launchpad / Akai APC (colour-only LED pads), DIY ESP32 decks. Drivers live in
   the bridge; the protocol already describes image keys, colour-only keys, dials and touch.
-  The integration still needs colour-only keys, dials and touch (skipped so far with a warning).
-- **More Elgato models**: Stream Deck Plus (dials, touch strip), Neo, Studio, Mini and
-  Original v1 (BMP images, done by the bridge)
+  The integration handles dials and touch strips; colour-only keys are still skipped with
+  a warning.
+- **More Elgato models**: Stream Deck + (USB driver; dials and touch strip already work in
+  the integration and the simulation), then Mini, Original v1 and Pedal (BMP images, done
+  by the bridge) and Neo, Studio
 
 ## Done
 

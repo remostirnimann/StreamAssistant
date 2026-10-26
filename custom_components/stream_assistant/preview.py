@@ -8,8 +8,8 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 
 from .capabilities import DeckCapabilities
-from .display import page_key_visual
-from .render import KeyVisual, render_key, render_preview
+from .display import page_dial_visual, page_key_visual
+from .render import KeyVisual, render_key, render_preview, render_segment
 
 CACHE_SIZE = 256
 
@@ -20,7 +20,7 @@ class RenderCache:
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize."""
         self.hass = hass
-        self._cache: OrderedDict[tuple[str, int, bool, KeyVisual], bytes] = OrderedDict()
+        self._cache: OrderedDict[tuple[str, int, int | bool, KeyVisual], bytes] = OrderedDict()
 
     async def async_render(self, model: DeckCapabilities, visual: KeyVisual, *, upright: bool) -> bytes:
         """JPEG of a key: upright for the editor, else as the deck expects it."""
@@ -37,6 +37,27 @@ class RenderCache:
         if len(self._cache) > CACHE_SIZE:
             self._cache.popitem(last=False)
         return jpeg
+
+    async def async_render_segment(self, model: DeckCapabilities, visual: KeyVisual) -> bytes:
+        """Upright JPEG of a dial's part of the touch strip (the bridge turns it if needed)."""
+        cache_key = ("segment", model.segment_width, model.touch_height, visual)
+        if (jpeg := self._cache.get(cache_key)) is not None:
+            self._cache.move_to_end(cache_key)
+            return jpeg
+        jpeg = await self.hass.async_add_executor_job(render_segment, model.segment_width, model.touch_height, visual)
+        self._cache[cache_key] = jpeg
+        if len(self._cache) > CACHE_SIZE:
+            self._cache.popitem(last=False)
+        return jpeg
+
+    async def async_dial_preview(self, model: DeckCapabilities, page: dict[str, Any]) -> list[bytes]:
+        """Touch strip segments of every dial of a page; empty without a touch strip."""
+        if not model.segment_width:
+            return []
+        return [
+            await self.async_render_segment(model, page_dial_visual(self.hass, page, index))
+            for index in range(model.dials)
+        ]
 
     async def async_page_preview(self, model: DeckCapabilities, page: dict[str, Any]) -> list[bytes]:
         """Upright JPEGs of every key of a page, with live entity states."""

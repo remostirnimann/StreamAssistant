@@ -27,6 +27,7 @@ public sealed class MainWindow : Window
     private readonly TextBox _name;
     private readonly NumericUpDown _cols;
     private readonly NumericUpDown _rows;
+    private readonly NumericUpDown _dials;
 
     public MainWindow(IServiceProvider services)
     {
@@ -45,6 +46,7 @@ public sealed class MainWindow : Window
         _name = new TextBox { PlaceholderText = _texts.DeckNamePlaceholder, Width = 220, Name = "deckName" };
         _cols = new NumericUpDown { Minimum = 1, Maximum = VirtualDecks.MaxCols, Value = 5, Increment = 1, FormatString = "0", Width = 120, Name = "deckCols" };
         _rows = new NumericUpDown { Minimum = 1, Maximum = VirtualDecks.MaxRows, Value = 3, Increment = 1, FormatString = "0", Width = 120, Name = "deckRows" };
+        _dials = new NumericUpDown { Minimum = 0, Maximum = VirtualDecks.MaxDials, Value = 0, Increment = 1, FormatString = "0", Width = 120, Name = "deckDials" };
         var addButton = new Button { Content = _texts.Add, Classes = { "accent" }, Name = "addDeck" };
         addButton.Click += (_, _) => AddDeck();
         var cancelButton = new Button { Content = _texts.Cancel };
@@ -64,6 +66,7 @@ public sealed class MainWindow : Window
                     Labeled(_texts.DeckName, _name),
                     Labeled(_texts.Columns, _cols),
                     Labeled(_texts.Rows, _rows),
+                    Labeled(_texts.Dials, _dials),
                     new StackPanel
                     {
                         Orientation = Orientation.Horizontal,
@@ -173,7 +176,7 @@ public sealed class MainWindow : Window
 
     private void AddDeck()
     {
-        _decks.Add(_name.Text ?? "", (int)(_cols.Value ?? 5), (int)(_rows.Value ?? 3));
+        _decks.Add(_name.Text ?? "", (int)(_cols.Value ?? 5), (int)(_rows.Value ?? 3), (int)(_dials.Value ?? 0));
         _name.Text = "";
         _addForm.IsVisible = false;
     }

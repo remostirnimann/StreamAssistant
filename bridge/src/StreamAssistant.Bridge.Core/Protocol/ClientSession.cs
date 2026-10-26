@@ -278,6 +278,25 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
                     }
                     return device.SetKeyImageAsync(key, format, payload, cancellationToken);
                 }
+            case "set_touch_image":
+                {
+                    var device = Device(command);
+                    var touch = device.Info.Capabilities.Touch ?? throw new ProtocolError("unsupported", "The device has no touch display");
+                    var x = Range(command, "x", 0, touch.Width - 1);
+                    var y = Range(command, "y", 0, touch.Height - 1);
+                    var width = Range(command, "width", 1, touch.Width - x);
+                    var height = Range(command, "height", 1, touch.Height - y);
+                    var format = Str(command, "format");
+                    if (format is not ("jpeg" or "png"))
+                    {
+                        throw new ProtocolError("invalid_message", "format must be jpeg or png");
+                    }
+                    if (payload.IsEmpty)
+                    {
+                        throw new ProtocolError("invalid_message", "set_touch_image is sent as a binary envelope with the image");
+                    }
+                    return device.SetTouchImageAsync(x, y, width, height, format, payload, cancellationToken);
+                }
             case "set_key_color":
                 {
                     var device = Device(command);

@@ -212,4 +212,67 @@ public sealed class WindowTests
             ((IDisposable)again).Dispose();
         }
     }
+
+    [AvaloniaFact]
+    public async Task Dials_and_touch_strip()
+    {
+        using var app = new DesktopFixture();
+        var deck = app.Decks.Add("Plus", 4, 2, dials: 4);
+        DesktopFixture.Flush();
+        var view = Assert.Single(app.Window.DeckViews);
+        Assert.Equal(800, deck.Info.Capabilities.Touch!.Width);
+
+        string[] labels = ["Licht", "Lautst.", "Rollo", "Heizung"];
+        for (var key = 0; key < 8; key++)
+        {
+            await deck.SetKeyImageAsync(key, "jpeg", KeyImage(labels[key % 4], "#2b2b2b"), CancellationToken.None);
+        }
+        for (var dial = 0; dial < 4; dial++)
+        {
+            await deck.SetTouchImageAsync(dial * 200, 0, 200, 100, "jpeg", KeyImage(labels[dial], "#1e4d3a"), CancellationToken.None);
+        }
+        await deck.SetTouchImageAsync(0, 0, 200, 100, "jpeg", new byte[] { 1, 2, 3 }, CancellationToken.None); // broken: left empty
+        DesktopFixture.Flush();
+        Assert.Equal(3, view.TouchImageCount);
+        app.Screenshot("05-dials");
+
+        var inputs = new List<DeviceInput>();
+        deck.Input += (_, input) => inputs.Add(input);
+        app.Find<Button>("right1").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        app.Find<Button>("left2").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+        Point Center(Control control) =>
+            control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), app.Window)!.Value;
+        var knob = Center(app.Find<Avalonia.Controls.Shapes.Ellipse>("knob0"));
+        app.Window.MouseDown(knob, MouseButton.Left);
+        DesktopFixture.Flush();
+        app.Window.MouseUp(knob, MouseButton.Left);
+        DesktopFixture.Flush();
+        app.Window.MouseWheel(knob, new Vector(0, -1));
+        DesktopFixture.Flush();
+
+        var strip = app.Find<Canvas>("strip");
+        var left = strip.TranslatePoint(new Point(250, 50), app.Window)!.Value;
+        var right = strip.TranslatePoint(new Point(750, 50), app.Window)!.Value;
+        app.Window.MouseDown(left, MouseButton.Left);
+        DesktopFixture.Flush();
+        app.Window.MouseUp(left, MouseButton.Left);
+        DesktopFixture.Flush();
+        app.Window.MouseDown(left, MouseButton.Left);
+        app.Window.MouseMove(right);
+        app.Window.MouseUp(right, MouseButton.Left);
+        DesktopFixture.Flush();
+
+        Assert.Equal(new DialInput(1, 1), inputs[0]);
+        Assert.Equal(new DialInput(2, -1), inputs[1]);
+        Assert.Equal(new DialPressInput(0, true), inputs[2]);
+        Assert.Equal(new DialPressInput(0, false), inputs[3]);
+        Assert.Equal(new DialInput(0, 1), inputs[4]);
+        var tap = Assert.IsType<TouchInput>(inputs[5]);
+        Assert.Equal(TouchInput.Tap, tap.Kind);
+        Assert.InRange(tap.X, 240, 260);
+        var swipe = Assert.IsType<TouchInput>(inputs[6]);
+        Assert.Equal(TouchInput.Swipe, swipe.Kind);
+        Assert.InRange(swipe.X2!.Value, 740, 760);
+    }
 }

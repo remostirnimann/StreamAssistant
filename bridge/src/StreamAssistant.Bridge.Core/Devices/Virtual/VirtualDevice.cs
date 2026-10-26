@@ -3,15 +3,24 @@ namespace StreamAssistant.Bridge.Devices.Virtual;
 /// <summary>
 /// A deck that only exists in software: a virtual deck in the desktop window,
 /// or a simulated deck for tests (--simulate). Whoever shows it listens to
-/// <see cref="Changed"/> and reports presses with <see cref="Press"/>.
+/// <see cref="Changed"/> and <see cref="TouchChanged"/> and reports input with
+/// <see cref="Press"/>, <see cref="Turn"/>, <see cref="PressDial"/> and <see cref="Touch"/>.
 /// </summary>
 public sealed class VirtualDevice(DeviceInfo info) : IControlDevice
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<int, KeyContent> _keys = [];
+    private readonly List<TouchImage> _touch = [];
 
     /// <summary>What a key shows: an image or a colour.</summary>
     public sealed record KeyContent(string? Format, byte[]? Image, string? Color);
+
+    /// <summary>An image on an area of the touch display.</summary>
+    public sealed record TouchImage(int X, int Y, int Width, int Height, string Format, byte[] Image)
+    {
+        public bool Inside(TouchImage other) =>
+            X >= other.X && Y >= other.Y && X + Width <= other.X + other.Width && Y + Height <= other.Y + other.Height;
+    }
 
     public DeviceInfo Info { get; } = info;
 
@@ -23,6 +32,21 @@ public sealed class VirtualDevice(DeviceInfo info) : IControlDevice
     public event Action<VirtualDevice, int?>? Changed;
 
     public event Action<VirtualDevice>? Identified;
+
+    /// <summary>Raised after an image was put on the touch display.</summary>
+    public event Action<VirtualDevice, TouchImage>? TouchChanged;
+
+    /// <summary>The images on the touch display, oldest first (later ones are drawn on top).</summary>
+    public IReadOnlyList<TouchImage> TouchImages
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _touch];
+            }
+        }
+    }
 
     public KeyContent? GetKey(int key)
     {
@@ -38,6 +62,49 @@ public sealed class VirtualDevice(DeviceInfo info) : IControlDevice
         {
             Input?.Invoke(this, new KeyInput(key, pressed));
         }
+    }
+
+    public void Turn(int dial, int delta)
+    {
+        if (Info.Capabilities.Dials is { } dials && dial >= 0 && dial < dials.Count && delta != 0)
+        {
+            Input?.Invoke(this, new DialInput(dial, delta));
+        }
+    }
+
+    public void PressDial(int dial, bool pressed)
+    {
+        if (Info.Capabilities.Dials is { Press: true } dials && dial >= 0 && dial < dials.Count)
+        {
+            Input?.Invoke(this, new DialPressInput(dial, pressed));
+        }
+    }
+
+    /// <summary>Report a touch; points outside the display are moved onto its edge.</summary>
+    public void Touch(string kind, int x, int y, int? x2 = null, int? y2 = null)
+    {
+        if (Info.Capabilities.Touch is not { } touch || kind is not (TouchInput.Tap or TouchInput.Hold or TouchInput.Swipe))
+        {
+            return;
+        }
+        int X(int value) => Math.Clamp(value, 0, touch.Width - 1);
+        int Y(int value) => Math.Clamp(value, 0, touch.Height - 1);
+        Input?.Invoke(this, kind == TouchInput.Swipe
+            ? new TouchInput(kind, X(x), Y(y), X(x2 ?? x), Y(y2 ?? y))
+            : new TouchInput(kind, X(x), Y(y)));
+    }
+
+    public Task SetTouchImageAsync(int x, int y, int width, int height, string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken)
+    {
+        var content = new TouchImage(x, y, width, height, format, image.ToArray());
+        lock (_lock)
+        {
+            // Images it covers completely are gone for good
+            _touch.RemoveAll(old => old.Inside(content));
+            _touch.Add(content);
+        }
+        TouchChanged?.Invoke(this, content);
+        return Task.CompletedTask;
     }
 
     public Task SetBrightnessAsync(int percent, CancellationToken cancellationToken)
@@ -70,6 +137,7 @@ public sealed class VirtualDevice(DeviceInfo info) : IControlDevice
         lock (_lock)
         {
             _keys.Clear();
+            _touch.Clear();
         }
         Changed?.Invoke(this, null);
         return Task.CompletedTask;
