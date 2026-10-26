@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Console;
 using StreamAssistant.Bridge.Configuration;
 using StreamAssistant.Bridge.Devices;
+using StreamAssistant.Bridge.Devices.Elgato;
 using StreamAssistant.Bridge.Devices.Simulated;
 using StreamAssistant.Bridge.Devices.Virtual;
 using StreamAssistant.Bridge.Discovery;
@@ -35,6 +36,8 @@ public static class BridgeHost
         builder.Services.AddSingleton<BridgeServer>();
         builder.Services.AddSingleton<Simulator>();
         builder.Services.AddSingleton<VirtualDecks>();
+        builder.Services.AddSingleton<IHidBackend, HidSharpBackend>();
+        builder.Services.AddHostedService<ElgatoWatcher>();
         builder.Services.AddHostedService<MdnsAdvertiser>();
         // Read lazily: tests and the command line can set the port
         builder.WebHost.ConfigureKestrel((context, kestrel) =>

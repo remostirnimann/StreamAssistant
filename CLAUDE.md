@@ -129,7 +129,8 @@ The code is split into three projects:
 A self-contained exe cannot reference another exe, so shared code goes into Core.
 
 Inside Core:
-- **Devices:** `IControlDevice` is implemented by `VirtualDevice` (desktop virtual decks and `--simulate` decks), and later by vendor USB drivers. `DeviceManager` raises `Added`/`Removed`/`Input` events. Drivers must return quickly and keep only the newest image per key.
+- **Devices:** `IControlDevice` is implemented by `VirtualDevice` (desktop virtual decks and `--simulate` decks) and `Elgato/ElgatoDeck` (USB). `DeviceManager` raises `Added`/`Removed`/`Input` events. Drivers must return quickly and keep only the newest image per key.
+- **USB:** `ElgatoWatcher` scans through `IHidBackend` (`HidSharpBackend` in production, excluded from coverage; `FakeHidBackend` in the tests) on plug events and every 5 s, and adds, removes and reopens decks. `KeyImages` converts images with StbImageSharp (fully managed; ImageSharp 4 needs a licence key for release builds and 3.x has known vulnerabilities).
 - **Protocol:**
   - `BridgeServer` keeps one active `ClientSession`; a new client replaces the old one, and devices reset to the idle screen 30 s after the client left.
   - `ClientSession` does the handshake, pairing or token check, commands and binary image envelopes.

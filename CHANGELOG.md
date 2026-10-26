@@ -8,6 +8,12 @@ the same version. Versions before 0.8.0b1 were not released.
 ## [Unreleased]
 
 ### Added
+- Bridge: Elgato USB driver for the Stream Deck MK.2, Original v2 and XL (HidSharp). Decks
+  are found on their own and follow USB plugging (scan on plug events and every 5 s), several
+  per computer. Key images are scaled, turned by 180° and sent as JPEG (StbImageSharp, fully
+  managed, so the single-file builds need no native libraries), only the newest image per
+  key is sent, and on exit the decks show the Elgato logo again. `--usb false` turns it off.
+  Not yet verified with a real deck.
 - Unit tests for the integration (pytest-homeassistant-custom-component, 91 tests, 94 %
   coverage) with a fake bridge and the simulated dock as real local servers.
 - More bridge tests: mDNS packets and announcement, status and simulator pages, idle
