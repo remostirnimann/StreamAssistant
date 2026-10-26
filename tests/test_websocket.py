@@ -41,7 +41,8 @@ async def test_entries_models_icons(ws) -> None:
     assert [e["entry_id"] for e in result["entries"]] == [ws.entry_id]
     assert result["entries"][0]["kind"] == "virtual" and result["templates"] == []
     models = (await call(ws, type="stream_assistant/models"))["result"]
-    assert {m["id"] for m in models} == {"mk2", "original_v2", "xl"}
+    assert {m["id"] for m in models} == {"mk2", "original_v2", "xl", "plus"}
+    assert next(m for m in models if m["id"] == "plus")["dials"] == 4
     icons = (await call(ws, type="stream_assistant/icons"))["result"]
     assert "lightbulb" in icons and len(icons) > 5000
 

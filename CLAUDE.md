@@ -86,14 +86,16 @@ cd custom_components && tar --exclude=__pycache__ -cf - stream_assistant | ssh -
 - `BehaviorController` (night brightness, idle fade, a press that only wakes the deck)
 - the entities' dispatcher signals
 
+Dials share the press logic with keys (`_on_press`, keyed `("dial", index)`). Turning either runs `left`/`right` actions or adjusts the dial's entity (`actions.adjust_call`), collected for `DIAL_SETTLE_SECONDS` into one call. Each dial owns an equal part of the touch strip (`render_segment`, `display.page_dial_visual`); taps there run the dial's actions.
+
 It never talks to hardware directly, only through a `DeckTransport` (`transport.py`):
 - `NetworkDockTransport` (Elgato Network Dock, Cora over TCP, client in `protocol/`)
 - `VirtualTransport` (HA-only virtual panel, consumed by the dashboard card)
 - `BridgeDeckTransport` (in `bridge_hub.py`)
 
-**Capabilities, not models.** `capabilities.py` `DeckCapabilities` (grid, key size, format, rotation) is what layout, rendering, templates and the editor use:
+**Capabilities, not models.** `capabilities.py` `DeckCapabilities` (grid, key size, format, rotation, dials, touch strip) is what layout, rendering, templates and the editor use:
 - Elgato models are mapped to it in the transport.
-- Free grids have ids like `grid_5x3` (virtual panels, templates, bridge decks).
+- Free grids have ids like `grid_5x3`, with dials `grid_4x2_d4` (virtual panels, templates, bridge decks).
 - The render cache key includes the key size, because grid ids are shared across sizes.
 
 **Entry kinds** (`CONF_KIND`), set up in `__init__.py`:

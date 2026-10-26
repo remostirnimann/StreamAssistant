@@ -23,7 +23,7 @@ public sealed class BridgeServer(
     /// <summary>After the client is gone this long, devices go back to their idle screen.</summary>
     public static readonly TimeSpan IdleResetDelay = TimeSpan.FromSeconds(30);
 
-    public static readonly string[] Features = ["key_images", "key_colors", "brightness"];
+    public static readonly string[] Features = ["key_images", "key_colors", "brightness", "dials", "touch"];
 
     public static string Version { get; } =
         typeof(BridgeServer).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]

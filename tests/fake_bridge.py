@@ -36,6 +36,14 @@ def deck(device_id: str = "sim-1", cols: int = 5, rows: int = 3, size: int = 72,
     return data
 
 
+def plus(device_id: str = "plus-1", dials: int = 4) -> dict[str, Any]:
+    """A deck with dials and a touch strip, like a Stream Deck +."""
+    data = deck(device_id, 4, 2, 120)
+    data["capabilities"]["dials"] = {"count": dials, "press": True}
+    data["capabilities"]["touch"] = {"width": dials * 200, "height": 100}
+    return data
+
+
 class FakeBridge:
     """Listens on 127.0.0.1 (random port)."""
 
@@ -45,6 +53,8 @@ class FakeBridge:
         self.devices: dict[str, dict[str, Any]] = {"sim-1": deck()}
         self.commands: list[dict[str, Any]] = []
         self.images: dict[tuple[str, int], bytes] = {}
+        # Touch strip images by (device, x, y, width, height)
+        self.touch_images: dict[tuple[str, int, int, int, int], bytes] = {}
         self.sockets: list[web.WebSocketResponse] = []
         self.hellos = 0
         self.port = 0
@@ -76,6 +86,15 @@ class FakeBridge:
 
     async def press(self, device: str, key: int, pressed: bool) -> None:
         await self.send_all({"type": "key", "device": device, "key": key, "pressed": pressed})
+
+    async def turn(self, device: str, dial: int, delta: int) -> None:
+        await self.send_all({"type": "dial", "device": device, "dial": dial, "delta": delta})
+
+    async def push_dial(self, device: str, dial: int, pressed: bool) -> None:
+        await self.send_all({"type": "dial_press", "device": device, "dial": dial, "pressed": pressed})
+
+    async def touch(self, device: str, kind: str, x: int, y: int = 50, **end: int) -> None:
+        await self.send_all({"type": "touch", "device": device, "kind": kind, "x": x, "y": y, **end})
 
     async def plug(self, data: dict[str, Any]) -> None:
         self.devices[data["id"]] = data
@@ -144,7 +163,12 @@ class FakeBridge:
             elif message.type == WSMsgType.BINARY:
                 (length,) = struct.unpack(">H", message.data[:2])
                 header = json.loads(message.data[2 : 2 + length])
-                self.images[(header["device"], header["key"])] = message.data[2 + length :]
+                payload = message.data[2 + length :]
+                if header["type"] == "set_touch_image":
+                    area = (header["device"], header["x"], header["y"], header["width"], header["height"])
+                    self.touch_images[area] = payload
+                else:
+                    self.images[(header["device"], header["key"])] = payload
         if ws in self.sockets:
             self.sockets.remove(ws)
         return ws

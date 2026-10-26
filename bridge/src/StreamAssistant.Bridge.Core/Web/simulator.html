@@ -21,12 +21,20 @@
   .key { aspect-ratio: 1; border-radius: 12%; background: #1b1b1b; border: 0; padding: 0; overflow: hidden; cursor: pointer; touch-action: manipulation; user-select: none; }
   .key img { width: 100%; height: 100%; display: block; pointer-events: none; }
   .key.down { transform: scale(.94); }
+  .strip { grid-column: 1 / -1; position: relative; background: #1b1b1b; border-radius: 8px; overflow: hidden; cursor: pointer; touch-action: none; user-select: none; }
+  .strip img { position: absolute; display: block; pointer-events: none; }
+  .dials { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(var(--dials), minmax(0, 1fr)); gap: 8px; }
+  .dial { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .dial button { font: inherit; border: 0; color: #ddd; background: #262626; cursor: pointer; user-select: none; touch-action: manipulation; }
+  .dial .turn { width: 34px; height: 34px; border-radius: 50%; }
+  .dial .knob { width: 52px; height: 52px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #555, #222); }
+  .dial .knob.down { transform: scale(.92); }
 </style>
 </head>
 <body>
 <main>
   <h1>Simulator</h1>
-  <div class="muted">Simulated decks of this bridge. Click a key to press it, hold it for a long press. <span id="state"></span></div>
+  <div class="muted">Simulated decks of this bridge. Click a key to press it, hold it for a long press. Dials: the arrows or the mouse wheel turn, the knob pushes. Touch strip: click, hold or drag. <span id="state"></span></div>
   <div id="decks"></div>
 </main>
 <script>
@@ -54,6 +62,7 @@
       m.devices.forEach(renderDevice);
     } else if (m.type === "device") renderDevice(m);
     else if (m.type === "key") setKey(m.device, m.key, m.content);
+    else if (m.type === "touch") addTouchImage(m.device, m.image);
     else if (m.type === "identify") {
       const el = decks.get(m.device)?.querySelector(".deck");
       el?.classList.add("flash");
@@ -72,7 +81,7 @@
     card.innerHTML = `<div class="head"><strong></strong><span class="muted"></span><button class="plug"></button></div>
       <div class="deck" style="--cols:${d.cols}"></div>`;
     card.querySelector("strong").textContent = d.name;
-    card.querySelector(".muted").textContent = `${d.id} · ${d.cols} × ${d.rows} · ${d.plugged ? `brightness ${d.brightness} %` : "unplugged"}`;
+    card.querySelector(".muted").textContent = `${d.id} · ${d.cols} × ${d.rows}${d.dials ? ` + ${d.dials} dials` : ""} · ${d.plugged ? `brightness ${d.brightness} %` : "unplugged"}`;
     const plug = card.querySelector(".plug");
     plug.textContent = d.plugged ? "Unplug" : "Plug in";
     plug.onclick = () => send({ type: "plug", device: d.id, plugged: !d.plugged });
@@ -101,6 +110,93 @@
       deck.append(key);
       setKey(d.id, i, d.keys[i]);
     }
+    if (d.touch) renderStrip(deck, d);
+    if (d.dials) renderDials(deck, d);
+  }
+
+  // Touch strip: tap, long press (held 0.5 s) or swipe (dragged), in display pixels
+  function renderStrip(deck, d) {
+    const strip = document.createElement("div");
+    strip.className = "strip";
+    strip.dataset.width = d.touch.width;
+    strip.dataset.height = d.touch.height;
+    strip.style.aspectRatio = `${d.touch.width} / ${d.touch.height}`;
+    deck.append(strip);
+    d.touch.images.forEach((image) => addTouchImage(d.id, image));
+    let start = null;
+    const point = (ev) => {
+      const box = strip.getBoundingClientRect();
+      return [Math.round(((ev.clientX - box.left) / box.width) * d.touch.width), Math.round(((ev.clientY - box.top) / box.height) * d.touch.height)];
+    };
+    strip.onpointerdown = (ev) => {
+      ev.preventDefault();
+      strip.setPointerCapture(ev.pointerId);
+      start = { at: Date.now(), xy: point(ev) };
+    };
+    strip.onpointerup = (ev) => {
+      if (!start) return;
+      const [x, y] = start.xy;
+      const [x2, y2] = point(ev);
+      if (Math.hypot(x2 - x, y2 - y) > d.touch.height / 3) send({ type: "touch", device: d.id, kind: "swipe", x, y, x2, y2 });
+      else send({ type: "touch", device: d.id, kind: Date.now() - start.at >= 500 ? "long" : "tap", x, y });
+      start = null;
+    };
+    strip.onpointercancel = () => (start = null);
+    strip.oncontextmenu = (ev) => ev.preventDefault();
+  }
+
+  function addTouchImage(device, image) {
+    const strip = decks.get(device)?.querySelector(".strip");
+    if (!strip) return;
+    const width = Number(strip.dataset.width);
+    const height = Number(strip.dataset.height);
+    const img = document.createElement("img");
+    img.src = image.src;
+    Object.assign(img.style, {
+      left: `${(image.x / width) * 100}%`,
+      top: `${(image.y / height) * 100}%`,
+      width: `${(image.width / width) * 100}%`,
+      height: `${(image.height / height) * 100}%`,
+    });
+    strip.append(img);
+    // Fully covered images are gone; keep the page from piling them up
+    for (const old of [...strip.querySelectorAll("img")].slice(0, -1)) {
+      if (old.style.left === img.style.left && old.style.top === img.style.top && old.style.width === img.style.width && old.style.height === img.style.height) old.remove();
+    }
+  }
+
+  function renderDials(deck, d) {
+    const row = document.createElement("div");
+    row.className = "dials";
+    row.style.setProperty("--dials", d.dials);
+    for (let i = 0; i < d.dials; i += 1) {
+      const dial = document.createElement("div");
+      dial.className = "dial";
+      dial.innerHTML = `<button class="turn" aria-label="Turn left">⟲</button><button class="knob" aria-label="Push dial ${i + 1}"></button><button class="turn" aria-label="Turn right">⟳</button>`;
+      const [left, knob, right] = dial.querySelectorAll("button");
+      left.onclick = () => send({ type: "turn", device: d.id, dial: i, delta: -1 });
+      right.onclick = () => send({ type: "turn", device: d.id, dial: i, delta: 1 });
+      dial.onwheel = (ev) => {
+        ev.preventDefault();
+        send({ type: "turn", device: d.id, dial: i, delta: ev.deltaY > 0 ? 1 : -1 });
+      };
+      const up = () => {
+        if (!knob.classList.contains("down")) return;
+        knob.classList.remove("down");
+        send({ type: "dial_press", device: d.id, dial: i, pressed: false });
+      };
+      knob.onpointerdown = (ev) => {
+        ev.preventDefault();
+        knob.setPointerCapture(ev.pointerId);
+        knob.classList.add("down");
+        send({ type: "dial_press", device: d.id, dial: i, pressed: true });
+      };
+      knob.onpointerup = up;
+      knob.onpointercancel = up;
+      knob.oncontextmenu = (ev) => ev.preventDefault();
+      row.append(dial);
+    }
+    deck.append(row);
   }
 
   function setKey(device, index, content) {

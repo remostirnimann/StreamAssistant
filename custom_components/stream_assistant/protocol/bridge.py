@@ -50,6 +50,18 @@ class BridgeInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class TouchEvent:
+    """A touch on a touch display (protocol section 9), pixels from the top left."""
+
+    kind: str  # tap | long | swipe
+    x: int
+    y: int
+    # End of a swipe
+    x2: int | None = None
+    y2: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class BridgeDevice:
     """A device attached to a bridge, reduced to what the integration uses."""
 
@@ -66,6 +78,10 @@ class BridgeDevice:
     key_size: int
     formats: tuple[str, ...]
     brightness: bool
+    dials: int = 0
+    dial_press: bool = False
+    touch_width: int = 0
+    touch_height: int = 0
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> BridgeDevice:
@@ -73,6 +89,8 @@ class BridgeDevice:
         caps = data.get("capabilities") or {}
         keys = caps.get("keys") or {}
         image = keys.get("image") or {}
+        dials = caps.get("dials") or {}
+        touch = caps.get("touch") or {}
         return cls(
             id=str(data["id"]),
             vendor=str(data.get("vendor") or ""),
@@ -86,11 +104,15 @@ class BridgeDevice:
             key_size=int(min(image.get("width") or 0, image.get("height") or 0)),
             formats=tuple(image.get("formats") or ()),
             brightness=bool(caps.get("brightness")),
+            dials=int(dials.get("count") or 0),
+            dial_press=bool(dials.get("press")),
+            touch_width=int(touch.get("width") or 0),
+            touch_height=int(touch.get("height") or 0),
         )
 
     def to_json(self) -> dict[str, Any]:
         """Serializable form, to remember devices across restarts."""
-        return {
+        data: dict[str, Any] = {
             "id": self.id,
             "vendor": self.vendor,
             "model": self.model,
@@ -107,6 +129,11 @@ class BridgeDevice:
                 "brightness": self.brightness,
             },
         }
+        if self.dials:
+            data["capabilities"]["dials"] = {"count": self.dials, "press": self.dial_press}
+        if self.touch_width and self.touch_height:
+            data["capabilities"]["touch"] = {"width": self.touch_width, "height": self.touch_height}
+        return data
 
 
 def _url(host: str, port: int, path: str, scheme: str = "http") -> str:
@@ -232,6 +259,9 @@ class BridgeClient:
         self.on_device_added: Callable[[BridgeDevice], None] | None = None
         self.on_device_removed: Callable[[str], None] | None = None
         self.on_key: Callable[[str, int, bool], None] | None = None
+        self.on_dial: Callable[[str, int, int], None] | None = None
+        self.on_dial_press: Callable[[str, int, bool], None] | None = None
+        self.on_touch: Callable[[str, TouchEvent], None] | None = None
         # The token was refused: the user has to pair again
         self.on_unauthorized: Callable[[], None] | None = None
 
@@ -271,6 +301,22 @@ class BridgeClient:
             self._outgoing.put_nowait(
                 envelope({"type": "set_key_image", "device": device, "key": key, "format": image_format}, image)
             )
+
+    def send_touch_image(
+        self, device: str, x: int, y: int, width: int, height: int, image: bytes, image_format: str = "jpeg"
+    ) -> None:
+        """Queue an image for an area of a touch display."""
+        if self.connected:
+            header = {
+                "type": "set_touch_image",
+                "device": device,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "format": image_format,
+            }
+            self._outgoing.put_nowait(envelope(header, image))
 
     # Connection loop
 
@@ -359,6 +405,22 @@ class BridgeClient:
                 self.on_device_removed(str(message["device"]))
             elif kind == "key" and self.on_key:
                 self.on_key(str(message["device"]), int(message["key"]), bool(message["pressed"]))
+            elif kind == "dial" and self.on_dial:
+                self.on_dial(str(message["device"]), int(message["dial"]), int(message["delta"]))
+            elif kind == "dial_press" and self.on_dial_press:
+                self.on_dial_press(str(message["device"]), int(message["dial"]), bool(message["pressed"]))
+            elif kind == "touch" and self.on_touch:
+                swipe = message["kind"] == "swipe"
+                self.on_touch(
+                    str(message["device"]),
+                    TouchEvent(
+                        str(message["kind"]),
+                        int(message["x"]),
+                        int(message["y"]),
+                        int(message["x2"]) if swipe else None,
+                        int(message["y2"]) if swipe else None,
+                    ),
+                )
             elif kind == "error":
                 if message.get("code") == "replaced":
                     raise BridgeError("replaced")

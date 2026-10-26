@@ -113,6 +113,34 @@
             }
           }
         }
+      },
+      "dial": {
+        "name": "Drehregler {dial}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "rotate_left": "Nach links gedreht",
+              "rotate_right": "Nach rechts gedreht",
+              "pressed": "Gedrückt",
+              "released": "Losgelassen",
+              "short_press": "Kurz gedrückt",
+              "long_press": "Lang gedrückt"
+            }
+          }
+        }
+      },
+      "touch_strip": {
+        "name": "Touchleiste",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "tap": "Angetippt",
+              "long_press": "Lang gedrückt",
+              "swipe_left": "Nach links gewischt",
+              "swipe_right": "Nach rechts gewischt"
+            }
+          }
+        }
       }
     },
     "number": {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 from homeassistant.const import ATTR_FRIENDLY_NAME, ATTR_UNIT_OF_MEASUREMENT, STATE_UNAVAILABLE, STATE_UNKNOWN
@@ -220,6 +221,48 @@ def format_state(hass: HomeAssistant, state: State) -> str:
             shown = shown.replace(".", ",")
         return f"{shown} {unit}"
     return text
+
+
+def _fraction(value: Any, low: Any, high: Any) -> float | None:
+    try:
+        value, low, high = float(value), float(low), float(high)
+    except (TypeError, ValueError):
+        return None
+    if high <= low:
+        return None
+    return max(0.0, min(1.0, (value - low) / (high - low)))
+
+
+def entity_level(state: State | None) -> float | None:
+    """0..1 for entities a dial typically adjusts; None when there is no such value."""
+    if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        return None
+    attrs = state.attributes
+    domain = state.domain
+    if domain == "light":
+        return _fraction(attrs.get("brightness") or 0, 0, 255) if state.state == "on" else 0.0
+    if domain == "media_player":
+        return _fraction(attrs.get("volume_level"), 0, 1)
+    if domain == "cover":
+        return _fraction(attrs.get("current_position"), 0, 100)
+    if domain == "fan":
+        return _fraction(attrs.get("percentage") or 0, 0, 100) if state.state == "on" else 0.0
+    if domain == "climate":
+        return _fraction(attrs.get("temperature"), attrs.get("min_temp"), attrs.get("max_temp"))
+    if domain in ("number", "input_number"):
+        return _fraction(state.state, attrs.get("min"), attrs.get("max"))
+    if attrs.get(ATTR_UNIT_OF_MEASUREMENT) == "%":
+        return _fraction(state.state, 0, 100)
+    return None
+
+
+def page_dial_visual(hass: HomeAssistant, page: dict[str, Any], index: int) -> KeyVisual:
+    """What a dial's part of the touch strip shows right now."""
+    dial = page.get("dials", {}).get(str(index))
+    visual = key_visual(hass, dial)
+    if not dial or not dial.get("entity_id"):
+        return visual
+    return dataclasses.replace(visual, level=entity_level(hass.states.get(dial["entity_id"])))
 
 
 def page_key_slot(page: dict[str, Any], index: int) -> tuple[dict[str, Any] | None, bool]:

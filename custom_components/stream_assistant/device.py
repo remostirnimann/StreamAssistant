@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Hashable
 import copy
 from dataclasses import dataclass
 from datetime import datetime
 import logging
 import secrets
+import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -20,7 +22,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
-from .actions import async_run_action
+from .actions import adjust_call, async_run_action, async_run_adjust
 from .behavior import BehaviorController
 from .capabilities import DeckCapabilities, find_capabilities, grid_capabilities
 from .const import (
@@ -30,26 +32,37 @@ from .const import (
     CONF_DOCK_SERIAL,
     CONF_KIND,
     CONF_ROWS,
+    DIAL_BASE_SECONDS,
+    DIAL_SETTLE_SECONDS,
     DOMAIN,
     EVENT_LONG_PRESS,
     EVENT_PRESSED,
     EVENT_RELEASED,
+    EVENT_ROTATE_LEFT,
+    EVENT_ROTATE_RIGHT,
     EVENT_SHORT_PRESS,
+    EVENT_SWIPE_LEFT,
+    EVENT_SWIPE_RIGHT,
+    EVENT_TAP,
     KIND_BRIDGE,
     KIND_DOCK,
     KIND_VIRTUAL,
     LONG_PRESS_SECONDS,
     VERSION,
+    signal_dial,
     signal_key,
     signal_state,
+    signal_touch,
 )
-from .display import page_key_slot, page_key_visual
+from .display import page_dial_visual, page_key_slot, page_key_visual
 from .layout import (
     ACTION_BACK,
     ACTION_NONE,
     ACTION_PAGE,
     KEY_SCHEMA,
     ROOT_PAGE_ID,
+    ROTATE_ACTIONS,
+    ROTATE_ADJUST,
     SECOND_LINE_NONE,
     empty_layout,
     merge_into_template,
@@ -59,7 +72,7 @@ from .layout import (
 )
 from .preview import RenderCache
 from .protocol import find_model
-from .protocol.bridge import BridgeDevice
+from .protocol.bridge import BridgeDevice, TouchEvent
 from .render import KeyVisual
 from .templates import DATA_TEMPLATES
 from .transport import AttachedDeck, DeckTransport, NetworkDockTransport, TransportError, VirtualTransport
@@ -71,6 +84,8 @@ SAVE_DELAY = 2
 DEFAULT_BRIGHTNESS = 70
 BACK_ACTION = {"type": ACTION_BACK}
 NO_ACTION = {"type": ACTION_NONE}
+# Detents of one turn that run "actions" one by one; more are dropped
+MAX_ROTATE_ACTIONS = 5
 
 # runtime_data: the deck of a dock or virtual panel, or the hub of a bridge (see bridge_hub.py)
 type StreamAssistantConfigEntry = ConfigEntry[Any]
@@ -171,16 +186,22 @@ class StreamAssistantDevice:
         self.current_page = ROOT_PAGE_ID
 
         self._store = _layout_store(hass, self.key)
-        self._long_press_timers: dict[int, CALLBACK_TYPE] = {}
-        self._short_done: set[int] = set()
+        # Keys are ints, dials ("dial", index): both are pressed the same way
+        self._long_press_timers: dict[Hashable, CALLBACK_TYPE] = {}
+        self._short_done: set[Hashable] = set()
         self._unsub_states: CALLBACK_TYPE | None = None
-        # What each key should show; a finished render is only sent if it still matches
-        self._wanted: dict[int, KeyVisual] = {}
+        # What each key (int) and strip segment (("dial", index)) should show;
+        # a finished render is only sent if it still matches
+        self._wanted: dict[Hashable, KeyVisual] = {}
+        # Dial detents waiting to become one adjustment, and the value the last one set
+        self._dial_pending: dict[int, int] = {}
+        self._dial_flush: dict[int, CALLBACK_TYPE] = {}
+        self._dial_base: dict[int, tuple[float, float]] = {}
         self._renderer = RenderCache(hass)
         self.behavior = BehaviorController(hass, self._apply_brightness)
         self.deck_connected_since: datetime | None = None
-        # Keys whose press only woke the display: their release is ignored too
-        self._swallowed: set[int] = set()
+        # Keys and dials whose press only woke the display: their release is ignored too
+        self._swallowed: set[Hashable] = set()
 
     @property
     def title(self) -> str:
@@ -289,6 +310,9 @@ class StreamAssistantDevice:
         self.transport.on_deck_connected = self._on_deck_connected
         self.transport.on_deck_disconnected = self._on_deck_disconnected
         self.transport.on_key = self._on_key
+        self.transport.on_dial = self._on_dial
+        self.transport.on_dial_press = self._on_dial_press
+        self.transport.on_touch = self._on_touch
         self._track_page_entities()
         self.transport.start()
 
@@ -355,6 +379,7 @@ class StreamAssistantDevice:
                 "connected": self.deck_connected,
                 "connected_since": self.deck_connected_since.isoformat() if self.deck_connected_since else None,
                 "key_count": self.model.key_count if self.model else None,
+                "dial_count": self.model.dials if self.model else None,
             },
             "brightness": {
                 "base": self.brightness,
@@ -384,7 +409,7 @@ class StreamAssistantDevice:
         template_model = self.templates.model(self.template_id) if template else None
         if template and template_model and self.model:
             self.layout, self.template_dropped = remap_layout(
-                template["layout"], template_model.cols, self.model.cols, self.model.rows
+                template["layout"], template_model.cols, self.model.cols, self.model.rows, self.model.dials
             )
         elif template:
             self.layout, self.template_dropped = copy.deepcopy(template["layout"]), 0
@@ -407,7 +432,11 @@ class StreamAssistantDevice:
         A linked deck writes into its template, which updates every linked deck.
         """
         if self.template_id and (template_model := self.templates.model(self.template_id)):
-            if self.model and (template_model.cols, template_model.rows) != (self.model.cols, self.model.rows):
+            if self.model and (template_model.cols, template_model.rows, template_model.dials) != (
+                self.model.cols,
+                self.model.rows,
+                self.model.dials,
+            ):
                 layout = merge_into_template(
                     layout,
                     self.model.cols,
@@ -415,6 +444,8 @@ class StreamAssistantDevice:
                     self.templates.get(self.template_id)["layout"],
                     template_model.cols,
                     template_model.rows,
+                    self.model.dials,
+                    template_model.dials,
                 )
             await self.templates.async_set_layout(self.template_id, layout)
             return
@@ -490,7 +521,8 @@ class StreamAssistantDevice:
         page = self.page(self.current_page)
         if page is None:
             return
-        entities = {k["entity_id"] for k in page["keys"].values() if k.get("entity_id")}
+        controls = [*page["keys"].values(), *page.get("dials", {}).values()]
+        entities = {c["entity_id"] for c in controls if c.get("entity_id")}
         if entities:
             self._unsub_states = async_track_state_change_event(self.hass, sorted(entities), self._on_state_change)
 
@@ -501,24 +533,32 @@ class StreamAssistantDevice:
             return
         entity_id = event.data["entity_id"]
         keys = [int(i) for i, k in page["keys"].items() if k.get("entity_id") == entity_id]
-        self._schedule_repaint(keys)
+        dials = [int(i) for i, d in page.get("dials", {}).items() if d.get("entity_id") == entity_id]
+        self._schedule_repaint(keys, dials)
 
     # Painting
 
     @callback
-    def _schedule_repaint(self, keys: list[int] | None = None) -> None:
+    def _schedule_repaint(self, keys: list[int] | None = None, dials: list[int] | None = None) -> None:
+        """Paint some keys and strip segments; everything when neither is given."""
         if not self.model or not self.deck_connected:
             # Painted on the next connect
             return
-        indices = range(self.model.key_count) if keys is None else keys
-        self.entry.async_create_background_task(self.hass, self._async_paint(list(indices)), "stream_assistant paint")
+        everything = keys is None and dials is None
+        key_list = list(range(self.model.key_count)) if everything else keys or []
+        dial_list = list(range(self.model.dials)) if everything else dials or []
+        self.entry.async_create_background_task(
+            self.hass, self._async_paint(key_list, dial_list), "stream_assistant paint"
+        )
 
-    async def _async_paint(self, keys: list[int]) -> None:
+    async def _async_paint(self, keys: list[int], dials: list[int] | None = None) -> None:
         if not self.model:
             return
         page = self.page(self.current_page)
         if page is None:
             return
+        if dials and self.model.segment_width:
+            await self._async_paint_segments(page, dials)
         for index in keys:
             if index >= self.model.key_count:
                 continue
@@ -531,6 +571,23 @@ class StreamAssistantDevice:
                 self.transport.set_key_image(index, jpeg)
             except TransportError as err:
                 _LOGGER.debug("Painting key %s failed: %s", index, err)
+                return
+
+    async def _async_paint_segments(self, page: dict[str, Any], dials: list[int]) -> None:
+        assert self.model
+        width = self.model.segment_width
+        for index in dials:
+            if index >= self.model.dials:
+                continue
+            visual = page_dial_visual(self.hass, page, index)
+            self._wanted[("dial", index)] = visual
+            jpeg = await self._renderer.async_render_segment(self.model, visual)
+            if self._wanted.get(("dial", index)) != visual or not self.deck_connected:
+                continue
+            try:
+                self.transport.set_touch_image(index * width, 0, width, self.model.touch_height, jpeg)
+            except TransportError as err:
+                _LOGGER.debug("Painting the touch strip failed: %s", err)
                 return
 
     async def async_render_page_preview(self, page: dict[str, Any]) -> list[bytes]:
@@ -595,15 +652,33 @@ class StreamAssistantDevice:
         async_dispatcher_send(self.hass, signal_state(self.key))
 
     def _cancel_timers(self) -> None:
-        for cancel in self._long_press_timers.values():
+        for cancel in [*self._long_press_timers.values(), *self._dial_flush.values()]:
             cancel()
         self._long_press_timers.clear()
         self._short_done.clear()
+        self._dial_flush.clear()
+        self._dial_pending.clear()
 
-    # Keys
+    # Keys and dials
+
+    def _dial(self, index: int, page: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        page = page or self.page(self.current_page)
+        return page.get("dials", {}).get(str(index)) if page else None
 
     @callback
     def _on_key(self, key: int, pressed: bool) -> None:
+        short, long = self._actions(key)
+        self._on_press(key, pressed, signal_key(self.key, key), short, long)
+
+    @callback
+    def _on_dial_press(self, index: int, pressed: bool) -> None:
+        dial = self._dial(index)
+        short, long = (dial["short"], dial["long"]) if dial else (NO_ACTION, NO_ACTION)
+        self._on_press(("dial", index), pressed, signal_dial(self.key, index), short, long)
+
+    @callback
+    def _on_press(self, key: Hashable, pressed: bool, signal: str, short: dict[str, Any], long: dict[str, Any]) -> None:
+        """A key or dial went down or up: events, short and long press."""
         if pressed and self.behavior.async_activity():
             # This press only woke the display: no events, no action
             self._swallowed.add(key)
@@ -611,9 +686,6 @@ class StreamAssistantDevice:
         if not pressed and key in self._swallowed:
             self._swallowed.discard(key)
             return
-
-        signal = signal_key(self.key, key)
-        short, long = self._actions(key)
 
         if pressed:
             async_dispatcher_send(self.hass, signal, EVENT_PRESSED)
@@ -644,6 +716,94 @@ class StreamAssistantDevice:
             if key not in self._short_done:
                 self._run(short)
         self._short_done.discard(key)
+
+    @callback
+    def _on_dial(self, index: int, delta: int) -> None:
+        if not delta or self.behavior.async_activity():
+            # Turning a dimmed deck only wakes it
+            return
+        async_dispatcher_send(
+            self.hass,
+            signal_dial(self.key, index),
+            EVENT_ROTATE_RIGHT if delta > 0 else EVENT_ROTATE_LEFT,
+            {"steps": abs(delta)},
+        )
+        self._rotate(index, delta, self._dial(index))
+
+    @callback
+    def _rotate(self, index: int, delta: int, dial: dict[str, Any] | None, page: dict[str, Any] | None = None) -> None:
+        if not dial:
+            return
+        if dial["rotate"] == ROTATE_ACTIONS:
+            action = dial["right"] if delta > 0 else dial["left"]
+            for _ in range(min(abs(delta), MAX_ROTATE_ACTIONS)):
+                self._run(action, page)
+        elif dial["rotate"] == ROTATE_ADJUST and dial.get("entity_id"):
+            # Fast turning: collect the detents into one service call
+            self._dial_pending[index] = self._dial_pending.get(index, 0) + delta
+            if index not in self._dial_flush:
+
+                @callback
+                def _flush(_now: Any) -> None:
+                    self._dial_flush.pop(index, None)
+                    self._adjust(index, self._dial_pending.pop(index, 0), dial)
+
+                self._dial_flush[index] = async_call_later(self.hass, DIAL_SETTLE_SECONDS, _flush)
+
+    @callback
+    def _adjust(self, index: int, steps: int, dial: dict[str, Any]) -> None:
+        entity_id = dial["entity_id"]
+        if not steps or (state := self.hass.states.get(entity_id)) is None:
+            return
+        base = None
+        if (last := self._dial_base.get(index)) and time.monotonic() - last[1] < DIAL_BASE_SECONDS:
+            # The entity may not have reported the last value yet
+            base = last[0]
+        if (call := adjust_call(state, steps, dial.get("step"), base)) is None:
+            _LOGGER.debug("%s: %s cannot be adjusted with a dial", self.title, entity_id)
+            return
+        if call.value is not None:
+            self._dial_base[index] = (call.value, time.monotonic())
+        self.entry.async_create_background_task(
+            self.hass, async_run_adjust(self.hass, entity_id, call), "stream_assistant dial"
+        )
+
+    @callback
+    def _on_touch(self, event: TouchEvent) -> None:
+        if self.behavior.async_activity():
+            # Touching a dimmed deck only wakes it
+            return
+        dial_index = self.model.segment(event.x) if self.model else None
+        data: dict[str, Any] = {"x": event.x, "y": event.y, "dial": dial_index}
+        if event.kind == "swipe":
+            end = event.x2 if event.x2 is not None else event.x
+            kind = EVENT_SWIPE_RIGHT if end >= event.x else EVENT_SWIPE_LEFT
+            data.update(x2=end, y2=event.y2)
+        else:
+            kind = EVENT_LONG_PRESS if event.kind == "long" else EVENT_TAP
+        async_dispatcher_send(self.hass, signal_touch(self.key), kind, data)
+        if dial_index is not None and kind in (EVENT_TAP, EVENT_LONG_PRESS) and (dial := self._dial(dial_index)):
+            self._run(dial["long"] if kind == EVENT_LONG_PRESS else dial["short"])
+
+    async def async_simulate_dial(self, index: int, gesture: str, page: dict[str, Any] | None = None) -> None:
+        """Behave as if a dial was used: "short" / "long" push, or "left" / "right" by one detent."""
+        page = page or self.page(self.current_page)
+        dial = self._dial(index, page)
+        self.behavior.async_activity()
+        signal = signal_dial(self.key, index)
+        if gesture in ("left", "right"):
+            delta = 1 if gesture == "right" else -1
+            async_dispatcher_send(
+                self.hass, signal, EVENT_ROTATE_RIGHT if delta > 0 else EVENT_ROTATE_LEFT, {"steps": 1}
+            )
+            self._rotate(index, delta, dial, page)
+            return
+        long_press = gesture == "long"
+        async_dispatcher_send(self.hass, signal, EVENT_PRESSED)
+        async_dispatcher_send(self.hass, signal, EVENT_LONG_PRESS if long_press else EVENT_RELEASED)
+        async_dispatcher_send(self.hass, signal, EVENT_RELEASED if long_press else EVENT_SHORT_PRESS)
+        if dial:
+            self._run(dial["long" if long_press else "short"], page)
 
     async def async_simulate_press(self, index: int, long_press: bool, page: dict[str, Any] | None = None) -> None:
         """Behave as if a key was pressed: key events plus its action.

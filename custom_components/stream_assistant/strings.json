@@ -113,6 +113,34 @@
             }
           }
         }
+      },
+      "dial": {
+        "name": "Dial {dial}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "rotate_left": "Turned left",
+              "rotate_right": "Turned right",
+              "pressed": "Pressed",
+              "released": "Released",
+              "short_press": "Short press",
+              "long_press": "Long press"
+            }
+          }
+        }
+      },
+      "touch_strip": {
+        "name": "Touch strip",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "tap": "Tap",
+              "long_press": "Long press",
+              "swipe_left": "Swiped left",
+              "swipe_right": "Swiped right"
+            }
+          }
+        }
       }
     },
     "number": {

@@ -8,6 +8,22 @@ the same version. Versions before 0.8.0b1 were not released.
 ## [Unreleased]
 
 ### Added
+- Dials and touch strips (the groundwork for the Stream Deck +):
+  - Every page has dials next to its keys. A dial shows its part of the touch strip (icon,
+    title, state and a level bar for brightness, volume, position, temperature or values)
+    and either adjusts its entity directly when turned (lights, covers, fans, media players,
+    climate, numbers, selects; step per detent configurable) or runs one action per detent
+    to the left or right. Pushing the dial or tapping/holding its segment runs the short
+    and long actions. Fast turning is collected into one service call, starting from the
+    value just set until the entity reports it.
+  - Event entities per dial (turned left/right with the number of detents, pressed,
+    released, short and long press) and for the touch strip (tap, long press, swipe left
+    or right, with position and dial).
+  - Editor: touch strip and dials below the keys, a dial form with turning mode, step and
+    test buttons for both directions. Templates keep dials (`grid_4x2_d4`, `plus`).
+  - Bridge: touch images (`set_touch_image`) and touch input; `--simulate plus` or
+    `--simulate 4x2:4` simulate decks with dials, the simulator page turns, pushes, taps,
+    holds and swipes; desktop virtual decks can have up to 6 dials.
 - Bridge: Elgato USB driver for the Stream Deck MK.2, Original v2 and XL (HidSharp). Decks
   are found on their own and follow USB plugging (scan on plug events and every 5 s), several
   per computer. Key images are scaled, turned by 180° and sent as JPEG (StbImageSharp, fully

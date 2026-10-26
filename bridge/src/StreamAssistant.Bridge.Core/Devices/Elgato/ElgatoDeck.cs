@@ -90,6 +90,9 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
         return Task.CompletedTask;
     }
 
+    public Task SetTouchImageAsync(int x, int y, int width, int height, string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken) =>
+        throw new DeviceException("unsupported", $"{Info.Name} has no touch display");
+
     public Task ClearKeyAsync(int key, CancellationToken cancellationToken)
     {
         QueueImage(key, KeyImages.Solid("#000000", _model.KeySize));
