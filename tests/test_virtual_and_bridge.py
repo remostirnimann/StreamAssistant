@@ -9,11 +9,11 @@ from homeassistant.config_entries import SOURCE_REAUTH
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
 
 from custom_components.stream_assistant.bridge_hub import BridgeHub
 from custom_components.stream_assistant.const import CONF_COLS, CONF_DEVICES, DOMAIN
-from custom_components.stream_assistant.layout import empty_layout
+from custom_components.stream_assistant.layout import empty_layout, validate_layout
 from custom_components.stream_assistant.transport import VirtualTransport
 
 from .common import SetupEntry, bridge_entry, entity_id, virtual_entry, wait_for
@@ -180,3 +180,26 @@ async def test_planner_entry(hass: HomeAssistant, setup_entry: SetupEntry) -> No
     assert entry.runtime_data is None
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.config_entries.async_remove(entry.entry_id)
+
+
+async def test_page_link_does_not_press_the_new_page(hass: HomeAssistant, setup_entry: SetupEntry) -> None:
+    """A key that opens a folder: its release must not run the key at its place in the folder."""
+    entry = await setup_entry(virtual_entry(4, 2))
+    device = entry.runtime_data
+    calls = async_mock_service(hass, "script", "turn_on")
+    layout = empty_layout()
+    layout["pages"][0]["keys"] = {"1": {"short": {"type": "page", "page": "f"}}}
+    layout["pages"].append(
+        {
+            "id": "f",
+            "name": "Folder",
+            "parent": "main",
+            "keys": {"1": {"short": {"type": "action", "action": "script.turn_on", "data": {"entity_id": "script.x"}}}},
+        }
+    )
+    await device.async_set_layout(validate_layout(layout, 8))
+    device.transport.press(1, True)
+    device.transport.press(1, False)
+    await hass.async_block_till_done()
+    assert device.current_page == "f"
+    assert calls == []

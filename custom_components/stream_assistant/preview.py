@@ -42,11 +42,15 @@ class RenderCache:
 
     async def async_render_segment(self, model: DeckCapabilities, visual: KeyVisual) -> bytes:
         """Upright JPEG of a dial's part of the touch strip (the bridge turns it if needed)."""
-        cache_key = ("segment", model.segment_width, model.touch_height, visual)
+        return await self.async_render_area(model.segment_width, model.touch_height, visual)
+
+    async def async_render_area(self, width: int, height: int, visual: KeyVisual) -> bytes:
+        """Upright JPEG of a wide area (strip segment, screen): icon and text side by side."""
+        cache_key = ("area", width, height, visual)
         if (jpeg := self._cache.get(cache_key)) is not None:
             self._cache.move_to_end(cache_key)
             return jpeg
-        jpeg = await self.hass.async_add_executor_job(render_segment, model.segment_width, model.touch_height, visual)
+        jpeg = await self.hass.async_add_executor_job(render_segment, width, height, visual)
         self._cache[cache_key] = jpeg
         if len(self._cache) > CACHE_SIZE:
             self._cache.popitem(last=False)

@@ -2,25 +2,25 @@ using System.Security.Cryptography;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using StreamAssistant.Bridge.Devices.Elgato;
 
 namespace StreamAssistant.Bridge.Configuration;
 
-/// <summary>A simulated deck: keys, and dials with a touch strip above them (200×100 pixels per dial).</summary>
-public sealed record SimulatedDeck(int Cols, int Rows, int Dials = 0, int KeySize = 72)
+/// <summary>
+/// A simulated deck: keys, and dials with a touch strip above them (200×100 pixels
+/// per dial), or shaped like an Elgato model (<see cref="Like"/>, e.g. "neo").
+/// </summary>
+public sealed record SimulatedDeck(int Cols, int Rows, int Dials = 0, int KeySize = 72, ElgatoModel? Like = null)
 {
     public const int SegmentWidth = 200;
     public const int StripHeight = 100;
 
-    /// <summary>"5x3", "4x2:4" (with 4 dials), "plus" (like a Stream Deck +) or "pedal" (3 keys without display).</summary>
+    /// <summary>"5x3", "4x2:4" (with 4 dials) or an Elgato model: mk2, xl, plus, mini, original, pedal, neo, studio.</summary>
     public static SimulatedDeck Parse(string text)
     {
-        if (text.Equals("plus", StringComparison.OrdinalIgnoreCase))
+        if (ElgatoModel.ByAlias(text) is { } model)
         {
-            return new SimulatedDeck(4, 2, 4, 120);
-        }
-        if (text.Equals("pedal", StringComparison.OrdinalIgnoreCase))
-        {
-            return new SimulatedDeck(3, 1, KeySize: 0);
+            return new SimulatedDeck(model.Cols, model.Rows, model.Dials, model.KeySize, model);
         }
         var parts = text.Split(':');
         var size = parts[0].Split('x');
@@ -28,7 +28,7 @@ public sealed record SimulatedDeck(int Cols, int Rows, int Dials = 0, int KeySiz
         if (parts.Length > 2 || size.Length != 2 || !int.TryParse(size[0], out var cols) || !int.TryParse(size[1], out var rows)
             || cols is < 1 or > 16 || rows is < 1 or > 16 || (parts.Length == 2 && (!int.TryParse(parts[1], out dials) || dials is < 1 or > 8)))
         {
-            throw new ArgumentException($"--simulate expects decks like 5x3, 4x2:4 or plus, got '{text}'");
+            throw new ArgumentException($"--simulate expects decks like 5x3, 4x2:4 or neo, got '{text}'");
         }
         return new SimulatedDeck(cols, rows, dials);
     }
@@ -39,7 +39,7 @@ public sealed record BridgeOptions(int Port, string ConfigDir, string? Name, IRe
 {
     public const int DefaultPort = 5390;
 
-    // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,4x2:4,plus,pedal --mdns false --usb false
+    // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,4x2:4,plus,neo --mdns false --usb false
     public static BridgeOptions From(IConfiguration config)
     {
         var simulate = (config["simulate"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

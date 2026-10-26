@@ -297,6 +297,48 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
                     }
                     return device.SetTouchImageAsync(x, y, width, height, format, payload, cancellationToken);
                 }
+            case "set_screen_image":
+                {
+                    var device = Device(command);
+                    if (device.Info.Capabilities.Screen is null)
+                    {
+                        throw new ProtocolError("unsupported", "The device has no screen");
+                    }
+                    var format = Str(command, "format");
+                    if (format is not ("jpeg" or "png"))
+                    {
+                        throw new ProtocolError("invalid_message", "format must be jpeg or png");
+                    }
+                    if (payload.IsEmpty)
+                    {
+                        throw new ProtocolError("invalid_message", "set_screen_image is sent as a binary envelope with the image");
+                    }
+                    return device.SetScreenImageAsync(format, payload, cancellationToken);
+                }
+            case "set_button_color":
+                {
+                    var device = Device(command);
+                    if (device.Info.Capabilities.Buttons is not { Colors: true } buttons)
+                    {
+                        throw new ProtocolError("unsupported", "The device has no lit buttons");
+                    }
+                    return device.SetButtonColorAsync(Range(command, "button", 0, buttons.Count - 1), Color(command), cancellationToken);
+                }
+            case "set_dial_leds":
+                {
+                    var device = Device(command);
+                    if (device.Info.Capabilities.Dials is not { Ring: > 0 } dials)
+                    {
+                        throw new ProtocolError("unsupported", "The device has no dial LEDs");
+                    }
+                    var dial = Range(command, "dial", 0, dials.Count - 1);
+                    var level = command["level"] is null ? 1.0 : Number(command, "level");
+                    if (level is not (>= 0 and <= 1))
+                    {
+                        throw new ProtocolError("invalid_message", "level must be between 0 and 1");
+                    }
+                    return device.SetDialLedsAsync(dial, Color(command), level.Value, cancellationToken);
+                }
             case "set_key_color":
                 {
                     var device = Device(command);
@@ -449,6 +491,17 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
 
     private static int? Int(JsonObject message, string field) =>
         message[field] is JsonValue value && value.TryGetValue<int>(out var number) ? number : null;
+
+    private static double? Number(JsonObject message, string field) =>
+        message[field] is JsonValue value && value.TryGetValue<double>(out var number) ? number : null;
+
+    private static string Color(JsonObject command)
+    {
+        var color = Str(command, "color");
+        return color is not null && ColorPattern().IsMatch(color)
+            ? color.ToLowerInvariant()
+            : throw new ProtocolError("invalid_message", "color must look like #rrggbb");
+    }
 
     [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
     private static partial Regex ColorPattern();

@@ -141,6 +141,19 @@
             }
           }
         }
+      },
+      "page_button": {
+        "name": "Seitentaste {button}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "pressed": "Gedrückt",
+              "released": "Losgelassen",
+              "short_press": "Kurz gedrückt",
+              "long_press": "Lang gedrückt"
+            }
+          }
+        }
       }
     },
     "number": {

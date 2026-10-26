@@ -37,6 +37,12 @@ internal sealed class StubDevice(DeviceInfo info) : IControlDevice
 
     public Task SetTouchImageAsync(int x, int y, int width, int height, string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken) => Call("touch");
 
+    public Task SetButtonColorAsync(int button, string color, CancellationToken cancellationToken) => Call("button");
+
+    public Task SetScreenImageAsync(string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken) => Call("screen");
+
+    public Task SetDialLedsAsync(int dial, string color, double level, CancellationToken cancellationToken) => Call("leds");
+
     public Task ClearKeyAsync(int key, CancellationToken cancellationToken) => Call("clear");
 
     public Task ResetAsync(CancellationToken cancellationToken) => Call("reset");
@@ -219,7 +225,9 @@ public sealed class ServerTests
             ["port"] = "6000",
         }).Build();
         var options = BridgeOptions.From(config);
-        Assert.Equal([new SimulatedDeck(5, 3), new SimulatedDeck(8, 4, 2), new SimulatedDeck(4, 2, 4, 120), new SimulatedDeck(3, 1, KeySize: 0)], options.Simulate);
+        Assert.Equal([new SimulatedDeck(5, 3), new SimulatedDeck(8, 4, 2)], options.Simulate.Take(2));
+        Assert.Equal(("Stream Deck +", 4, 120), (options.Simulate[2].Like!.Name, options.Simulate[2].Dials, options.Simulate[2].KeySize));
+        Assert.Equal(("Stream Deck Pedal", 0), (options.Simulate[3].Like!.Name, options.Simulate[3].KeySize));
         Assert.Equal(6000, options.Port);
         Assert.True(options.Mdns);
         Assert.EndsWith("stream-assistant-bridge", options.ConfigDir);

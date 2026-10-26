@@ -33,16 +33,15 @@ public sealed class Simulator
             var info = new DeviceInfo(
                 Id: id,
                 Vendor: "Stream Assistant",
-                Model: $"Simulated deck {deck.Cols}×{deck.Rows}" + (deck.Dials > 0 ? $" with {deck.Dials} dials" : ""),
+                Model: deck.Like is { } like
+                    ? $"Simulated {like.Name}"
+                    : $"Simulated deck {deck.Cols}×{deck.Rows}" + (deck.Dials > 0 ? $" with {deck.Dials} dials" : ""),
                 Name: $"Simulated deck {number}",
                 Serial: id,
                 Firmware: BridgeServer.Version,
                 Virtual: true,
-                Capabilities: new DeviceCapabilities(
-                    deck.KeySize > 0 ? KeyGrid.Images(deck.Cols, deck.Rows, deck.KeySize) : KeyGrid.Pedals(deck.Cols, deck.Rows),
-                    Brightness: deck.KeySize > 0,
-                    dials,
-                    touch));
+                // Shaped like an Elgato model: the same capabilities as its driver
+                Capabilities: deck.Like?.Capabilities() ?? new DeviceCapabilities(KeyGrid.Images(deck.Cols, deck.Rows, deck.KeySize), Brightness: true, dials, touch));
             var device = new VirtualDevice(info);
             device.Changed += (d, key) => Publish(key is { } k ? KeyJson(d, k) : DeviceJson(d));
             device.TouchChanged += (d, image) => Publish(new JsonObject { ["type"] = "touch", ["device"] = d.Info.Id, ["image"] = TouchJson(image) });
@@ -180,6 +179,12 @@ public sealed class Simulator
             case "dial_press" when IsPlugged(device):
                 device.PressDial(message["dial"]?.GetValue<int>() ?? -1, message["pressed"]?.GetValue<bool>() ?? false);
                 break;
+            case "button" when IsPlugged(device):
+                device.PressButton(message["button"]?.GetValue<int>() ?? -1, message["pressed"]?.GetValue<bool>() ?? false);
+                break;
+            case "nfc" when IsPlugged(device):
+                device.ReadTag(message["id"]?.GetValue<string>() ?? "");
+                break;
             case "touch" when IsPlugged(device):
                 device.Touch(
                     message["kind"]?.GetValue<string>() ?? "",
@@ -219,6 +224,21 @@ public sealed class Simulator
             ["brightness"] = device.Brightness,
             ["keys"] = keys,
             ["dials"] = device.Info.Capabilities.Dials?.Count ?? 0,
+            ["dial_leds"] = new JsonArray(Enumerable.Range(0, device.Info.Capabilities.Dials is { Ring: > 0 } ring ? ring.Count : 0)
+                .Select(dial => (JsonNode?)(device.GetDialLeds(dial) is { } leds ? new JsonObject { ["color"] = leds.Color, ["level"] = leds.Level } : null))
+                .ToArray()),
+            ["buttons"] = new JsonArray(Enumerable.Range(0, device.Info.Capabilities.Buttons?.Count ?? 0)
+                .Select(button => (JsonNode?)device.GetButtonColor(button))
+                .ToArray()),
+            ["screen"] = device.Info.Capabilities.Screen is { } screen
+                ? new JsonObject
+                {
+                    ["width"] = screen.Width,
+                    ["height"] = screen.Height,
+                    ["src"] = device.Screen is { } shown ? $"data:image/{shown.Format};base64,{Convert.ToBase64String(shown.Image)}" : null,
+                }
+                : null,
+            ["nfc"] = device.Info.Capabilities.Nfc,
             ["touch"] = device.Info.Capabilities.Touch is { } touch
                 ? new JsonObject
                 {

@@ -12,7 +12,11 @@ public sealed record KeyGrid(int Cols, int Rows, int ImageWidth, int ImageHeight
     public bool HasImages => ImageWidth > 0;
 
     public static KeyGrid Images(int cols, int rows, int size, params string[] formats) =>
-        new(cols, rows, size, size, formats.Length > 0 ? formats : ["jpeg", "png"]);
+        Images(cols, rows, size, size, formats);
+
+    /// <summary>Keys with images of <paramref name="width"/> × <paramref name="height"/> (not always square).</summary>
+    public static KeyGrid Images(int cols, int rows, int width, int height, params string[] formats) =>
+        new(cols, rows, width, height, formats.Length > 0 ? formats : ["jpeg", "png"]);
 
     public static KeyGrid ColorsOnly(int cols, int rows) => new(cols, rows, 0, 0, []);
 
@@ -20,12 +24,26 @@ public sealed record KeyGrid(int Cols, int Rows, int ImageWidth, int ImageHeight
     public static KeyGrid Pedals(int cols, int rows) => new(cols, rows, 0, 0, [], InputOnly: true);
 }
 
-public sealed record DialSet(int Count, bool Press);
+/// <summary>Dials; <paramref name="Ring"/> is the number of LEDs in a ring around each (0: none).</summary>
+public sealed record DialSet(int Count, bool Press, int Ring = 0);
 
 public sealed record TouchArea(int Width, int Height);
 
+/// <summary>Buttons outside the key grid (e.g. the page buttons of the Neo), optionally lit in a colour.</summary>
+public sealed record ButtonSet(int Count, bool Colors);
+
+/// <summary>A display without touch input (e.g. the info display of the Neo).</summary>
+public sealed record ScreenArea(int Width, int Height);
+
 /// <summary>What a device can do (protocol section 4.2).</summary>
-public sealed record DeviceCapabilities(KeyGrid? Keys, bool Brightness, DialSet? Dials = null, TouchArea? Touch = null);
+public sealed record DeviceCapabilities(
+    KeyGrid? Keys,
+    bool Brightness,
+    DialSet? Dials = null,
+    TouchArea? Touch = null,
+    ButtonSet? Buttons = null,
+    ScreenArea? Screen = null,
+    bool Nfc = false);
 
 /// <summary>Static facts about a device, as sent in the inventory.</summary>
 public sealed record DeviceInfo(
@@ -66,10 +84,31 @@ public sealed record DeviceInfo(
         if (Capabilities.Dials is { } dials)
         {
             caps["dials"] = new JsonObject { ["count"] = dials.Count, ["press"] = dials.Press };
+            if (dials.Ring > 0)
+            {
+                caps["dials"]!["ring"] = dials.Ring;
+            }
         }
         if (Capabilities.Touch is { } touch)
         {
             caps["touch"] = new JsonObject { ["width"] = touch.Width, ["height"] = touch.Height };
+        }
+        if (Capabilities.Buttons is { } buttons)
+        {
+            caps["buttons"] = new JsonObject { ["count"] = buttons.Count, ["colors"] = buttons.Colors };
+        }
+        if (Capabilities.Screen is { } screen)
+        {
+            caps["screen"] = new JsonObject
+            {
+                ["width"] = screen.Width,
+                ["height"] = screen.Height,
+                ["formats"] = new JsonArray("jpeg", "png"),
+            };
+        }
+        if (Capabilities.Nfc)
+        {
+            caps["nfc"] = true;
         }
         return new JsonObject
         {
@@ -128,6 +167,19 @@ public sealed record TouchInput(string Kind, int X, int Y, int? X2 = null, int? 
     }
 }
 
+/// <summary>A button outside the key grid went down or up.</summary>
+public sealed record ButtonInput(int Button, bool Pressed) : DeviceInput
+{
+    public override JsonObject ToJson(string deviceId) =>
+        new() { ["type"] = "button", ["device"] = deviceId, ["button"] = Button, ["pressed"] = Pressed };
+}
+
+/// <summary>An NFC tag was read.</summary>
+public sealed record NfcInput(string Id) : DeviceInput
+{
+    public override JsonObject ToJson(string deviceId) => new() { ["type"] = "nfc", ["device"] = deviceId, ["id"] = Id };
+}
+
 /// <summary>A failure the client gets told about, with a protocol error code (section 8).</summary>
 public sealed class DeviceException(string code, string message) : Exception(message)
 {
@@ -155,6 +207,15 @@ public interface IControlDevice
 
     /// <summary>Show an upright image on an area of the touch display (already checked against its size).</summary>
     Task SetTouchImageAsync(int x, int y, int width, int height, string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken);
+
+    /// <summary>Light a button outside the grid; black is off.</summary>
+    Task SetButtonColorAsync(int button, string color, CancellationToken cancellationToken);
+
+    /// <summary>Show an upright image on the whole screen.</summary>
+    Task SetScreenImageAsync(string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken);
+
+    /// <summary>Light <paramref name="level"/> (0–1) of a dial's LED ring, and its centre, in <paramref name="color"/>.</summary>
+    Task SetDialLedsAsync(int dial, string color, double level, CancellationToken cancellationToken);
 
     Task ClearKeyAsync(int key, CancellationToken cancellationToken);
 

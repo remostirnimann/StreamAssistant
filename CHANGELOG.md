@@ -8,6 +8,18 @@ the same version. Versions before 0.8.0b1 were not released.
 ## [Unreleased]
 
 ### Added
+- Bridge: USB drivers for the Stream Deck Neo and Studio (not yet tried on real hardware):
+  - Neo: the two page buttons turn to the previous and next page and are lit when there is
+    one; the info screen shows the page name and its number. Event entities per page button.
+  - Studio: 32 keys of 144×112 (Home Assistant draws them square, the bridge centres them on
+    black), two dials whose LED rings show the dial's colour and its entity's level, and the
+    NFC reader: tags read there are Home Assistant tag scans (Tags integration).
+  - Protocol: `buttons`, `screen`, `dials.ring` and `nfc` capabilities, the commands
+    `set_button_color`, `set_screen_image` and `set_dial_leds`, the inputs `button` and `nfc`.
+  - `--simulate` takes Elgato models by name (`mk2`, `xl`, `plus`, `mini`, `original`,
+    `pedal`, `neo`, `studio`); the simulator page shows page buttons, screen, LED rings and
+    can read NFC tags.
+  - Free grids and templates can have up to 16 columns; templates for the Neo and Studio.
 - Bridge: USB drivers for more Stream Decks, following the reference implementation
   node-elgato-stream-deck (not yet tried on real hardware):
   - Stream Deck +: keys, four dials (turn and push) and the touch strip (images per area;
@@ -55,6 +67,8 @@ the same version. Versions before 0.8.0b1 were not released.
 - Line endings are LF everywhere (`.gitattributes`).
 
 ### Fixed
+- A key that switches the page no longer runs the key at its place on the new page when it
+  is released.
 - The pairing connection to a bridge left a heartbeat timer running.
 - Stored layouts are validated when loaded; a damaged one starts empty instead of failing
   later.

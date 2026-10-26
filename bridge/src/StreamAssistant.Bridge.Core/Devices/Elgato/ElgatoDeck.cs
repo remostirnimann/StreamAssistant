@@ -18,7 +18,7 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
     private readonly ILogger _logger;
     private readonly Lock _lock = new();
     private readonly Queue<byte[]> _features = new();
-    // Newest reports per key (Key >= 0) or touch area (Key -1), in the order they came
+    // Newest reports per key (Key >= 0), touch area (TouchSlot), screen, button or dial, in the order they came
     private readonly List<Pending> _images = [];
     private readonly SemaphoreSlim _signal = new(0);
     private readonly CancellationTokenSource _stop = new();
@@ -32,10 +32,15 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
     /// <summary>Reports for one key or area; colour fills are feature reports.</summary>
     private sealed record Pending(Slot Slot, IReadOnlyList<byte[]> Reports, bool Feature);
 
+    private const int TouchSlot = -1;
+    private const int ScreenSlot = -2;
+    private const int ButtonSlot = -100;
+    private const int DialSlot = -200;
+
     private readonly record struct Slot(int Key, int X = 0, int Y = 0, int Width = 0, int Height = 0)
     {
         public bool Covers(Slot other) =>
-            Key < 0 && other.Key < 0 && X <= other.X && Y <= other.Y && X + Width >= other.X + other.Width && Y + Height >= other.Y + other.Height;
+            Key == TouchSlot && other.Key == TouchSlot && X <= other.X && Y <= other.Y && X + Width >= other.X + other.Width && Y + Height >= other.Y + other.Height;
     }
 
     private ElgatoDeck(IHidDevice hid, ElgatoModel model, DeviceInfo info, TimeProvider time, ILogger logger)
@@ -94,7 +99,7 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
         NeedDisplay();
         CheckKey(key);
         // Converted here, so a broken image is reported to the client
-        var encoded = _model.EncodeKey(KeyImages.Decode(image, _model.KeySize, _model.KeySize));
+        var encoded = _model.EncodeKey(KeyImages.Fit(image, _model.KeySize, _model.ImageHeight));
         QueueImage(new Slot(key), _model.ImageReports(key, encoded).ToList());
         return Task.CompletedTask;
     }
@@ -111,7 +116,7 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
         }
         else
         {
-            QueueImage(new Slot(key), _model.ImageReports(key, _model.EncodeKey(KeyImages.Solid(color, _model.KeySize, _model.KeySize))).ToList());
+            QueueImage(new Slot(key), _model.ImageReports(key, _model.EncodeKey(KeyImages.Solid(color, _model.KeySize, _model.ImageHeight))).ToList());
         }
         return Task.CompletedTask;
     }
@@ -125,7 +130,40 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
             throw new DeviceException("unsupported", $"{Info.Name} has no touch display");
         }
         var jpeg = KeyImages.Jpeg(KeyImages.Decode(image, width, height), width, height);
-        QueueImage(new Slot(-1, x, y, width, height), ElgatoModel.TouchReports(x, y, width, height, jpeg).ToList());
+        QueueImage(new Slot(TouchSlot, x, y, width, height), ElgatoModel.TouchReports(x, y, width, height, jpeg).ToList());
+        return Task.CompletedTask;
+    }
+
+    public Task SetScreenImageAsync(string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken)
+    {
+        if (!_model.HasScreen)
+        {
+            throw new DeviceException("unsupported", $"{Info.Name} has no screen");
+        }
+        var jpeg = _model.EncodeScreen(KeyImages.Decode(image, _model.ScreenWidth, _model.ScreenHeight));
+        QueueImage(new Slot(ScreenSlot), ElgatoModel.ScreenReports(jpeg).ToList());
+        return Task.CompletedTask;
+    }
+
+    public Task SetButtonColorAsync(int button, string color, CancellationToken cancellationToken)
+    {
+        if (button < 0 || button >= _model.Buttons)
+        {
+            throw new DeviceException("unsupported", $"{Info.Name} has no button {button}");
+        }
+        var (red, green, blue) = KeyImages.Rgb(color);
+        QueueImage(new Slot(ButtonSlot - button), [_model.ButtonColorReport(button, red, green, blue)], feature: true);
+        return Task.CompletedTask;
+    }
+
+    public Task SetDialLedsAsync(int dial, string color, double level, CancellationToken cancellationToken)
+    {
+        if (_model.DialRing == 0 || dial < 0 || dial >= _model.Dials)
+        {
+            throw new DeviceException("unsupported", $"{Info.Name} has no LEDs on dial {dial}");
+        }
+        var (red, green, blue) = KeyImages.Rgb(color);
+        QueueImage(new Slot(DialSlot - dial), _model.DialLedReports(dial, red, green, blue, level).ToList());
         return Task.CompletedTask;
     }
 
