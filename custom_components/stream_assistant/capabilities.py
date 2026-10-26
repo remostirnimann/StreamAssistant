@@ -35,6 +35,15 @@ class DeckCapabilities:
     # Touch strip in pixels; 0 when there is none
     touch_width: int = 0
     touch_height: int = 0
+    # LEDs in a ring around each dial (Stream Deck Studio); 0 when there are none
+    dial_ring: int = 0
+    # Lit buttons outside the grid: previous and next page (Stream Deck Neo)
+    buttons: int = 0
+    # A small display without touch, showing the page name (Stream Deck Neo)
+    screen_width: int = 0
+    screen_height: int = 0
+    # An NFC reader: reads become Home Assistant tag scans (Stream Deck Studio)
+    nfc: bool = False
 
     @property
     def key_count(self) -> int:
@@ -50,6 +59,11 @@ class DeckCapabilities:
     def has_touch(self) -> bool:
         """Return True when there is a touch strip to draw on."""
         return self.touch_width > 0 and self.touch_height > 0
+
+    @property
+    def has_screen(self) -> bool:
+        """Return True when there is a screen besides the keys."""
+        return self.screen_width > 0 and self.screen_height > 0
 
     @property
     def segment_width(self) -> int:
@@ -69,11 +83,13 @@ CATALOG: tuple[DeckCapabilities, ...] = (
     DeckCapabilities("original_v2", "Stream Deck Original v2", 5, 3, 72, rotation=180),
     DeckCapabilities("xl", "Stream Deck XL", 8, 4, 96, rotation=180),
     DeckCapabilities("plus", "Stream Deck +", 4, 2, 120, dials=4, touch_width=800, touch_height=100),
+    DeckCapabilities("neo", "Stream Deck Neo", 4, 2, 96, rotation=180, buttons=2, screen_width=248, screen_height=58),
+    DeckCapabilities("studio", "Stream Deck Studio", 16, 2, 112, dials=2, dial_ring=24, nfc=True),
 )
 
 
 # Free grids (virtual panels, templates for them): any size within these limits
-MAX_COLS = 12
+MAX_COLS = 16
 MAX_ROWS = 8
 MAX_DIALS = 8
 # Virtual panels are shown on tablets and phones, render sharp enough for high-DPI screens

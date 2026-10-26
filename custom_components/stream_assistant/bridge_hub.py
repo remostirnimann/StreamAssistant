@@ -87,6 +87,20 @@ class BridgeDeckTransport(DeckTransport):
         """Send an image for an area of the touch strip (JPEG, upright)."""
         self._client.send_touch_image(self.device_id, x, y, width, height, image)
 
+    def set_screen_image(self, image: bytes) -> None:
+        """Send an image for the screen (JPEG, upright)."""
+        self._client.send_screen_image(self.device_id, image)
+
+    def set_button_color(self, index: int, color: str) -> None:
+        """Light a button outside the grid."""
+        self._client.send({"type": "set_button_color", "device": self.device_id, "button": index, "color": color})
+
+    def set_dial_leds(self, index: int, color: str, level: float) -> None:
+        """Light a dial's LED ring."""
+        self._client.send(
+            {"type": "set_dial_leds", "device": self.device_id, "dial": index, "color": color, "level": round(level, 3)}
+        )
+
     # Fed by the hub
 
     @callback
@@ -135,6 +149,18 @@ class BridgeDeckTransport(DeckTransport):
         """The touch strip was tapped, held or swiped."""
         if self._present and self.on_touch:
             self.on_touch(event)
+
+    @callback
+    def button(self, index: int, pressed: bool) -> None:
+        """A button outside the grid went down or up."""
+        if self._present and self.on_button:
+            self.on_button(index, pressed)
+
+    @callback
+    def nfc(self, tag_id: str) -> None:
+        """An NFC tag was read."""
+        if self._present and self.on_nfc:
+            self.on_nfc(tag_id)
 
 
 class BridgeHub:
@@ -191,6 +217,8 @@ class BridgeHub:
         self.client.on_dial = self._on_dial
         self.client.on_dial_press = self._on_dial_press
         self.client.on_touch = self._on_touch
+        self.client.on_button = self._on_button
+        self.client.on_nfc = self._on_nfc
         self.client.on_unauthorized = self._on_unauthorized
         self.client.start()
 
@@ -225,6 +253,11 @@ class BridgeHub:
             dials=found.dials,
             touch_width=found.touch_width,
             touch_height=found.touch_height,
+            dial_ring=found.dial_ring,
+            buttons=found.buttons if found.button_colors else 0,
+            screen_width=found.screen_width,
+            screen_height=found.screen_height,
+            nfc=found.nfc,
         )
         transport = BridgeDeckTransport(self.client, found, caps)
         device = StreamAssistantDevice(
@@ -260,8 +293,19 @@ class BridgeHub:
                 current.model.dials,
                 current.model.touch_width,
                 current.model.touch_height,
+                current.model.buttons,
+                current.model.screen_width,
             )
-            != (found.cols, found.rows, found.key_size, found.dials, found.touch_width, found.touch_height)
+            != (
+                found.cols,
+                found.rows,
+                found.key_size,
+                found.dials,
+                found.touch_width,
+                found.touch_height,
+                found.buttons if found.button_colors else 0,
+                found.screen_width,
+            )
         ):
             _LOGGER.info("%s: %s changed its controls, reloading", self.entry.title, found.name)
             self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
@@ -339,6 +383,16 @@ class BridgeHub:
     def _on_touch(self, device_id: str, event: TouchEvent) -> None:
         if transport := self._transports.get(device_id):
             transport.touch(event)
+
+    @callback
+    def _on_button(self, device_id: str, index: int, pressed: bool) -> None:
+        if transport := self._transports.get(device_id):
+            transport.button(index, pressed)
+
+    @callback
+    def _on_nfc(self, device_id: str, tag_id: str) -> None:
+        if transport := self._transports.get(device_id):
+            transport.nfc(tag_id)
 
     @callback
     def _on_unauthorized(self) -> None:

@@ -1,4 +1,4 @@
-"""Event entities: one per key and dial, one for the touch strip."""
+"""Event entities: one per key, dial and page button, one for the touch strip."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from .const import (
     SERVICE_CLEAR_KEY,
     SERVICE_SET_KEY,
     TOUCH_EVENT_TYPES,
+    signal_button,
     signal_dial,
     signal_key,
     signal_touch,
@@ -72,6 +73,7 @@ async def async_setup_entry(
         _remove_surplus_keys(hass, entry, device)
         entities: list[EventEntity] = [StreamDeckKeyEvent(device, key) for key in range(device.model.key_count)]
         entities.extend(StreamDeckDialEvent(device, dial) for dial in range(device.model.dials))
+        entities.extend(StreamDeckButtonEvent(device, button) for button in range(device.model.buttons))
         if device.model.has_touch:
             entities.append(StreamDeckTouchEvent(device))
         async_add_entities(entities)
@@ -87,7 +89,11 @@ def _remove_surplus_keys(hass: HomeAssistant, entry: StreamAssistantConfigEntry,
     """Drop key and dial entities the deck no longer has (a smaller grid, other controls)."""
     assert device.model
     registry = er.async_get(hass)
-    limits = {f"{device.deck_serial}_key_": device.model.key_count, f"{device.deck_serial}_dial_": device.model.dials}
+    limits = {
+        f"{device.deck_serial}_key_": device.model.key_count,
+        f"{device.deck_serial}_dial_": device.model.dials,
+        f"{device.deck_serial}_button_": device.model.buttons,
+    }
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         if entity.domain != "event":
             continue
@@ -195,4 +201,34 @@ class StreamDeckTouchEvent(StreamAssistantEntity, EventEntity):
     @callback
     def _on_touch_event(self, event_type: str, data: dict[str, Any]) -> None:
         self._trigger_event(event_type, data)
+        self.async_write_ha_state()
+
+
+class StreamDeckButtonEvent(StreamAssistantEntity, EventEntity):
+    """A page button beside the keys (Neo): fires the press events; it also turns the page."""
+
+    _attr_device_class = EventDeviceClass.BUTTON
+    _attr_event_types = KEY_EVENT_TYPES
+    _attr_translation_key = "page_button"
+
+    def __init__(self, device: StreamAssistantDevice, button: int) -> None:
+        """Initialize."""
+        super().__init__(device)
+        assert device.deck_serial
+        self.button = button
+        self._attr_unique_id = f"{device.deck_serial}_button_{button}"
+        self._attr_device_info = device.deck_device_info
+        self._attr_translation_placeholders = {"button": str(button + 1)}
+        self._attr_extra_state_attributes = {"button": button}
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to this button's events."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, signal_button(self.device.key, self.button), self._on_button_event)
+        )
+
+    @callback
+    def _on_button_event(self, event_type: str) -> None:
+        self._trigger_event(event_type)
         self.async_write_ha_state()

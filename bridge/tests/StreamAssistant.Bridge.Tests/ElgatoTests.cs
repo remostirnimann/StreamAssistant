@@ -273,7 +273,7 @@ public sealed class ElgatoTests
     {
         Assert.Equal("Stream Deck XL", ElgatoModel.Find(ElgatoModel.VendorId, 0x008F)!.Name);
         Assert.Equal("Stream Deck Mini", ElgatoModel.Find(ElgatoModel.VendorId, 0x0063)!.Name);
-        Assert.Null(ElgatoModel.Find(ElgatoModel.VendorId, 0x00AA)); // Studio: not supported
+        Assert.Null(ElgatoModel.Find(ElgatoModel.VendorId, 0x00C6)); // + XL: not supported
         Assert.Null(ElgatoModel.Find(0x1234, 0x0080));
         Assert.Equal(15, Mk2.KeyCount);
 
@@ -614,7 +614,7 @@ public sealed class ElgatoTests
     {
         var usb = new FakeHidBackend();
         usb.Plug("other", productId: 0x0080, vendorId: 0x1234); // another vendor
-        usb.Plug("studio", productId: 0x00AA);                  // Elgato, not supported yet
+        usb.Plug("plus-xl", productId: 0x00C6);                 // Elgato, not supported yet
         var first = usb.Plug("port-1");
         await using var bridge = new TestBridge(services => services.AddSingleton<IHidBackend>(usb), usb: true);
         var manager = bridge.Services.GetRequiredService<DeviceManager>();

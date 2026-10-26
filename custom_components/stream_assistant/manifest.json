@@ -1,6 +1,9 @@
 {
   "domain": "stream_assistant",
   "name": "Stream Assistant",
+  "after_dependencies": [
+    "tag"
+  ],
   "codeowners": [
     "@remostirnimann"
   ],

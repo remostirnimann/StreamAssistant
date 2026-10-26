@@ -141,6 +141,19 @@
             }
           }
         }
+      },
+      "page_button": {
+        "name": "Page button {button}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "pressed": "Pressed",
+              "released": "Released",
+              "short_press": "Short press",
+              "long_press": "Long press"
+            }
+          }
+        }
       }
     },
     "number": {

@@ -29,12 +29,19 @@
   .dial .turn { width: 34px; height: 34px; border-radius: 50%; }
   .dial .knob { width: 52px; height: 52px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #555, #222); }
   .dial .knob.down { transform: scale(.92); }
+  .extras { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .extras .page { width: 22%; height: 18px; border: 0; border-radius: 6px; background: #262626; cursor: pointer; }
+  .extras .page.down { transform: scale(.94); }
+  .extras .screen { flex: 1; max-width: 50%; background: #1b1b1b; border-radius: 6px; overflow: hidden; }
+  .extras .screen img { width: 100%; height: 100%; display: block; }
+  .nfc { display: flex; gap: 8px; margin-top: 10px; }
+  .nfc input { flex: 1; font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
 </style>
 </head>
 <body>
 <main>
   <h1>Simulator</h1>
-  <div class="muted">Simulated decks of this bridge. Click a key to press it, hold it for a long press. Dials: the arrows or the mouse wheel turn, the knob pushes. Touch strip: click, hold or drag. <span id="state"></span></div>
+  <div class="muted">Simulated decks of this bridge. Click a key to press it, hold it for a long press. Dials: the arrows or the mouse wheel turn, the knob pushes. Touch strip: click, hold or drag. Lit page buttons (Neo) click like keys; a tag id can be "read" by the NFC reader (Studio). <span id="state"></span></div>
   <div id="decks"></div>
 </main>
 <script>
@@ -112,6 +119,56 @@
     }
     if (d.touch) renderStrip(deck, d);
     if (d.dials) renderDials(deck, d);
+    if (d.buttons.length || d.screen) renderExtras(deck, d);
+    if (d.nfc) renderNfc(card, d);
+  }
+
+  // Page buttons (lit in their colour) and the small screen between them (Neo)
+  function renderExtras(deck, d) {
+    const row = document.createElement("div");
+    row.className = "extras";
+    const button = (index) => {
+      const el = document.createElement("button");
+      el.className = "page";
+      el.setAttribute("aria-label", `Button ${index + 1}`);
+      el.style.background = d.buttons[index] && d.buttons[index] !== "#000000" ? d.buttons[index] : "";
+      const up = () => {
+        if (!el.classList.contains("down")) return;
+        el.classList.remove("down");
+        send({ type: "button", device: d.id, button: index, pressed: false });
+      };
+      el.onpointerdown = (ev) => {
+        ev.preventDefault();
+        el.setPointerCapture(ev.pointerId);
+        el.classList.add("down");
+        send({ type: "button", device: d.id, button: index, pressed: true });
+      };
+      el.onpointerup = up;
+      el.onpointercancel = up;
+      return el;
+    };
+    if (d.buttons.length) row.append(button(0));
+    if (d.screen) {
+      const screen = document.createElement("div");
+      screen.className = "screen";
+      screen.style.aspectRatio = `${d.screen.width} / ${d.screen.height}`;
+      if (d.screen.src) screen.innerHTML = `<img alt="" src="${d.screen.src}">`;
+      row.append(screen);
+    }
+    for (let i = 1; i < d.buttons.length; i += 1) row.append(button(i));
+    deck.append(row);
+  }
+
+  function renderNfc(card, d) {
+    const form = document.createElement("form");
+    form.className = "nfc";
+    form.innerHTML = `<input placeholder="NFC tag id, e.g. 04A2B3C4D5" aria-label="NFC tag id"><button class="plug">Read tag</button>`;
+    form.onsubmit = (ev) => {
+      ev.preventDefault();
+      const id = form.querySelector("input").value.trim();
+      if (id) send({ type: "nfc", device: d.id, id });
+    };
+    card.append(form);
   }
 
   // Touch strip: tap, long press (held 0.5 s) or swipe (dragged), in display pixels
@@ -174,6 +231,12 @@
       dial.className = "dial";
       dial.innerHTML = `<button class="turn" aria-label="Turn left">⟲</button><button class="knob" aria-label="Push dial ${i + 1}"></button><button class="turn" aria-label="Turn right">⟳</button>`;
       const [left, knob, right] = dial.querySelectorAll("button");
+      // LED ring (Studio): the lit share in its colour around the knob
+      const leds = d.dial_leds?.[i];
+      if (leds) {
+        knob.style.boxShadow = "0 0 0 4px #111";
+        knob.style.background = `radial-gradient(circle, ${leds.color} 0 22%, #333 23% 62%, transparent 63%), conic-gradient(${leds.color} 0 ${leds.level * 360}deg, #222 ${leds.level * 360}deg)`;
+      }
       left.onclick = () => send({ type: "turn", device: d.id, dial: i, delta: -1 });
       right.onclick = () => send({ type: "turn", device: d.id, dial: i, delta: 1 });
       dial.onwheel = (ev) => {

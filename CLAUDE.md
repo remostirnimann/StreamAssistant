@@ -86,7 +86,7 @@ cd custom_components && tar --exclude=__pycache__ -cf - stream_assistant | ssh -
 - `BehaviorController` (night brightness, idle fade, a press that only wakes the deck)
 - the entities' dispatcher signals
 
-Dials share the press logic with keys (`_on_press`, keyed `("dial", index)`). Turning either runs `left`/`right` actions or adjusts the dial's entity (`actions.adjust_call`), collected for `DIAL_SETTLE_SECONDS` into one call. Each dial owns an equal part of the touch strip (`render_segment`, `display.page_dial_visual`); taps there run the dial's actions.
+Dials share the press logic with keys (`_on_press`, keyed `("dial", index)`). Turning either runs `left`/`right` actions or adjusts the dial's entity (`actions.adjust_call`), collected for `DIAL_SETTLE_SECONDS` into one call. Each dial owns an equal part of the touch strip (`render_segment`, `display.page_dial_visual`); taps there run the dial's actions. Decks with LED rings (Studio) show the dial's colour and level there instead. Page buttons (Neo) turn to the previous/next page in layout order and are lit when there is one; the screen shows the page name. NFC reads become tag scans (`tag` is an after-dependency).
 
 It never talks to hardware directly, only through a `DeckTransport` (`transport.py`):
 - `NetworkDockTransport` (Elgato Network Dock, Cora over TCP, client in `protocol/`)
@@ -132,7 +132,7 @@ A self-contained exe cannot reference another exe, so shared code goes into Core
 
 Inside Core:
 - **Devices:** `IControlDevice` is implemented by `VirtualDevice` (desktop virtual decks and `--simulate` decks) and `Elgato/ElgatoDeck` (USB). `DeviceManager` raises `Added`/`Removed`/`Input` events. Drivers must return quickly and keep only the newest image per key.
-- **USB:** `ElgatoModel` lists the supported Stream Decks; its `ElgatoFamily` (Original, Mini, Gen2, Plus, Pedal) decides image format and orientation, report layouts, feature reports and input parsing (`InputParser`), following node-elgato-stream-deck. `ElgatoWatcher` scans through `IHidBackend` (`HidSharpBackend` in production, excluded from coverage; `FakeHidBackend` in the tests) on plug events and every 5 s, and adds, removes and reopens decks. `KeyImages` converts images with StbImageSharp (fully managed; ImageSharp 4 needs a licence key for release builds and 3.x has known vulnerabilities).
+- **USB:** `ElgatoModel` lists the supported Stream Decks; its `ElgatoFamily` (Original, Mini, Gen2, Plus, Pedal, Neo, Studio) decides image format and orientation, report layouts, feature reports and input parsing (`InputParser`), following node-elgato-stream-deck. `ElgatoWatcher` scans through `IHidBackend` (`HidSharpBackend` in production, excluded from coverage; `FakeHidBackend` in the tests) on plug events and every 5 s, and adds, removes and reopens decks. `KeyImages` converts images with StbImageSharp (fully managed; ImageSharp 4 needs a licence key for release builds and 3.x has known vulnerabilities).
 - **Protocol:**
   - `BridgeServer` keeps one active `ClientSession`; a new client replaces the old one, and devices reset to the idle screen 30 s after the client left.
   - `ClientSession` does the handshake, pairing or token check, commands and binary image envelopes.

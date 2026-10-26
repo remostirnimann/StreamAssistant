@@ -75,6 +75,11 @@ def signal_dial(deck: str, dial: int) -> str:
     return f"{DOMAIN}_{deck}_dial_{dial}"
 
 
+def signal_button(deck: str, button: int) -> str:
+    """Dispatcher signal for events of a button outside the grid (page buttons)."""
+    return f"{DOMAIN}_{deck}_button_{button}"
+
+
 def signal_touch(deck: str) -> str:
     """Dispatcher signal for events of the touch strip of a deck."""
     return f"{DOMAIN}_{deck}_touch"

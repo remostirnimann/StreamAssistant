@@ -4,13 +4,21 @@ namespace StreamAssistant.Bridge.Devices.Virtual;
 /// A deck that only exists in software: a virtual deck in the desktop window,
 /// or a simulated deck for tests (--simulate). Whoever shows it listens to
 /// <see cref="Changed"/> and <see cref="TouchChanged"/> and reports input with
-/// <see cref="Press"/>, <see cref="Turn"/>, <see cref="PressDial"/> and <see cref="Touch"/>.
+/// <see cref="Press"/>, <see cref="Turn"/>, <see cref="PressDial"/>, <see cref="Touch"/>,
+/// <see cref="PressButton"/> and <see cref="ReadTag"/>. Button colours, the screen
+/// and dial LEDs count as a change of the whole device.
 /// </summary>
 public sealed class VirtualDevice(DeviceInfo info) : IControlDevice
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<int, KeyContent> _keys = [];
     private readonly List<TouchImage> _touch = [];
+    private readonly Dictionary<int, string> _buttons = [];
+    private readonly Dictionary<int, DialLeds> _dialLeds = [];
+    private (string Format, byte[] Image)? _screen;
+
+    /// <summary>What a dial's LEDs show.</summary>
+    public sealed record DialLeds(string Color, double Level);
 
     /// <summary>What a key shows: an image or a colour.</summary>
     public sealed record KeyContent(string? Format, byte[]? Image, string? Color);
@@ -46,6 +54,68 @@ public sealed class VirtualDevice(DeviceInfo info) : IControlDevice
                 return [.. _touch];
             }
         }
+    }
+
+    public string? GetButtonColor(int button)
+    {
+        lock (_lock)
+        {
+            return _buttons.GetValueOrDefault(button);
+        }
+    }
+
+    public DialLeds? GetDialLeds(int dial)
+    {
+        lock (_lock)
+        {
+            return _dialLeds.GetValueOrDefault(dial);
+        }
+    }
+
+    public (string Format, byte[] Image)? Screen
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _screen;
+            }
+        }
+    }
+
+    public void PressButton(int button, bool pressed)
+    {
+        if (Info.Capabilities.Buttons is { } buttons && button >= 0 && button < buttons.Count)
+        {
+            Input?.Invoke(this, new ButtonInput(button, pressed));
+        }
+    }
+
+    public void ReadTag(string id)
+    {
+        if (Info.Capabilities.Nfc && !string.IsNullOrWhiteSpace(id))
+        {
+            Input?.Invoke(this, new NfcInput(id.Trim()));
+        }
+    }
+
+    public Task SetButtonColorAsync(int button, string color, CancellationToken cancellationToken) =>
+        ChangeExtras(() => _buttons[button] = color);
+
+    public Task SetScreenImageAsync(string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken) =>
+        ChangeExtras(() => _screen = (format, image.ToArray()));
+
+    public Task SetDialLedsAsync(int dial, string color, double level, CancellationToken cancellationToken) =>
+        ChangeExtras(() => _dialLeds[dial] = new DialLeds(color, level));
+
+    private Task ChangeExtras(Action change)
+    {
+        lock (_lock)
+        {
+            change();
+        }
+        Changed?.Invoke(this, null);
+        return Task.CompletedTask;
     }
 
     public KeyContent? GetKey(int key)
@@ -138,6 +208,9 @@ public sealed class VirtualDevice(DeviceInfo info) : IControlDevice
         {
             _keys.Clear();
             _touch.Clear();
+            _buttons.Clear();
+            _dialLeds.Clear();
+            _screen = null;
         }
         Changed?.Invoke(this, null);
         return Task.CompletedTask;

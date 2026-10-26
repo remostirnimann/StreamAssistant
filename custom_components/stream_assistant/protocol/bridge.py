@@ -84,6 +84,12 @@ class BridgeDevice:
     dial_press: bool = False
     touch_width: int = 0
     touch_height: int = 0
+    dial_ring: int = 0
+    buttons: int = 0
+    button_colors: bool = False
+    screen_width: int = 0
+    screen_height: int = 0
+    nfc: bool = False
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> BridgeDevice:
@@ -93,6 +99,8 @@ class BridgeDevice:
         image = keys.get("image") or {}
         dials = caps.get("dials") or {}
         touch = caps.get("touch") or {}
+        buttons = caps.get("buttons") or {}
+        screen = caps.get("screen") or {}
         return cls(
             id=str(data["id"]),
             vendor=str(data.get("vendor") or ""),
@@ -111,6 +119,12 @@ class BridgeDevice:
             dial_press=bool(dials.get("press")),
             touch_width=int(touch.get("width") or 0),
             touch_height=int(touch.get("height") or 0),
+            dial_ring=int(dials.get("ring") or 0),
+            buttons=int(buttons.get("count") or 0),
+            button_colors=bool(buttons.get("colors")),
+            screen_width=int(screen.get("width") or 0),
+            screen_height=int(screen.get("height") or 0),
+            nfc=bool(caps.get("nfc")),
         )
 
     def to_json(self) -> dict[str, Any]:
@@ -137,10 +151,19 @@ class BridgeDevice:
             del keys["image"]
         if self.colors:
             keys["colors"] = True
+        caps = data["capabilities"]
         if self.dials:
-            data["capabilities"]["dials"] = {"count": self.dials, "press": self.dial_press}
+            caps["dials"] = {"count": self.dials, "press": self.dial_press}
+            if self.dial_ring:
+                caps["dials"]["ring"] = self.dial_ring
         if self.touch_width and self.touch_height:
-            data["capabilities"]["touch"] = {"width": self.touch_width, "height": self.touch_height}
+            caps["touch"] = {"width": self.touch_width, "height": self.touch_height}
+        if self.buttons:
+            caps["buttons"] = {"count": self.buttons, "colors": self.button_colors}
+        if self.screen_width and self.screen_height:
+            caps["screen"] = {"width": self.screen_width, "height": self.screen_height, "formats": ["jpeg", "png"]}
+        if self.nfc:
+            caps["nfc"] = True
         return data
 
 
@@ -270,6 +293,8 @@ class BridgeClient:
         self.on_dial: Callable[[str, int, int], None] | None = None
         self.on_dial_press: Callable[[str, int, bool], None] | None = None
         self.on_touch: Callable[[str, TouchEvent], None] | None = None
+        self.on_button: Callable[[str, int, bool], None] | None = None
+        self.on_nfc: Callable[[str, str], None] | None = None
         # The token was refused: the user has to pair again
         self.on_unauthorized: Callable[[], None] | None = None
 
@@ -325,6 +350,13 @@ class BridgeClient:
                 "format": image_format,
             }
             self._outgoing.put_nowait(envelope(header, image))
+
+    def send_screen_image(self, device: str, image: bytes, image_format: str = "jpeg") -> None:
+        """Queue an image for the whole screen."""
+        if self.connected:
+            self._outgoing.put_nowait(
+                envelope({"type": "set_screen_image", "device": device, "format": image_format}, image)
+            )
 
     # Connection loop
 
@@ -417,6 +449,10 @@ class BridgeClient:
                 self.on_dial(str(message["device"]), int(message["dial"]), int(message["delta"]))
             elif kind == "dial_press" and self.on_dial_press:
                 self.on_dial_press(str(message["device"]), int(message["dial"]), bool(message["pressed"]))
+            elif kind == "button" and self.on_button:
+                self.on_button(str(message["device"]), int(message["button"]), bool(message["pressed"]))
+            elif kind == "nfc" and self.on_nfc:
+                self.on_nfc(str(message["device"]), str(message["id"]))
             elif kind == "touch" and self.on_touch:
                 swipe = message["kind"] == "swipe"
                 self.on_touch(

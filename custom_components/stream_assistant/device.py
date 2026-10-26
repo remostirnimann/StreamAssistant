@@ -49,6 +49,7 @@ from .const import (
     KIND_VIRTUAL,
     LONG_PRESS_SECONDS,
     VERSION,
+    signal_button,
     signal_dial,
     signal_key,
     signal_state,
@@ -313,6 +314,8 @@ class StreamAssistantDevice:
         self.transport.on_dial = self._on_dial
         self.transport.on_dial_press = self._on_dial_press
         self.transport.on_touch = self._on_touch
+        self.transport.on_button = self._on_button
+        self.transport.on_nfc = self._on_nfc
         self._track_page_entities()
         self.transport.start()
 
@@ -548,17 +551,21 @@ class StreamAssistantDevice:
         key_list = list(range(self.model.key_count)) if everything else keys or []
         dial_list = list(range(self.model.dials)) if everything else dials or []
         self.entry.async_create_background_task(
-            self.hass, self._async_paint(key_list, dial_list), "stream_assistant paint"
+            self.hass, self._async_paint(key_list, dial_list, extras=everything), "stream_assistant paint"
         )
 
-    async def _async_paint(self, keys: list[int], dials: list[int] | None = None) -> None:
+    async def _async_paint(self, keys: list[int], dials: list[int] | None = None, *, extras: bool = False) -> None:
         if not self.model:
             return
         page = self.page(self.current_page)
         if page is None:
             return
+        if extras:
+            await self._async_paint_extras(page)
         if dials and self.model.segment_width:
             await self._async_paint_segments(page, dials)
+        if dials and self.model.dial_ring:
+            self._paint_dial_leds(page, dials)
         for index in keys:
             if index >= self.model.key_count:
                 continue
@@ -589,6 +596,50 @@ class StreamAssistantDevice:
             except TransportError as err:
                 _LOGGER.debug("Painting the touch strip failed: %s", err)
                 return
+
+    def _paint_dial_leds(self, page: dict[str, Any], dials: list[int]) -> None:
+        """LED rings show the dial's colour and its entity's level (Studio)."""
+        assert self.model
+        for index in dials:
+            if index >= self.model.dials:
+                continue
+            visual = page_dial_visual(self.hass, page, index)
+            empty = page.get("dials", {}).get(str(index)) is None
+            try:
+                self.transport.set_dial_leds(
+                    index, "#000000" if empty else visual.background, 1.0 if visual.level is None else visual.level
+                )
+            except TransportError as err:
+                _LOGGER.debug("Lighting dial %s failed: %s", index, err)
+                return
+
+    def _neighbour_page(self, step: int) -> str | None:
+        """The page before (-1) or after (+1) the one shown, in the editor's order."""
+        ids = [p["id"] for p in self.layout["pages"]]
+        position = ids.index(self.current_page) + step if self.current_page in ids else -1
+        return ids[position] if 0 <= position < len(ids) else None
+
+    async def _async_paint_extras(self, page: dict[str, Any]) -> None:
+        """Page buttons lit where there is a page to go to, the page name on the screen (Neo)."""
+        assert self.model
+        try:
+            for index, step in enumerate((-1, 1)[: self.model.buttons]):
+                self.transport.set_button_color(index, "#ffffff" if self._neighbour_page(step) else "#000000")
+            if self.model.has_screen:
+                ids = [p["id"] for p in self.layout["pages"]]
+                visual = KeyVisual(
+                    title=page["name"],
+                    subtitle=f"{ids.index(page['id']) + 1} / {len(ids)}" if len(ids) > 1 else "",
+                    background="#000000",
+                    foreground="#ffffff",
+                )
+                image = await self._renderer.async_render_area(
+                    self.model.screen_width, self.model.screen_height, visual
+                )
+                if self.deck_connected:
+                    self.transport.set_screen_image(image)
+        except TransportError as err:
+            _LOGGER.debug("Painting the page buttons or screen failed: %s", err)
 
     async def async_render_page_preview(self, page: dict[str, Any]) -> list[bytes]:
         """Upright JPEGs of every key of a (possibly unsaved) page, for the editor."""
@@ -695,10 +746,6 @@ class StreamAssistantDevice:
         if pressed:
             async_dispatcher_send(self.hass, signal, EVENT_PRESSED)
             self._short_done.discard(key)
-            if long["type"] == ACTION_NONE:
-                # Nothing to wait for: react on press, feels instant
-                self._short_done.add(key)
-                self._run(short)
 
             @callback
             def _long_press(_now: Any) -> None:
@@ -710,7 +757,13 @@ class StreamAssistantDevice:
 
             if cancel := self._long_press_timers.pop(key, None):
                 cancel()
+            # The timer comes first: a page switch below starts right away (eager task) and
+            # cancels it, so the release cannot run an action of the new page
             self._long_press_timers[key] = async_call_later(self.hass, LONG_PRESS_SECONDS, _long_press)
+            if long["type"] == ACTION_NONE:
+                # Nothing to wait for: react on press, feels instant
+                self._short_done.add(key)
+                self._run(short)
             return
 
         async_dispatcher_send(self.hass, signal, EVENT_RELEASED)
@@ -721,6 +774,30 @@ class StreamAssistantDevice:
             if key not in self._short_done:
                 self._run(short)
         self._short_done.discard(key)
+
+    @callback
+    def _on_button(self, index: int, pressed: bool) -> None:
+        """Page buttons (Neo): the left one shows the previous page, the right one the next."""
+        target = self._neighbour_page(-1 if index == 0 else 1)
+        short = {"type": ACTION_PAGE, "page": target} if target else NO_ACTION
+        self._on_press(("button", index), pressed, signal_button(self.key, index), short, NO_ACTION)
+
+    @callback
+    def _on_nfc(self, tag_id: str) -> None:
+        """An NFC tag was read (Studio): a tag scan in Home Assistant, from this deck."""
+        self.behavior.async_activity()
+        device = dr.async_get(self.hass).async_get_device_by_identifier((DOMAIN, self.deck_serial), self.entry.entry_id)
+        self.entry.async_create_background_task(
+            self.hass, self._async_scan_tag(tag_id, device.id if device else None), "stream_assistant tag"
+        )
+
+    async def _async_scan_tag(self, tag_id: str, device_id: str | None) -> None:
+        if "tag" not in self.hass.config.components:
+            _LOGGER.warning("%s read tag %s, but the Tags integration is not set up", self.title, tag_id)
+            return
+        from homeassistant.components.tag import async_scan_tag
+
+        await async_scan_tag(self.hass, tag_id, device_id)
 
     @callback
     def _on_dial(self, index: int, delta: int) -> None:

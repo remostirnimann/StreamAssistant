@@ -16,8 +16,39 @@ public static class KeyImages
     private const int Quality = 90;
     private const int BmpHeader = 54;
 
+    /// <summary>
+    /// Decode a JPEG or PNG for a key: scaled to fit and centred on black when its shape
+    /// differs (Home Assistant draws square keys; the Studio's are 144×112).
+    /// </summary>
+    public static byte[] Fit(ReadOnlyMemory<byte> image, int width, int height)
+    {
+        var decoded = DecodeImage(image);
+        var scale = Math.Min((double)width / decoded.Width, (double)height / decoded.Height);
+        var innerWidth = Math.Max(1, (int)Math.Round(decoded.Width * scale));
+        var innerHeight = Math.Max(1, (int)Math.Round(decoded.Height * scale));
+        var inner = Scale(decoded.Data, decoded.Width, decoded.Height, innerWidth, innerHeight);
+        if (innerWidth == width && innerHeight == height)
+        {
+            return inner;
+        }
+        var result = new byte[width * height * 3];
+        var left = (width - innerWidth) / 2;
+        var top = (height - innerHeight) / 2;
+        for (var y = 0; y < innerHeight; y++)
+        {
+            Array.Copy(inner, y * innerWidth * 3, result, (((top + y) * width) + left) * 3, innerWidth * 3);
+        }
+        return result;
+    }
+
     /// <summary>Decode a JPEG or PNG and scale it to <paramref name="width"/> × <paramref name="height"/>.</summary>
     public static byte[] Decode(ReadOnlyMemory<byte> image, int width, int height)
+    {
+        var decoded = DecodeImage(image);
+        return Scale(decoded.Data, decoded.Width, decoded.Height, width, height);
+    }
+
+    private static ImageResult DecodeImage(ReadOnlyMemory<byte> image)
     {
         ImageResult decoded;
         try
@@ -28,7 +59,7 @@ public static class KeyImages
         {
             throw new DeviceException("invalid_message", $"Unreadable image: {err.Message}");
         }
-        return Scale(decoded.Data, decoded.Width, decoded.Height, width, height);
+        return decoded;
     }
 
     /// <summary>An area in one colour, <paramref name="color"/> as #rrggbb.</summary>
@@ -52,24 +83,24 @@ public static class KeyImages
     }
 
     /// <summary>
-    /// Mirror and/or turn a square image, as the reference implementation does:
-    /// target (x, y) takes the source pixel after the flips, with x and y swapped when turning.
-    /// Both flips together turn the image by 180°.
+    /// Mirror and/or turn an image, as the reference implementation does: target (x, y)
+    /// takes the source pixel after the flips, with x and y swapped when turning (square
+    /// images only). Both flips together turn the image by 180°.
     /// </summary>
-    public static byte[] Transform(byte[] pixels, int size, bool rotate, bool xFlip, bool yFlip)
+    public static byte[] Transform(byte[] pixels, int width, int height, bool rotate, bool xFlip, bool yFlip)
     {
         var result = new byte[pixels.Length];
-        for (var y = 0; y < size; y++)
+        for (var y = 0; y < height; y++)
         {
-            for (var x = 0; x < size; x++)
+            for (var x = 0; x < width; x++)
             {
-                var sx = xFlip ? size - x - 1 : x;
-                var sy = yFlip ? size - y - 1 : y;
+                var sx = xFlip ? width - x - 1 : x;
+                var sy = yFlip ? height - y - 1 : y;
                 if (rotate)
                 {
                     (sx, sy) = (sy, sx);
                 }
-                Array.Copy(pixels, ((sy * size) + sx) * 3, result, ((y * size) + x) * 3, 3);
+                Array.Copy(pixels, ((sy * width) + sx) * 3, result, ((y * width) + x) * 3, 3);
             }
         }
         return result;

@@ -44,6 +44,23 @@ def plus(device_id: str = "plus-1", dials: int = 4) -> dict[str, Any]:
     return data
 
 
+def neo(device_id: str = "neo-1") -> dict[str, Any]:
+    """Like a Stream Deck Neo: 4x2 keys, two lit page buttons, a small screen."""
+    data = deck(device_id, 4, 2, 96)
+    data["capabilities"]["buttons"] = {"count": 2, "colors": True}
+    data["capabilities"]["screen"] = {"width": 248, "height": 58, "formats": ["jpeg", "png"]}
+    return data
+
+
+def studio(device_id: str = "studio-1") -> dict[str, Any]:
+    """Like a Stream Deck Studio: 16x2 wide keys, two dials with LED rings, NFC."""
+    data = deck(device_id, 16, 2)
+    data["capabilities"]["keys"]["image"] = {"width": 144, "height": 112, "formats": ["jpeg", "png"]}
+    data["capabilities"]["dials"] = {"count": 2, "press": True, "ring": 24}
+    data["capabilities"]["nfc"] = True
+    return data
+
+
 def pedal(device_id: str = "pedal-1") -> dict[str, Any]:
     """Three keys without display, like a Stream Deck Pedal."""
     data = deck(device_id, 3, 1)
@@ -62,6 +79,7 @@ class FakeBridge:
         self.images: dict[tuple[str, int], bytes] = {}
         # Touch strip images by (device, x, y, width, height)
         self.touch_images: dict[tuple[str, int, int, int, int], bytes] = {}
+        self.screen_images: dict[str, bytes] = {}
         self.sockets: list[web.WebSocketResponse] = []
         self.hellos = 0
         self.port = 0
@@ -99,6 +117,12 @@ class FakeBridge:
 
     async def push_dial(self, device: str, dial: int, pressed: bool) -> None:
         await self.send_all({"type": "dial_press", "device": device, "dial": dial, "pressed": pressed})
+
+    async def button(self, device: str, button: int, pressed: bool) -> None:
+        await self.send_all({"type": "button", "device": device, "button": button, "pressed": pressed})
+
+    async def tag(self, device: str, tag_id: str) -> None:
+        await self.send_all({"type": "nfc", "device": device, "id": tag_id})
 
     async def touch(self, device: str, kind: str, x: int, y: int = 50, **end: int) -> None:
         await self.send_all({"type": "touch", "device": device, "kind": kind, "x": x, "y": y, **end})
@@ -171,7 +195,9 @@ class FakeBridge:
                 (length,) = struct.unpack(">H", message.data[:2])
                 header = json.loads(message.data[2 : 2 + length])
                 payload = message.data[2 + length :]
-                if header["type"] == "set_touch_image":
+                if header["type"] == "set_screen_image":
+                    self.screen_images[header["device"]] = payload
+                elif header["type"] == "set_touch_image":
                     area = (header["device"], header["x"], header["y"], header["width"], header["height"])
                     self.touch_images[area] = payload
                 else:

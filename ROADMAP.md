@@ -33,9 +33,9 @@
   the bridge; the protocol already describes image keys, colour-only keys, dials and touch.
   The integration handles dials and touch strips; colour-only keys are still skipped with
   a warning.
-- **More Elgato models**: Neo (page keys, small info display) and Studio. The +, Mini,
-  first Stream Deck, Pedal and the modules have USB drivers but still need trying on real
-  hardware.
+- **More Elgato models**: Stream Deck + XL. All other current models have USB drivers but,
+  apart from the MK.2, still need trying on real hardware. The Studio can also be reached
+  over the network (like the Network Dock); not used yet.
 
 ## Done
 

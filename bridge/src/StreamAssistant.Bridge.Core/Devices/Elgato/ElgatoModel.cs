@@ -20,6 +20,12 @@ public enum ElgatoFamily
 
     /// <summary>Stream Deck Pedal: three pedals, no display.</summary>
     Pedal,
+
+    /// <summary>Stream Deck Neo: JPEG keys upside down, two lit page buttons, a small info screen.</summary>
+    Neo,
+
+    /// <summary>Stream Deck Studio: 144×112 JPEG keys (upright), two dials with LED rings, NFC.</summary>
+    Studio,
 }
 
 /// <summary>
@@ -35,7 +41,12 @@ public sealed record ElgatoModel(
     int KeySize,
     int Dials = 0,
     int TouchWidth = 0,
-    int TouchHeight = 0)
+    int TouchHeight = 0,
+    int KeyHeight = 0,
+    int Buttons = 0,
+    int ScreenWidth = 0,
+    int ScreenHeight = 0,
+    int DialRing = 0)
 {
     public const int VendorId = 0x0FD9;
 
@@ -55,9 +66,18 @@ public sealed record ElgatoModel(
         new("Stream Deck 6 Module", [0x00B8], ElgatoFamily.Mini, 3, 2, 80),
         new("Stream Deck", [0x0060], ElgatoFamily.Original, 5, 3, 72),
         new("Stream Deck Pedal", [0x0086], ElgatoFamily.Pedal, 3, 1, 0),
+        new("Stream Deck Neo", [0x009A], ElgatoFamily.Neo, 4, 2, 96, Buttons: 2, ScreenWidth: 248, ScreenHeight: 58),
+        new("Stream Deck Studio", [0x00AA], ElgatoFamily.Studio, 16, 2, 144, Dials: 2, KeyHeight: 112, DialRing: 24),
     ];
 
     public int KeyCount => Cols * Rows;
+
+    /// <summary>Key images are <see cref="KeySize"/> wide and this high (only the Studio's are not square).</summary>
+    public int ImageHeight => KeyHeight > 0 ? KeyHeight : KeySize;
+
+    public bool HasScreen => ScreenWidth > 0 && ScreenHeight > 0;
+
+    public bool HasNfc => Family == ElgatoFamily.Studio;
 
     /// <summary>The keys show images (everything but the Pedal).</summary>
     public bool HasDisplay => KeySize > 0;
@@ -66,14 +86,33 @@ public sealed record ElgatoModel(
 
     private bool IsGen1 => Family is ElgatoFamily.Original or ElgatoFamily.Mini;
 
+    private static readonly Dictionary<string, string> Aliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["mk2"] = "Stream Deck MK.2",
+        ["xl"] = "Stream Deck XL",
+        ["plus"] = "Stream Deck +",
+        ["mini"] = "Stream Deck Mini",
+        ["original"] = "Stream Deck",
+        ["pedal"] = "Stream Deck Pedal",
+        ["neo"] = "Stream Deck Neo",
+        ["studio"] = "Stream Deck Studio",
+    };
+
+    /// <summary>A model by short name (for --simulate), or null.</summary>
+    public static ElgatoModel? ByAlias(string alias) =>
+        Aliases.TryGetValue(alias.Trim(), out var name) ? All.First(m => m.Name == name) : null;
+
     public static ElgatoModel? Find(int vendorId, int productId) =>
         vendorId == VendorId ? All.FirstOrDefault(m => m.ProductIds.Contains(productId)) : null;
 
     public DeviceCapabilities Capabilities() => new(
-        HasDisplay ? KeyGrid.Images(Cols, Rows, KeySize, "jpeg", "png") : KeyGrid.Pedals(Cols, Rows),
+        HasDisplay ? KeyGrid.Images(Cols, Rows, KeySize, ImageHeight, "jpeg", "png") : KeyGrid.Pedals(Cols, Rows),
         Brightness: HasDisplay,
-        Dials > 0 ? new DialSet(Dials, Press: true) : null,
-        HasTouch ? new TouchArea(TouchWidth, TouchHeight) : null);
+        Dials > 0 ? new DialSet(Dials, Press: true, DialRing) : null,
+        HasTouch ? new TouchArea(TouchWidth, TouchHeight) : null,
+        Buttons > 0 ? new ButtonSet(Buttons, Colors: true) : null,
+        HasScreen ? new ScreenArea(ScreenWidth, ScreenHeight) : null,
+        HasNfc);
 
     /// <summary>The key number the deck uses: the first Stream Deck counts each row from the right.</summary>
     public int HidKey(int key) =>
@@ -82,11 +121,58 @@ public sealed record ElgatoModel(
     /// <summary>An upright RGB image of a key, prepared as the deck wants it (JPEG or BMP).</summary>
     public byte[] EncodeKey(byte[] rgb) => Family switch
     {
-        ElgatoFamily.Gen2 => KeyImages.Jpeg(KeyImages.Transform(rgb, KeySize, rotate: false, xFlip: true, yFlip: true), KeySize, KeySize),
-        ElgatoFamily.Mini => KeyImages.Bmp(KeyImages.Transform(rgb, KeySize, rotate: true, xFlip: false, yFlip: true), KeySize, 2835),
-        ElgatoFamily.Original => KeyImages.Bmp(KeyImages.Transform(rgb, KeySize, rotate: false, xFlip: true, yFlip: false), KeySize, 3780),
-        _ => KeyImages.Jpeg(rgb, KeySize, KeySize),
+        ElgatoFamily.Gen2 or ElgatoFamily.Neo => KeyImages.Jpeg(KeyImages.Transform(rgb, KeySize, KeySize, rotate: false, xFlip: true, yFlip: true), KeySize, KeySize),
+        ElgatoFamily.Mini => KeyImages.Bmp(KeyImages.Transform(rgb, KeySize, KeySize, rotate: true, xFlip: false, yFlip: true), KeySize, 2835),
+        ElgatoFamily.Original => KeyImages.Bmp(KeyImages.Transform(rgb, KeySize, KeySize, rotate: false, xFlip: true, yFlip: false), KeySize, 3780),
+        _ => KeyImages.Jpeg(rgb, KeySize, ImageHeight),
     };
+
+    /// <summary>An upright RGB image of the whole screen (Neo), as the deck wants it: turned by 180°.</summary>
+    public byte[] EncodeScreen(byte[] rgb) =>
+        KeyImages.Jpeg(KeyImages.Transform(rgb, ScreenWidth, ScreenHeight, rotate: false, xFlip: true, yFlip: true), ScreenWidth, ScreenHeight);
+
+    /// <summary>The output reports that show a JPEG on the screen (Neo).</summary>
+    public static IEnumerable<byte[]> ScreenReports(byte[] jpeg) =>
+        Gen2Packets(jpeg, 8, (header, part, last, length) =>
+        {
+            header[1] = 0x0B;
+            header[3] = last ? (byte)1 : (byte)0;
+            BinaryPrimitives.WriteUInt16LittleEndian(header[4..], (ushort)length);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[6..], (ushort)part);
+        });
+
+    /// <summary>Lights a button outside the grid (the Neo's page buttons follow its keys).</summary>
+    public byte[] ButtonColorReport(int button, byte red, byte green, byte blue) =>
+        [0x03, 0x06, (byte)(KeyCount + button), red, green, blue];
+
+    /// <summary>
+    /// Output reports for a dial's LEDs (Studio): the centre in the colour, and the first
+    /// <paramref name="level"/> share of the ring. The right ring starts half a turn further.
+    /// </summary>
+    public IEnumerable<byte[]> DialLedReports(int dial, byte red, byte green, byte blue, double level)
+    {
+        var centre = new byte[PacketSize];
+        centre[0] = 0x02;
+        centre[1] = 0x10;
+        centre[2] = (byte)dial;
+        (centre[3], centre[4], centre[5]) = (red, green, blue);
+        yield return centre;
+
+        var lit = (int)Math.Round(Math.Clamp(level, 0, 1) * DialRing);
+        var colors = new byte[DialRing * 3];
+        for (var led = 0; led < lit; led++)
+        {
+            (colors[led * 3], colors[(led * 3) + 1], colors[(led * 3) + 2]) = (red, green, blue);
+        }
+        var offset = dial == 1 ? DialRing / 2 : 0;
+        var ring = new byte[PacketSize];
+        ring[0] = 0x02;
+        ring[1] = 0x0F;
+        ring[2] = (byte)dial;
+        colors.AsSpan(offset * 3).CopyTo(ring.AsSpan(3));
+        colors.AsSpan(0, offset * 3).CopyTo(ring.AsSpan(3 + colors.Length - (offset * 3)));
+        yield return ring;
+    }
 
     /// <summary>The output reports that show an encoded image on a key.</summary>
     public IEnumerable<byte[]> ImageReports(int key, byte[] image)
@@ -156,7 +242,7 @@ public sealed record ElgatoModel(
 
     /// <summary>Fills a key with a colour without an image; null where the deck cannot (first generation).</summary>
     public byte[]? ColorReport(int key, byte red, byte green, byte blue) =>
-        Family is ElgatoFamily.Gen2 or ElgatoFamily.Plus ? [0x03, 0x06, (byte)HidKey(key), red, green, blue] : null;
+        IsGen1 ? null : [0x03, 0x06, (byte)HidKey(key), red, green, blue];
 
     /// <summary>Firmware version, read from the deck.</summary>
     public string ReadFirmware(IHidDevice hid)
@@ -181,6 +267,7 @@ public sealed record ElgatoModel(
     {
         private readonly bool[] _keys = new bool[model.KeyCount];
         private readonly bool[] _dials = new bool[model.Dials];
+        private readonly bool[] _buttons = new bool[model.Buttons];
 
         public IEnumerable<DeviceInput> Parse(byte[] report, int length)
         {
@@ -194,9 +281,10 @@ public sealed record ElgatoModel(
                 ElgatoFamily.Pedal => Keys(report, length, 4),
                 _ => report[1] switch
                 {
-                    0x00 => Keys(report, length, 4),
+                    0x00 => [.. Keys(report, length, 4), .. Buttons(report, length, 4 + model.KeyCount)],
                     0x02 when model.HasTouch => Touch(report, length),
                     0x03 when model.Dials > 0 => Dials(report, length),
+                    0x04 when model.HasNfc => Tag(report, length),
                     _ => [],
                 },
             };
@@ -219,6 +307,34 @@ public sealed record ElgatoModel(
                 }
             }
             return events;
+        }
+
+        /// <summary>Buttons outside the grid report right after the keys (Neo).</summary>
+        private List<DeviceInput> Buttons(byte[] report, int length, int offset)
+        {
+            var events = new List<DeviceInput>();
+            for (var button = 0; button < _buttons.Length && offset + button < length; button++)
+            {
+                var pressed = report[offset + button] != 0;
+                if (pressed != _buttons[button])
+                {
+                    _buttons[button] = pressed;
+                    events.Add(new ButtonInput(button, pressed));
+                }
+            }
+            return events;
+        }
+
+        /// <summary>An NFC read: length (16 bit, little endian) in bytes 2–3, the id from byte 4.</summary>
+        private static List<DeviceInput> Tag(byte[] report, int length)
+        {
+            var size = report[2] | (report[3] << 8);
+            if (size == 0 || 4 + size > length)
+            {
+                return [];
+            }
+            var id = Encoding.ASCII.GetString(report, 4, size).Trim('\0', ' ');
+            return id.Length > 0 ? [new NfcInput(id)] : [];
         }
 
         private static List<DeviceInput> Touch(byte[] report, int length)
