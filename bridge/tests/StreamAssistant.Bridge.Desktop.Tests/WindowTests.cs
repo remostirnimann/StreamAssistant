@@ -31,12 +31,15 @@ public sealed class DesktopFixture : IDisposable
     public DesktopFixture()
     {
         ConfigDir = Path.Combine(Path.GetTempPath(), "sab-desktop-" + Guid.NewGuid().ToString("N"));
-        Texts.Current = Texts.German;
-        Bridge = BridgeHost.Build(["--config-dir", ConfigDir, "--mdns", "false", "--name", "Testrechner"]);
+        // SAB_TEST_LANGUAGE=en gives English screenshots for the documentation
+        Texts.Current = English ? Texts.English : Texts.German;
+        Bridge = BridgeHost.Build(["--config-dir", ConfigDir, "--mdns", "false", "--name", English ? "Office PC" : "Testrechner"]);
         Assert.True(BridgeHost.Prepare(Bridge, virtualDecks: true));
         Window = new MainWindow(Bridge.Services) { Width = 760, Height = 900 };
         Window.Show();
     }
+
+    public static bool English => Environment.GetEnvironmentVariable("SAB_TEST_LANGUAGE") == "en";
 
     public string ConfigDir { get; }
 
@@ -100,7 +103,7 @@ public sealed class WindowTests
         using var app = new DesktopFixture();
         DesktopFixture.Flush();
 
-        Assert.Contains("noch nicht gekoppelt", app.Window.StatusText);
+        Assert.Contains(Texts.Current.NeverPaired, app.Window.StatusText);
         var pairing = app.Bridge.Services.GetRequiredService<PairingService>();
         Assert.Equal($"{pairing.Code[..3]} {pairing.Code[3..]}", app.Window.CodeText);
         Assert.NotNull(app.Find<TextBlock>("noDecks"));
@@ -136,11 +139,11 @@ public sealed class WindowTests
     public async Task Key_images_brightness_and_presses()
     {
         using var app = new DesktopFixture();
-        var deck = app.Decks.Add("Küche", 5, 3);
+        var deck = app.Decks.Add(DesktopFixture.English ? "Kitchen" : "Küche", 5, 3);
         DesktopFixture.Flush();
         var view = Assert.Single(app.Window.DeckViews);
 
-        string[] labels = ["Licht", "Rollo", "Szene", "Musik", "Heizung"];
+        string[] labels = DesktopFixture.English ? ["Light", "Blinds", "Scene", "Music", "Heating"] : ["Licht", "Rollo", "Szene", "Musik", "Heizung"];
         string[] colors = ["#f2b134", "#2b2b2b", "#2f6fb0", "#1e4d3a", "#8a3b2b"];
         for (var key = 0; key < 15; key++)
         {
@@ -222,7 +225,7 @@ public sealed class WindowTests
         var view = Assert.Single(app.Window.DeckViews);
         Assert.Equal(800, deck.Info.Capabilities.Touch!.Width);
 
-        string[] labels = ["Licht", "Lautst.", "Rollo", "Heizung"];
+        string[] labels = DesktopFixture.English ? ["Light", "Volume", "Blinds", "Heating"] : ["Licht", "Lautst.", "Rollo", "Heizung"];
         for (var key = 0; key < 8; key++)
         {
             await deck.SetKeyImageAsync(key, "jpeg", KeyImage(labels[key % 4], "#2b2b2b"), CancellationToken.None);

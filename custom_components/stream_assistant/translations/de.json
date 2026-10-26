@@ -48,7 +48,7 @@
         },
         "data_description": {
           "name": "Name des Geräts, z. B. «Küche Tablet».",
-          "cols": "Tasten pro Zeile (1–12).",
+          "cols": "Tasten pro Zeile (1–16).",
           "rows": "Anzahl Zeilen (1–8)."
         }
       },

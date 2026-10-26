@@ -8,6 +8,12 @@ the same version. Versions before 0.8.0b1 were not released.
 ## [Unreleased]
 
 ### Added
+- User documentation in `docs/`: installation, setup, the bridge (download, start, pairing,
+  autostart), devices with their test status, virtual and simulated panels, the key editor,
+  automations and troubleshooting, with screenshots. `docs/images/README.md` lists every
+  image, the ones still to take on a real Home Assistant or hardware, and how to make the
+  others again (`scripts/docs_demo.py`, `scripts/docs-pages/`, English desktop screenshots
+  with `SAB_TEST_LANGUAGE=en`).
 - Bridge: USB drivers for the Stream Deck Neo and Studio (not yet tried on real hardware):
   - Neo: the two page buttons turn to the previous and next page and are lit when there is
     one; the info screen shows the page name and its number. Event entities per page button.
@@ -67,6 +73,9 @@ the same version. Versions before 0.8.0b1 were not released.
 - Line endings are LF everywhere (`.gitattributes`).
 
 ### Fixed
+- Up to 16 columns everywhere: the virtual panel form still said 1–12, the template dialog
+  allowed 12 columns and no dials, and virtual decks in the bridge window allowed 12 columns.
+- Key editor: the title of a dial's form no longer breaks over two lines.
 - A key that switches the page no longer runs the key at its place on the new page when it
   is released.
 - The pairing connection to a bridge left a heartbeat timer running.
