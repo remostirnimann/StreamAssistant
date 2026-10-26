@@ -203,9 +203,15 @@ class BridgeHub:
     # Devices
 
     async def _async_add_device(self, found: BridgeDevice, *, announce: bool) -> StreamAssistantDevice | None:
-        if found.cols < 1 or found.rows < 1 or found.key_size < 1 or "jpeg" not in found.formats:
+        image_keys = found.key_size > 0 and "jpeg" in found.formats
+        # Keys without any display (pedals) only press
+        input_only = found.key_size == 0 and not found.colors
+        if found.cols < 1 or found.rows < 1 or not (image_keys or input_only):
             _LOGGER.warning(
-                "%s: %s (%s) has no JPEG image keys, not supported yet", self.entry.title, found.name, found.id
+                "%s: %s (%s) has keys this version cannot drive (colour-only keys), not supported yet",
+                self.entry.title,
+                found.name,
+                found.id,
             )
             return None
         assert self.hub_device_id

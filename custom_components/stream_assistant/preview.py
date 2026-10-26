@@ -12,6 +12,8 @@ from .display import page_dial_visual, page_key_visual
 from .render import KeyVisual, render_key, render_preview, render_segment
 
 CACHE_SIZE = 256
+# Editor previews of keys without a display (pedals)
+PREVIEW_KEY_SIZE = 96
 
 
 class RenderCache:
@@ -30,7 +32,7 @@ class RenderCache:
             self._cache.move_to_end(cache_key)
             return jpeg
         if upright:
-            jpeg = await self.hass.async_add_executor_job(render_preview, model.key_size, visual)
+            jpeg = await self.hass.async_add_executor_job(render_preview, model.key_size or PREVIEW_KEY_SIZE, visual)
         else:
             jpeg = await self.hass.async_add_executor_job(render_key, model, visual)
         self._cache[cache_key] = jpeg

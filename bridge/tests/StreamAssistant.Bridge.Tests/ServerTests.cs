@@ -107,6 +107,29 @@ public sealed class ServerTests
     }
 
     [Fact]
+    public async Task Keys_without_display_only_report_presses()
+    {
+        await using var bridge = new TestBridge();
+        var pedal = StubDevice.Create("pedal", new DeviceCapabilities(KeyGrid.Pedals(3, 1), Brightness: false));
+        bridge.Services.GetRequiredService<DeviceManager>().Add(pedal);
+        var (client, _) = await bridge.PairAsync();
+        await using var _ = client;
+        foreach (var command in new[]
+        {
+            new JsonObject { ["type"] = "set_key_color", ["device"] = "pedal", ["key"] = 0, ["color"] = "#ffffff" },
+            new JsonObject { ["type"] = "clear_key", ["device"] = "pedal", ["key"] = 0 },
+        })
+        {
+            var refused = await Command(client, command);
+            Assert.Equal("unsupported", (string?)refused["error"]!["code"]);
+            Assert.Contains("no display", (string?)refused["error"]!["message"]);
+        }
+        await client.SendBinaryAsync(new JsonObject { ["type"] = "set_key_image", ["device"] = "pedal", ["key"] = 0, ["format"] = "png", ["id"] = 1 }, [1]);
+        Assert.Contains("no display", (string?)(await client.ReceiveAsync())["error"]!["message"]);
+        Assert.Empty(pedal.Calls);
+    }
+
+    [Fact]
     public async Task Malformed_messages()
     {
         await using var bridge = new TestBridge();
@@ -192,11 +215,11 @@ public sealed class ServerTests
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["simulate"] = "5x3, 8x4:2, plus",
+            ["simulate"] = "5x3, 8x4:2, plus, Pedal",
             ["port"] = "6000",
         }).Build();
         var options = BridgeOptions.From(config);
-        Assert.Equal([new SimulatedDeck(5, 3), new SimulatedDeck(8, 4, 2), new SimulatedDeck(4, 2, 4, 120)], options.Simulate);
+        Assert.Equal([new SimulatedDeck(5, 3), new SimulatedDeck(8, 4, 2), new SimulatedDeck(4, 2, 4, 120), new SimulatedDeck(3, 1, KeySize: 0)], options.Simulate);
         Assert.Equal(6000, options.Port);
         Assert.True(options.Mdns);
         Assert.EndsWith("stream-assistant-bridge", options.ConfigDir);

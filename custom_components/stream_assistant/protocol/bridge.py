@@ -78,6 +78,8 @@ class BridgeDevice:
     key_size: int
     formats: tuple[str, ...]
     brightness: bool
+    # Colour-only keys (LED pads); keys without image and colours have no display (pedals)
+    colors: bool = False
     dials: int = 0
     dial_press: bool = False
     touch_width: int = 0
@@ -104,6 +106,7 @@ class BridgeDevice:
             key_size=int(min(image.get("width") or 0, image.get("height") or 0)),
             formats=tuple(image.get("formats") or ()),
             brightness=bool(caps.get("brightness")),
+            colors=bool(keys.get("colors")),
             dials=int(dials.get("count") or 0),
             dial_press=bool(dials.get("press")),
             touch_width=int(touch.get("width") or 0),
@@ -129,6 +132,11 @@ class BridgeDevice:
                 "brightness": self.brightness,
             },
         }
+        keys = data["capabilities"]["keys"]
+        if not self.key_size:
+            del keys["image"]
+        if self.colors:
+            keys["colors"] = True
         if self.dials:
             data["capabilities"]["dials"] = {"count": self.dials, "press": self.dial_press}
         if self.touch_width and self.touch_height:

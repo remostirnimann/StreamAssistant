@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using StbImageSharp;
 using StbImageWriteSharp;
@@ -6,13 +7,17 @@ using WriteComponents = StbImageWriteSharp.ColorComponents;
 
 namespace StreamAssistant.Bridge.Devices.Elgato;
 
-/// <summary>Turns the client's upright images into what a Gen2 deck shows: JPEG, key size, turned by 180°.</summary>
+/// <summary>
+/// Image work for Stream Decks: the client sends upright JPEG or PNG; decks want
+/// them scaled, flipped or turned, as JPEG or BMP. Pixels are RGB, row by row.
+/// </summary>
 public static class KeyImages
 {
     private const int Quality = 90;
+    private const int BmpHeader = 54;
 
-    /// <summary>Decode any JPEG or PNG; scale it to the key and turn it.</summary>
-    public static byte[] ForKey(ReadOnlyMemory<byte> image, int size)
+    /// <summary>Decode a JPEG or PNG and scale it to <paramref name="width"/> × <paramref name="height"/>.</summary>
+    public static byte[] Decode(ReadOnlyMemory<byte> image, int width, int height)
     {
         ImageResult decoded;
         try
@@ -23,61 +28,103 @@ public static class KeyImages
         {
             throw new DeviceException("invalid_message", $"Unreadable image: {err.Message}");
         }
-        var pixels = Scale(decoded.Data, decoded.Width, decoded.Height, size);
-        return Encode(Turn(pixels), size);
+        return Scale(decoded.Data, decoded.Width, decoded.Height, width, height);
     }
 
-    /// <summary>A key in one colour, <paramref name="color"/> as #rrggbb.</summary>
-    public static byte[] Solid(string color, int size)
+    /// <summary>An area in one colour, <paramref name="color"/> as #rrggbb.</summary>
+    public static byte[] Solid(string color, int width, int height)
     {
-        var rgb = int.Parse(color.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
-        var pixels = new byte[size * size * 3];
+        var (red, green, blue) = Rgb(color);
+        var pixels = new byte[width * height * 3];
         for (var i = 0; i < pixels.Length; i += 3)
         {
-            pixels[i] = (byte)(rgb >> 16);
-            pixels[i + 1] = (byte)(rgb >> 8);
-            pixels[i + 2] = (byte)rgb;
+            pixels[i] = red;
+            pixels[i + 1] = green;
+            pixels[i + 2] = blue;
         }
-        return Encode(pixels, size);
+        return pixels;
+    }
+
+    public static (byte Red, byte Green, byte Blue) Rgb(string color)
+    {
+        var rgb = int.Parse(color.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        return ((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+    }
+
+    /// <summary>
+    /// Mirror and/or turn a square image, as the reference implementation does:
+    /// target (x, y) takes the source pixel after the flips, with x and y swapped when turning.
+    /// Both flips together turn the image by 180°.
+    /// </summary>
+    public static byte[] Transform(byte[] pixels, int size, bool rotate, bool xFlip, bool yFlip)
+    {
+        var result = new byte[pixels.Length];
+        for (var y = 0; y < size; y++)
+        {
+            for (var x = 0; x < size; x++)
+            {
+                var sx = xFlip ? size - x - 1 : x;
+                var sy = yFlip ? size - y - 1 : y;
+                if (rotate)
+                {
+                    (sx, sy) = (sy, sx);
+                }
+                Array.Copy(pixels, ((sy * size) + sx) * 3, result, ((y * size) + x) * 3, 3);
+            }
+        }
+        return result;
+    }
+
+    public static byte[] Jpeg(byte[] pixels, int width, int height)
+    {
+        using var output = new MemoryStream();
+        new ImageWriter().WriteJpg(pixels, width, height, WriteComponents.RedGreenBlue, output, Quality);
+        return output.ToArray();
+    }
+
+    /// <summary>24-bit BMP with the rows in the given order (as the first-generation decks expect), BGR.</summary>
+    public static byte[] Bmp(byte[] pixels, int size, int pixelsPerMeter)
+    {
+        var data = new byte[BmpHeader + pixels.Length];
+        var span = data.AsSpan();
+        span[0] = (byte)'B';
+        span[1] = (byte)'M';
+        BinaryPrimitives.WriteUInt32LittleEndian(span[2..], (uint)data.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(span[10..], BmpHeader);
+        BinaryPrimitives.WriteUInt32LittleEndian(span[14..], 40);
+        BinaryPrimitives.WriteInt32LittleEndian(span[18..], size);
+        BinaryPrimitives.WriteInt32LittleEndian(span[22..], size);
+        BinaryPrimitives.WriteInt16LittleEndian(span[26..], 1);
+        BinaryPrimitives.WriteInt16LittleEndian(span[28..], 24);
+        BinaryPrimitives.WriteInt32LittleEndian(span[34..], pixels.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(span[38..], pixelsPerMeter);
+        BinaryPrimitives.WriteInt32LittleEndian(span[42..], pixelsPerMeter);
+        for (var i = 0; i < pixels.Length; i += 3)
+        {
+            data[BmpHeader + i] = pixels[i + 2];
+            data[BmpHeader + i + 1] = pixels[i + 1];
+            data[BmpHeader + i + 2] = pixels[i];
+        }
+        return data;
     }
 
     /// <summary>Nearest neighbour; the client normally sends the right size already.</summary>
-    private static byte[] Scale(byte[] pixels, int width, int height, int size)
+    private static byte[] Scale(byte[] pixels, int width, int height, int toWidth, int toHeight)
     {
-        if (width == size && height == size)
+        if (width == toWidth && height == toHeight)
         {
             return pixels;
         }
-        var scaled = new byte[size * size * 3];
-        for (var y = 0; y < size; y++)
+        var scaled = new byte[toWidth * toHeight * 3];
+        for (var y = 0; y < toHeight; y++)
         {
-            var sy = y * height / size;
-            for (var x = 0; x < size; x++)
+            var sy = y * height / toHeight;
+            for (var x = 0; x < toWidth; x++)
             {
-                var sx = x * width / size;
-                Array.Copy(pixels, ((sy * width) + sx) * 3, scaled, ((y * size) + x) * 3, 3);
+                var sx = x * width / toWidth;
+                Array.Copy(pixels, ((sy * width) + sx) * 3, scaled, ((y * toWidth) + x) * 3, 3);
             }
         }
         return scaled;
-    }
-
-    /// <summary>180°: the pixel order reversed.</summary>
-    private static byte[] Turn(byte[] pixels)
-    {
-        var turned = new byte[pixels.Length];
-        for (int from = 0, to = pixels.Length - 3; from < pixels.Length; from += 3, to -= 3)
-        {
-            turned[to] = pixels[from];
-            turned[to + 1] = pixels[from + 1];
-            turned[to + 2] = pixels[from + 2];
-        }
-        return turned;
-    }
-
-    private static byte[] Encode(byte[] pixels, int size)
-    {
-        using var output = new MemoryStream();
-        new ImageWriter().WriteJpg(pixels, size, size, WriteComponents.RedGreenBlue, output, Quality);
-        return output.ToArray();
     }
 }

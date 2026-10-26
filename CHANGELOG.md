@@ -8,6 +8,18 @@ the same version. Versions before 0.8.0b1 were not released.
 ## [Unreleased]
 
 ### Added
+- Bridge: USB drivers for more Stream Decks, following the reference implementation
+  node-elgato-stream-deck (not yet tried on real hardware):
+  - Stream Deck +: keys, four dials (turn and push) and the touch strip (images per area;
+    tap, hold and swipe).
+  - Stream Deck Mini and 6 Module, and the first Stream Deck: BMP images, first-generation
+    reports, the first Stream Deck's keys counted from the right.
+  - Stream Deck Pedal: three keys without display.
+  - The 15 and 32 key modules (like the MK.2 and XL).
+  - Colours fill keys with one small report on decks that can, instead of an image.
+- Keys without a display (pedals) in the protocol and the integration: they only press,
+  get no images and no brightness entity, and pressing never only wakes the deck.
+  `--simulate pedal` simulates one.
 - Dials and touch strips (the groundwork for the Stream Deck +):
   - Every page has dials next to its keys. A dial shows its part of the touch strip (icon,
     title, state and a level bar for brightness, volume, position, temperature or values)

@@ -1,10 +1,11 @@
 namespace StreamAssistant.Bridge.Devices.Elgato;
 
 /// <summary>
-/// One Gen2 Stream Deck on USB. Calls only queue work: a writer task sends
-/// control reports in order and the newest image per key, a reader thread
-/// turns input reports into key events. A USB error marks the deck failed;
-/// <see cref="ElgatoWatcher"/> then removes it and opens it again when it is back.
+/// One Stream Deck on USB (any <see cref="ElgatoFamily"/>). Calls only queue work:
+/// a writer task sends control reports in order and the newest image per key or
+/// touch area, a reader thread turns input reports into events. A USB error marks
+/// the deck failed; <see cref="ElgatoWatcher"/> then removes it and opens it again
+/// when it is back.
 /// </summary>
 public sealed class ElgatoDeck : IControlDevice, IDisposable
 {
@@ -17,7 +18,8 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
     private readonly ILogger _logger;
     private readonly Lock _lock = new();
     private readonly Queue<byte[]> _features = new();
-    private readonly Dictionary<int, byte[]> _images = [];
+    // Newest reports per key (Key >= 0) or touch area (Key -1), in the order they came
+    private readonly List<Pending> _images = [];
     private readonly SemaphoreSlim _signal = new(0);
     private readonly CancellationTokenSource _stop = new();
     private readonly TaskCompletionSource _idle = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -26,6 +28,15 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
     private int _brightness = 100;
     private volatile bool _failed;
     private volatile bool _closing;
+
+    /// <summary>Reports for one key or area; colour fills are feature reports.</summary>
+    private sealed record Pending(Slot Slot, IReadOnlyList<byte[]> Reports, bool Feature);
+
+    private readonly record struct Slot(int Key, int X = 0, int Y = 0, int Width = 0, int Height = 0)
+    {
+        public bool Covers(Slot other) =>
+            Key < 0 && other.Key < 0 && X <= other.X && Y <= other.Y && X + Width >= other.X + other.Width && Y + Height >= other.Y + other.Height;
+    }
 
     private ElgatoDeck(IHidDevice hid, ElgatoModel model, DeviceInfo info, TimeProvider time, ILogger logger)
     {
@@ -48,8 +59,8 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
     /// <summary>Read firmware and serial from an opened deck and start its reader and writer.</summary>
     public static ElgatoDeck Start(IHidDevice hid, ElgatoModel model, string? usbSerial, TimeProvider time, ILogger logger)
     {
-        var serial = string.IsNullOrWhiteSpace(usbSerial) ? ElgatoModel.ParseSerial(hid.GetFeature(ElgatoModel.SerialReport)) : usbSerial.Trim();
-        var firmware = ElgatoModel.ParseFirmware(hid.GetFeature(ElgatoModel.FirmwareReport));
+        var serial = string.IsNullOrWhiteSpace(usbSerial) ? model.ReadSerial(hid) : usbSerial.Trim();
+        var firmware = model.ReadFirmware(hid);
         if (serial.Length == 0)
         {
             throw new IOException("The deck reports no serial number");
@@ -62,7 +73,7 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
             Serial: serial,
             Firmware: firmware.Length > 0 ? firmware : null,
             Virtual: false,
-            Capabilities: new DeviceCapabilities(KeyGrid.Images(model.Cols, model.Rows, model.KeySize, "jpeg", "png"), Brightness: true));
+            Capabilities: model.Capabilities());
         var deck = new ElgatoDeck(hid, model, info, time, logger);
         deck._writer = Task.Run(deck.WriteLoopAsync);
         deck._reader = new Thread(deck.ReadLoop) { IsBackground = true, Name = $"{info.Id} input" };
@@ -72,41 +83,65 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
 
     public Task SetBrightnessAsync(int percent, CancellationToken cancellationToken)
     {
+        NeedDisplay();
         _brightness = Math.Clamp(percent, 0, 100);
-        Queue(ElgatoModel.BrightnessReport(_brightness));
+        Queue(_model.BrightnessReport(_brightness));
         return Task.CompletedTask;
     }
 
     public Task SetKeyImageAsync(int key, string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken)
     {
+        NeedDisplay();
+        CheckKey(key);
         // Converted here, so a broken image is reported to the client
-        QueueImage(key, KeyImages.ForKey(image, _model.KeySize));
+        var encoded = _model.EncodeKey(KeyImages.Decode(image, _model.KeySize, _model.KeySize));
+        QueueImage(new Slot(key), _model.ImageReports(key, encoded).ToList());
         return Task.CompletedTask;
     }
 
     public Task SetKeyColorAsync(int key, string color, CancellationToken cancellationToken)
     {
-        QueueImage(key, KeyImages.Solid(color, _model.KeySize));
+        NeedDisplay();
+        CheckKey(key);
+        var (red, green, blue) = KeyImages.Rgb(color);
+        // Newer decks fill a key with one small feature report; the first generation needs an image
+        if (_model.ColorReport(key, red, green, blue) is { } fill)
+        {
+            QueueImage(new Slot(key), [fill], feature: true);
+        }
+        else
+        {
+            QueueImage(new Slot(key), _model.ImageReports(key, _model.EncodeKey(KeyImages.Solid(color, _model.KeySize, _model.KeySize))).ToList());
+        }
         return Task.CompletedTask;
     }
 
-    public Task SetTouchImageAsync(int x, int y, int width, int height, string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken) =>
-        throw new DeviceException("unsupported", $"{Info.Name} has no touch display");
+    public Task ClearKeyAsync(int key, CancellationToken cancellationToken) => SetKeyColorAsync(key, "#000000", cancellationToken);
 
-    public Task ClearKeyAsync(int key, CancellationToken cancellationToken)
+    public Task SetTouchImageAsync(int x, int y, int width, int height, string format, ReadOnlyMemory<byte> image, CancellationToken cancellationToken)
     {
-        QueueImage(key, KeyImages.Solid("#000000", _model.KeySize));
+        if (!_model.HasTouch)
+        {
+            throw new DeviceException("unsupported", $"{Info.Name} has no touch display");
+        }
+        var jpeg = KeyImages.Jpeg(KeyImages.Decode(image, width, height), width, height);
+        QueueImage(new Slot(-1, x, y, width, height), ElgatoModel.TouchReports(x, y, width, height, jpeg).ToList());
         return Task.CompletedTask;
     }
 
     public Task ResetAsync(CancellationToken cancellationToken)
     {
         CheckAlive();
+        if (!_model.HasDisplay)
+        {
+            // The Pedal has nothing to show
+            return Task.CompletedTask;
+        }
         lock (_lock)
         {
             // The logo replaces everything still waiting
             _images.Clear();
-            _features.Enqueue(ElgatoModel.ResetReport());
+            _features.Enqueue(_model.ResetReport());
         }
         _signal.Release();
         return Task.CompletedTask;
@@ -115,7 +150,10 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
     public Task IdentifyAsync(CancellationToken cancellationToken)
     {
         CheckAlive();
-        _ = BlinkAsync();
+        if (_model.HasDisplay)
+        {
+            _ = BlinkAsync();
+        }
         return Task.CompletedTask;
     }
 
@@ -146,16 +184,30 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
         _writer.Wait(CloseTimeout);
     }
 
-    private void QueueImage(int key, byte[] jpeg)
+    private void NeedDisplay()
     {
-        CheckAlive();
+        if (!_model.HasDisplay)
+        {
+            throw new DeviceException("unsupported", $"{Info.Name} has no display");
+        }
+    }
+
+    private void CheckKey(int key)
+    {
         if (key < 0 || key >= _model.KeyCount)
         {
             throw new DeviceException("invalid_message", $"Key {key} does not exist");
         }
+    }
+
+    /// <summary>Replace what waits for this key or area (and touch areas it covers); feature reports go out as such.</summary>
+    private void QueueImage(Slot slot, IReadOnlyList<byte[]> reports, bool feature = false)
+    {
+        CheckAlive();
         lock (_lock)
         {
-            _images[key] = jpeg;
+            _images.RemoveAll(pending => pending.Slot == slot || slot.Covers(pending.Slot));
+            _images.Add(new Pending(slot, reports, feature));
         }
         _signal.Release();
     }
@@ -184,9 +236,9 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
         {
             for (var i = 0; i < 3; i++)
             {
-                Queue(ElgatoModel.BrightnessReport(0));
+                Queue(_model.BrightnessReport(0));
                 await Task.Delay(BlinkStep, _time, _stop.Token);
-                Queue(ElgatoModel.BrightnessReport(_brightness));
+                Queue(_model.BrightnessReport(_brightness));
                 await Task.Delay(BlinkStep, _time, _stop.Token);
             }
         }
@@ -224,7 +276,7 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
         _idle.TrySetResult();
     }
 
-    /// <summary>Control reports first (in order), then one pending image.</summary>
+    /// <summary>Control reports first (in order), then the oldest pending image.</summary>
     private bool TakeWork(out Action work)
     {
         lock (_lock)
@@ -234,14 +286,22 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
                 work = () => _hid.SetFeature(feature);
                 return true;
             }
-            foreach (var (key, jpeg) in _images)
+            if (_images.Count > 0)
             {
-                _images.Remove(key);
+                var pending = _images[0];
+                _images.RemoveAt(0);
                 work = () =>
                 {
-                    foreach (var report in ElgatoModel.ImageReports(key, jpeg))
+                    foreach (var report in pending.Reports)
                     {
-                        _hid.Write(report);
+                        if (pending.Feature)
+                        {
+                            _hid.SetFeature(report);
+                        }
+                        else
+                        {
+                            _hid.Write(report);
+                        }
                     }
                 };
                 return true;
@@ -254,23 +314,15 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
     private void ReadLoop()
     {
         var buffer = new byte[Math.Max(_hid.InputReportLength, 512)];
-        var pressed = new bool[_model.KeyCount];
+        var parser = new ElgatoModel.InputParser(_model);
         try
         {
             while (!_stop.IsCancellationRequested)
             {
                 var length = _hid.Read(buffer);
-                if (_model.ParseKeys(buffer, length) is not { } keys)
+                foreach (var input in parser.Parse(buffer, length))
                 {
-                    continue;
-                }
-                for (var key = 0; key < keys.Length; key++)
-                {
-                    if (keys[key] != pressed[key])
-                    {
-                        pressed[key] = keys[key];
-                        Input?.Invoke(this, new KeyInput(key, keys[key]));
-                    }
+                    Input?.Invoke(this, input);
                 }
             }
         }

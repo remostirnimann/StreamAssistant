@@ -11,12 +11,16 @@ public sealed record SimulatedDeck(int Cols, int Rows, int Dials = 0, int KeySiz
     public const int SegmentWidth = 200;
     public const int StripHeight = 100;
 
-    /// <summary>"5x3", "4x2:4" (with 4 dials) or "plus" (like a Stream Deck +).</summary>
+    /// <summary>"5x3", "4x2:4" (with 4 dials), "plus" (like a Stream Deck +) or "pedal" (3 keys without display).</summary>
     public static SimulatedDeck Parse(string text)
     {
         if (text.Equals("plus", StringComparison.OrdinalIgnoreCase))
         {
             return new SimulatedDeck(4, 2, 4, 120);
+        }
+        if (text.Equals("pedal", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SimulatedDeck(3, 1, KeySize: 0);
         }
         var parts = text.Split(':');
         var size = parts[0].Split('x');
@@ -35,7 +39,7 @@ public sealed record BridgeOptions(int Port, string ConfigDir, string? Name, IRe
 {
     public const int DefaultPort = 5390;
 
-    // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,4x2:4,plus --mdns false --usb false
+    // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,4x2:4,plus,pedal --mdns false --usb false
     public static BridgeOptions From(IConfiguration config)
     {
         var simulate = (config["simulate"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

@@ -38,7 +38,11 @@ public sealed class Simulator
                 Serial: id,
                 Firmware: BridgeServer.Version,
                 Virtual: true,
-                Capabilities: new DeviceCapabilities(KeyGrid.Images(deck.Cols, deck.Rows, deck.KeySize), Brightness: true, dials, touch));
+                Capabilities: new DeviceCapabilities(
+                    deck.KeySize > 0 ? KeyGrid.Images(deck.Cols, deck.Rows, deck.KeySize) : KeyGrid.Pedals(deck.Cols, deck.Rows),
+                    Brightness: deck.KeySize > 0,
+                    dials,
+                    touch));
             var device = new VirtualDevice(info);
             device.Changed += (d, key) => Publish(key is { } k ? KeyJson(d, k) : DeviceJson(d));
             device.TouchChanged += (d, image) => Publish(new JsonObject { ["type"] = "touch", ["device"] = d.Info.Id, ["image"] = TouchJson(image) });

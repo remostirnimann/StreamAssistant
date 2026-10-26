@@ -32,7 +32,7 @@ decks are stored in `bridge.json`.
 
 ```text
 stream-assistant-bridge [--port 5390] [--name "Office PC"] [--config-dir <dir>]
-                        [--simulate 5x3[,4x2:4,plus...]] [--mdns false] [--usb false]
+                        [--simulate 5x3[,4x2:4,plus,pedal...]] [--mdns false] [--usb false]
                         [--unpair-all]
 ```
 
@@ -41,7 +41,8 @@ stream-assistant-bridge [--port 5390] [--name "Office PC"] [--config-dir <dir>]
   code when adding it.
 - `--simulate 5x3` adds a simulated deck; `http://localhost:5390/sim` shows
   it, presses keys (hold for a long press) and plugs it in and out. `4x2:4`
-  adds 4 dials with a touch strip, `plus` is shaped like a Stream Deck +.
+  adds 4 dials with a touch strip, `plus` is shaped like a Stream Deck +,
+  `pedal` like a Stream Deck Pedal (3 keys without display).
 - Settings (bridge id, paired clients) live in `bridge.json` in the config
   folder (default: `%APPDATA%\stream-assistant-bridge` on Windows,
   `~/.config/stream-assistant-bridge` elsewhere). Only one bridge can use a folder.
@@ -50,8 +51,12 @@ stream-assistant-bridge [--port 5390] [--name "Office PC"] [--config-dir <dir>]
 
 ## Stream Decks on USB
 
-Supported: Stream Deck MK.2, Original v2 and XL. Plug them in at any time; they
-appear in Home Assistant as `elgato-<serial>`. The Elgato Stream Deck app must
+Supported: Stream Deck MK.2, Original v2, XL, + (keys, dials, touch strip),
+Mini, the first Stream Deck, the Pedal and the 6, 15 and 32 key modules. Plug
+them in at any time; they appear in Home Assistant as `elgato-<serial>`. Only
+the MK.2 has been tried on real hardware so far; the others follow the
+reference implementation (node-elgato-stream-deck). The Neo and the Studio are
+not supported yet. The Elgato Stream Deck app must
 not run at the same time (only one program can drive a deck). When a deck cannot
 be opened, the bridge keeps trying and picks it up once it is free.
 

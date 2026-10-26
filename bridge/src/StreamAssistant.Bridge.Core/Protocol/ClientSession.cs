@@ -264,7 +264,7 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
                     var grid = Keys(device);
                     if (!grid.HasImages)
                     {
-                        throw new ProtocolError("unsupported", "The keys of this device only show colours");
+                        throw new ProtocolError("unsupported", grid.InputOnly ? "The keys of this device have no display" : "The keys of this device only show colours");
                     }
                     var key = Range(command, "key", 0, grid.Count - 1);
                     var format = Str(command, "format");
@@ -300,7 +300,7 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
             case "set_key_color":
                 {
                     var device = Device(command);
-                    var key = Range(command, "key", 0, Keys(device).Count - 1);
+                    var key = Range(command, "key", 0, Display(device).Count - 1);
                     var color = Str(command, "color");
                     if (color is null || !ColorPattern().IsMatch(color))
                     {
@@ -311,7 +311,7 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
             case "clear_key":
                 {
                     var device = Device(command);
-                    return device.ClearKeyAsync(Range(command, "key", 0, Keys(device).Count - 1), cancellationToken);
+                    return device.ClearKeyAsync(Range(command, "key", 0, Display(device).Count - 1), cancellationToken);
                 }
             case "reset":
                 return Device(command).ResetAsync(cancellationToken);
@@ -330,6 +330,13 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
 
     private static KeyGrid Keys(IControlDevice device) =>
         device.Info.Capabilities.Keys ?? throw new ProtocolError("unsupported", "The device has no keys");
+
+    /// <summary>Keys that show something (image or colour).</summary>
+    private static KeyGrid Display(IControlDevice device)
+    {
+        var grid = Keys(device);
+        return grid.InputOnly ? throw new ProtocolError("unsupported", "The keys of this device have no display") : grid;
+    }
 
     private static int Range(JsonObject command, string field, int min, int max)
     {
