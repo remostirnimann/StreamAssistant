@@ -1,6 +1,9 @@
 # Key editor
 
 The key editor is in the Home Assistant sidebar: **Stream Assistant** (administrators only).
+
+<!-- TODO image: images/ha-sidebar.png – the sidebar with the Stream Assistant entry (list: docs/images/README.md) -->
+
 At the top you choose a **device** (a deck or virtual panel) or a **template**. Two views:
 
 - **Keys:** pages, keys, dials and what they do.

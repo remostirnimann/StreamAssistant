@@ -33,6 +33,10 @@ Home Assistant or with real hardware.
 
 ## Still to take
 
+Every place in the documentation that still needs one of these images has a hidden marker
+(an HTML comment, not shown on GitHub). Search the repository for **`TODO image`** to find
+them all; replace the marker with the image once it exists.
+
 Screenshots of Home Assistant itself (its dialogs cannot be shown without a running
 Home Assistant) and photos of real hardware. Take Home Assistant screenshots in English,
 light theme, about 1280 px wide; crop to the dialog.

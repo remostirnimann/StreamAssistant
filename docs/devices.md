@@ -15,6 +15,9 @@ device.
 
 ## Elgato Stream Decks
 
+<!-- TODO image: images/photo-dock-mk2.jpg – photo: Network Dock with a Stream Deck MK.2 showing a layout (list: docs/images/README.md) -->
+<!-- TODO image: images/photo-<model>.jpg – photos of the other models once they are tested (list: docs/images/README.md) -->
+
 | Model | Keys | Extras | Network Dock | Bridge (USB) |
 |---|---|---|---|---|
 | Stream Deck MK.2 (also *Scissor* keys) | 15 (5×3), 72 px | – | ✅ Tested (dock firmware 1.01.013) | 🧪 Untested |

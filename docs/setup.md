@@ -11,6 +11,8 @@ what to add:
 | **Virtual panel** | A deck that only exists in Home Assistant, shown on a dashboard |
 | **Only plan** | No hardware yet: enables the key editor to plan templates |
 
+<!-- TODO image: images/ha-add-menu.png – the Add integration menu of Stream Assistant (list: docs/images/README.md) -->
+
 You can add as many docks, bridges and virtual panels as you like; each is its own
 entry. Then design the keys in the [key editor](editor.md) (sidebar: *Stream Assistant*).
 
@@ -25,6 +27,8 @@ optionally powered over PoE).
 3. Home Assistant usually finds the dock on its own: *Settings → Devices & services*
    shows **Discovered: Stream Deck Network Dock**. Choose *Add* and confirm.
    Otherwise choose *Stream Deck Network Dock* in the menu and enter the dock's IP address.
+
+   <!-- TODO image: images/ha-discovered.png – Devices & services with the discovered dock or bridge (list: docs/images/README.md) -->
 
 The dock is identified by its serial number. When it gets a new IP address,
 Home Assistant follows it (mDNS and DHCP), so you do not need a fixed address.
@@ -41,6 +45,8 @@ You get one device for the dock and one for the Stream Deck.
    or on `http://localhost:5390` on that computer). The code is shown only on the
    computer itself, so nobody else on the network can pair.
 
+   <!-- TODO image: images/ha-bridge-pairing.png – the pairing step asking for the 6-digit code (list: docs/images/README.md) -->
+
 You get one device for the bridge and one per deck on it. Decks appear and disappear
 with USB plugging; once seen, a deck keeps its entities and layout while it is unplugged.
 If the bridge forgets the pairing (for example after `--unpair-all`), Home Assistant asks
@@ -52,6 +58,9 @@ A virtual panel has no hardware: it is shown and pressed on a dashboard, for exa
 a wall tablet or a phone.
 
 1. Choose *Virtual panel*, enter a name and the grid: 1–16 columns, 1–8 rows.
+
+   <!-- TODO image: images/ha-virtual-panel-form.png – the virtual panel form (name, columns, rows) (list: docs/images/README.md) -->
+
 2. Add the card to a dashboard: *Edit dashboard → Add card →* **Stream Assistant panel**,
    and choose the panel. Options: gap between keys, show the title.
 
@@ -69,6 +78,8 @@ real decks are set up; templates are not deleted with it.
 ## What you get in Home Assistant
 
 Per deck (the names follow the device; you can rename them):
+
+<!-- TODO image: images/ha-device-page.png – a deck's device page with its entities (list: docs/images/README.md) -->
 
 | Entity | What it does |
 |---|---|

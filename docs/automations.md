@@ -40,6 +40,8 @@ actions:
       entity_id: scene.movie_night
 ```
 
+<!-- TODO image: images/ha-automation-event.png – optional: automation editor with a state trigger on a key's event entity (list: docs/images/README.md) -->
+
 A dial turned to the right, as many times as it was turned:
 
 ```yaml

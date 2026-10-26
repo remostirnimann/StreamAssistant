@@ -22,6 +22,10 @@ A virtual panel needs no bridge and no hardware.
 
 ![A virtual panel on a dashboard](images/card-virtual-panel.png)
 
+<!-- TODO image: images/ha-card-picker.png – Add card dialog with the Stream Assistant panel card and its editor (list: docs/images/README.md) -->
+
+<!-- TODO image: images/photo-wall-tablet.jpg – photo, optional: a wall tablet showing a virtual panel (list: docs/images/README.md) -->
+
 In YAML:
 
 ```yaml

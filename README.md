@@ -1,10 +1,14 @@
 # Stream Assistant
 
+<!-- TODO image: docs/images/logo.png – logo (list: docs/images/README.md) -->
+
 Home Assistant integration that drives **Elgato Stream Decks** directly, with all
 configuration in Home Assistant: no Stream Deck app, no Companion, no plugins. Design every
 key, dial and page in a key editor in the sidebar; keys follow their entities live.
 
 ![Keys as Stream Assistant draws them](docs/images/keys-gallery.png)
+
+<!-- TODO image: docs/images/photo-dock-mk2.jpg – photo: Network Dock with a Stream Deck MK.2 showing a layout (list: docs/images/README.md) -->
 
 A deck can be connected in three ways:
 
