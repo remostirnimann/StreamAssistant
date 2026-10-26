@@ -25,7 +25,7 @@ class DeckCapabilities:
     name: str
     cols: int
     rows: int
-    # Square key images, edge length in pixels
+    # Square key images, edge length in pixels; 0 for keys without a display (pedals)
     key_size: int
     image_format: str = IMAGE_JPEG
     # Degrees the image must be rotated before it is sent (panel mounted upside down)
@@ -40,6 +40,11 @@ class DeckCapabilities:
     def key_count(self) -> int:
         """Return the number of keys."""
         return self.cols * self.rows
+
+    @property
+    def has_display(self) -> bool:
+        """Return True when the keys show images (False for pedals)."""
+        return self.key_size > 0
 
     @property
     def has_touch(self) -> bool:

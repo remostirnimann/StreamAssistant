@@ -44,6 +44,13 @@ def plus(device_id: str = "plus-1", dials: int = 4) -> dict[str, Any]:
     return data
 
 
+def pedal(device_id: str = "pedal-1") -> dict[str, Any]:
+    """Three keys without display, like a Stream Deck Pedal."""
+    data = deck(device_id, 3, 1)
+    data["capabilities"] = {"keys": {"cols": 3, "rows": 1}}
+    return data
+
+
 class FakeBridge:
     """Listens on 127.0.0.1 (random port)."""
 

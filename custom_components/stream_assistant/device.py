@@ -343,7 +343,7 @@ class StreamAssistantDevice:
     @callback
     def _apply_brightness(self) -> None:
         """Send the brightness the behavior asks for (normal, night or dimmed)."""
-        if self.deck_connected:
+        if self.deck_connected and self.model and self.model.has_display:
             try:
                 self.transport.set_brightness(self.behavior.target_brightness(self.brightness))
             except TransportError as err:
@@ -541,8 +541,8 @@ class StreamAssistantDevice:
     @callback
     def _schedule_repaint(self, keys: list[int] | None = None, dials: list[int] | None = None) -> None:
         """Paint some keys and strip segments; everything when neither is given."""
-        if not self.model or not self.deck_connected:
-            # Painted on the next connect
+        if not self.model or not self.deck_connected or not self.model.has_display:
+            # Painted on the next connect; nothing to paint on pedals
             return
         everything = keys is None and dials is None
         key_list = list(range(self.model.key_count)) if everything else keys or []
@@ -661,6 +661,11 @@ class StreamAssistantDevice:
 
     # Keys and dials
 
+    def _only_wakes(self) -> bool:
+        """Count activity; True when it only woke the dimmed display (never on pedals: nothing to wake)."""
+        woke = self.behavior.async_activity()
+        return woke and bool(self.model and self.model.has_display)
+
     def _dial(self, index: int, page: dict[str, Any] | None = None) -> dict[str, Any] | None:
         page = page or self.page(self.current_page)
         return page.get("dials", {}).get(str(index)) if page else None
@@ -679,7 +684,7 @@ class StreamAssistantDevice:
     @callback
     def _on_press(self, key: Hashable, pressed: bool, signal: str, short: dict[str, Any], long: dict[str, Any]) -> None:
         """A key or dial went down or up: events, short and long press."""
-        if pressed and self.behavior.async_activity():
+        if pressed and self._only_wakes():
             # This press only woke the display: no events, no action
             self._swallowed.add(key)
             return
@@ -719,7 +724,7 @@ class StreamAssistantDevice:
 
     @callback
     def _on_dial(self, index: int, delta: int) -> None:
-        if not delta or self.behavior.async_activity():
+        if not delta or self._only_wakes():
             # Turning a dimmed deck only wakes it
             return
         async_dispatcher_send(
@@ -770,7 +775,7 @@ class StreamAssistantDevice:
 
     @callback
     def _on_touch(self, event: TouchEvent) -> None:
-        if self.behavior.async_activity():
+        if self._only_wakes():
             # Touching a dimmed deck only wakes it
             return
         dial_index = self.model.segment(event.x) if self.model else None

@@ -164,7 +164,7 @@ with the **same id**.
 
 | Capability | Fields | Meaning |
 |---|---|---|
-| `keys` | `cols`, `rows`, `image` or `colors` | Grid of keys. With `image` the keys show pictures of `width`×`height` pixels in one of `formats` (`jpeg`, `png`). With `"colors": true` (and no `image`) the keys only show a colour (LED pads). |
+| `keys` | `cols`, `rows`, `image` or `colors` | Grid of keys. With `image` the keys show pictures of `width`×`height` pixels in one of `formats` (`jpeg`, `png`). With `"colors": true` (and no `image`) the keys only show a colour (LED pads). With neither, the keys have no display and only report presses (pedals): images and colours are refused with `unsupported`. |
 | `brightness` | `true` | The display brightness can be set. |
 | `dials` | `count`, `press` | Rotary encoders, left to right; `press` true when they can be pushed. |
 | `touch` | `width`, `height` | A touch display (e.g. strip of the Stream Deck Plus), addressed in pixels. |

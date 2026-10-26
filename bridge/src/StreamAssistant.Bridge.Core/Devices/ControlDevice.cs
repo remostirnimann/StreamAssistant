@@ -2,8 +2,11 @@ using System.Text.Json.Nodes;
 
 namespace StreamAssistant.Bridge.Devices;
 
-/// <summary>Grid of keys. Either image keys (<see cref="ImageWidth"/> > 0) or colour-only keys.</summary>
-public sealed record KeyGrid(int Cols, int Rows, int ImageWidth, int ImageHeight, IReadOnlyList<string> Formats)
+/// <summary>
+/// Grid of keys: image keys (<see cref="ImageWidth"/> > 0), colour-only keys, or
+/// keys without any display (<see cref="InputOnly"/>, e.g. pedals).
+/// </summary>
+public sealed record KeyGrid(int Cols, int Rows, int ImageWidth, int ImageHeight, IReadOnlyList<string> Formats, bool InputOnly = false)
 {
     public int Count => Cols * Rows;
     public bool HasImages => ImageWidth > 0;
@@ -12,6 +15,9 @@ public sealed record KeyGrid(int Cols, int Rows, int ImageWidth, int ImageHeight
         new(cols, rows, size, size, formats.Length > 0 ? formats : ["jpeg", "png"]);
 
     public static KeyGrid ColorsOnly(int cols, int rows) => new(cols, rows, 0, 0, []);
+
+    /// <summary>Keys without any display, such as pedals.</summary>
+    public static KeyGrid Pedals(int cols, int rows) => new(cols, rows, 0, 0, [], InputOnly: true);
 }
 
 public sealed record DialSet(int Count, bool Press);
@@ -47,7 +53,7 @@ public sealed record DeviceInfo(
                     ["formats"] = new JsonArray(keys.Formats.Select(f => (JsonNode)f).ToArray()),
                 };
             }
-            else
+            else if (!keys.InputOnly)
             {
                 grid["colors"] = true;
             }
