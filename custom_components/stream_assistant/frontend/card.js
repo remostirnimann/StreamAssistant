@@ -312,6 +312,7 @@ if (!customElements.get(CARD_TYPE)) {
   customElements.define(CARD_TYPE, StreamAssistantCard);
   customElements.define(`${CARD_TYPE}-editor`, StreamAssistantCardEditor);
   window.customCards = window.customCards || [];
-  const t = texts({ language: navigator.language });
+  // The card picker shows this text: Home Assistant's language, else the browser's
+  const t = texts({ language: document.querySelector("home-assistant")?.hass?.language || navigator.language });
   window.customCards.push({ type: CARD_TYPE, name: t.name, description: t.description, preview: false });
 }

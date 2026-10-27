@@ -126,6 +126,7 @@ const T = {
     testHint: "Wie ein echter Tastendruck: löst die Events und die Aktion aus (auch ungespeichert)",
     tested: "Ausgeführt",
     dial: "Drehregler",
+    dials: "Drehregler",
     dialHint: "Drehregler und ihr Teil der Touchleiste: anklicken zum Bearbeiten.",
     touchStrip: "Touchleiste",
     rotate: "Drehen",
@@ -307,6 +308,7 @@ const T = {
     testHint: "Like a real key press: fires the events and the action (also unsaved)",
     tested: "Ran",
     dial: "Dial",
+    dials: "Dials",
     dialHint: "Dials and their part of the touch strip: click to edit.",
     touchStrip: "Touch strip",
     rotate: "Turning",
@@ -789,8 +791,9 @@ class StreamAssistantPanel extends HTMLElement {
         <label>${t.templateName}<input id="tpl-name" maxlength="60" placeholder="${esc(t.templateNamePlaceholder)}"></label>
         <label>${t.model}<select id="tpl-model">${models}</select></label>
         <div class="grid-size" id="tpl-grid" hidden>
-          <label>${t.cols}<input id="tpl-cols" type="number" min="1" max="12" value="5"></label>
+          <label>${t.cols}<input id="tpl-cols" type="number" min="1" max="16" value="5"></label>
           <label>${t.rows}<input id="tpl-rows" type="number" min="1" max="8" value="3"></label>
+          <label>${t.dials}<input id="tpl-dials" type="number" min="0" max="8" value="0"></label>
         </div>
       </div>
       <div class="dlg-foot">
@@ -805,8 +808,9 @@ class StreamAssistantPanel extends HTMLElement {
     const name = this.shadowRoot.getElementById("tpl-name").value.trim();
     let model = this.shadowRoot.getElementById("tpl-model").value;
     if (model === "grid") {
-      const clamp = (id, max) => Math.max(1, Math.min(max, Math.round(Number(this.shadowRoot.getElementById(id).value) || 1)));
-      model = `grid_${clamp("tpl-cols", 12)}x${clamp("tpl-rows", 8)}`;
+      const value = (id, min, max) => Math.max(min, Math.min(max, Math.round(Number(this.shadowRoot.getElementById(id).value) || min)));
+      const dials = value("tpl-dials", 0, 8);
+      model = `grid_${value("tpl-cols", 1, 16)}x${value("tpl-rows", 1, 8)}${dials ? `_d${dials}` : ""}`;
     }
     if (!name) return;
     if (!this._confirmLeave()) return;
@@ -1975,6 +1979,7 @@ const STYLE = `
   .knob.selected { outline: 3px solid var(--primary-color); }
   .hint { margin: 0; font-size: 13px; color: var(--secondary-text-color); text-align: center; }
   .form-head { display: flex; align-items: baseline; gap: 12px; }
+  .form-head h2 { white-space: nowrap; }
   h2 { margin: 0; font-size: 18px; font-weight: 500; }
   .sub { font-size: 13px; color: var(--secondary-text-color); }
   .section { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }

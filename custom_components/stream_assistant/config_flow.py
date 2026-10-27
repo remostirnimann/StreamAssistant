@@ -195,7 +195,11 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="pair",
             data_schema=vol.Schema({vol.Required("code"): str}),
-            description_placeholders={"name": self._bridge.name, "host": f"{self._host}:{self._port}"},
+            description_placeholders={
+                "name": self._bridge.name,
+                "host": f"{self._host}:{self._port}",
+                "port": str(self._port),
+            },
             errors=errors,
         )
 

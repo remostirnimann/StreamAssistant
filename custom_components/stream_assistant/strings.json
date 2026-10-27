@@ -33,7 +33,7 @@
       },
       "pair": {
         "title": "Pair with {name}",
-        "description": "Enter the 6-digit pairing code the bridge at {host} shows (its window, log, or http://localhost:5390 on that computer).",
+        "description": "Enter the 6-digit pairing code the bridge at {host} shows (its window, log, or http://localhost:{port} on that computer).",
         "data": {
           "code": "Pairing code"
         }
@@ -48,7 +48,7 @@
         },
         "data_description": {
           "name": "Name of the device, e.g. \"Kitchen tablet\".",
-          "cols": "Keys per row (1-12).",
+          "cols": "Keys per row (1-16).",
           "rows": "Number of rows (1-8)."
         }
       },

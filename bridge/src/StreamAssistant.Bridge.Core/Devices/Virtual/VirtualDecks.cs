@@ -10,7 +10,7 @@ namespace StreamAssistant.Bridge.Devices.Virtual;
 /// </summary>
 public sealed class VirtualDecks(SettingsStore store, DeviceManager manager, ILogger<VirtualDecks> logger)
 {
-    public const int MaxCols = 12;
+    public const int MaxCols = 16;
     public const int MaxRows = 8;
     public const int MaxDials = 6;
 
