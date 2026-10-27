@@ -5,7 +5,7 @@ All notable changes to Stream Assistant. Format based on
 Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
 the same version. Versions before 0.8.0b1 were not released.
 
-## [Unreleased]
+## [0.9.0b1] - 2026-10-27
 
 ### Added
 - Bridge installers:
