@@ -26,7 +26,7 @@ A deck can be connected in three ways:
 
 - [Installation](docs/installation.md): HACS or by hand
 - [Setup](docs/setup.md): docks, bridges, virtual panels
-- [Stream Assistant Bridge](docs/bridge.md): download, start, pairing, autostart
+- [Stream Assistant Bridge](docs/bridge.md): installers, pairing, updates from Home Assistant
 - [Devices and status](docs/devices.md): every model and how far it is tested
 - [Virtual and simulated panels](docs/virtual-panels.md)
 - [Key editor](docs/editor.md): pages, keys, dials, templates, behaviour

@@ -47,6 +47,8 @@ class BridgeInfo:
     name: str
     version: str
     platform: str = ""
+    # Optional parts of the protocol the bridge offers, e.g. "update"
+    features: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,6 +245,7 @@ def _info(welcome: dict[str, Any]) -> BridgeInfo:
         str(bridge.get("name", "")),
         str(bridge.get("version", "")),
         str(bridge.get("platform", "")),
+        tuple(str(f) for f in welcome.get("features") or ()),
     )
 
 
@@ -295,6 +298,8 @@ class BridgeClient:
         self.on_touch: Callable[[str, TouchEvent], None] | None = None
         self.on_button: Callable[[str, int, bool], None] | None = None
         self.on_nfc: Callable[[str, str], None] | None = None
+        # Progress of a self-update: {"state": downloading | installing | failed, "version", "message"}
+        self.on_update_status: Callable[[dict[str, Any]], None] | None = None
         # The token was refused: the user has to pair again
         self.on_unauthorized: Callable[[], None] | None = None
 
@@ -465,9 +470,13 @@ class BridgeClient:
                         int(message["y2"]) if swipe else None,
                     ),
                 )
+            elif kind == "update_status" and self.on_update_status:
+                self.on_update_status(message)
             elif kind == "error":
                 if message.get("code") == "replaced":
                     raise BridgeError("replaced")
+                if message.get("request") == "update" and self.on_update_status:
+                    self.on_update_status({"state": "failed", "message": message.get("message")})
                 _LOGGER.debug("Bridge %s reported %s: %s", self.host, message.get("code"), message.get("message"))
         except (KeyError, TypeError, ValueError) as err:
             _LOGGER.debug("Bridge %s sent an unexpected %s message: %s", self.host, kind, err)

@@ -14,9 +14,66 @@ There are two versions, with the same features:
 
 Each is a single file and needs nothing else installed (no .NET, no Python).
 
-## Download
+## Install
 
-Download the file for your computer from the
+The installers set the console bridge up as a service: it starts with the computer, runs
+without anyone logged in, and Home Assistant can update it (see [Updates](#updates)).
+
+### Windows
+
+Download `stream-assistant-bridge-<version>-win-x64.msi` from the
+[releases page](https://github.com/remostirnimann/StreamAssistant/releases) and run it.
+It installs the bridge for all users:
+
+- program in `C:\Program Files\Stream Assistant Bridge`, settings and log
+  (`bridge.log`) in `C:\ProgramData\Stream Assistant Bridge`;
+- the Windows service *Stream Assistant Bridge*, started automatically and restarted if
+  it fails;
+- a firewall rule for the bridge (Home Assistant connects on TCP port 5390, the bridge
+  announces itself via mDNS);
+- a start menu entry *Stream Assistant Bridge* that opens the status page with the
+  pairing code.
+
+The installer is not signed yet: Windows SmartScreen may warn. Choose
+*More info → Run anyway*. Uninstall it in *Settings → Apps*; the settings (and so the
+pairing) stay in `C:\ProgramData\Stream Assistant Bridge`.
+
+<!-- TODO image: bridge-msi-start-menu (the start menu entry and the status page with the pairing code) -->
+
+### Linux and macOS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/remostirnimann/StreamAssistant/main/bridge/install.sh | sudo sh
+```
+
+On macOS, run it without `sudo`. The script picks the right file for the computer
+(also Alpine and ARM), checks its checksum, and
+
+- **Linux:** installs the program in `/opt/stream-assistant-bridge`, keeps the settings
+  in `/var/lib/stream-assistant-bridge`, creates the user `stream-assistant`, allows it
+  to use Stream Decks (udev rule) and sets up the systemd service
+  `stream-assistant-bridge`. The pairing code is in the log:
+  `journalctl -u stream-assistant-bridge | grep -i pairing`.
+- **macOS:** installs the program and its settings in
+  `~/Library/Application Support/Stream Assistant Bridge` and a LaunchAgent that starts
+  it when you log in. Log: `~/Library/Logs/stream-assistant-bridge.log`.
+
+Options go after `sh -s --`, for example
+`curl -fsSL … | sudo sh -s -- --version 0.9.0`:
+
+| Option | What it does |
+|---|---|
+| `--version X.Y.Z` | Installs this version instead of the newest one |
+| `--uninstall` | Removes the service and the program; the settings (pairing) stay |
+| `--uninstall --purge` | Removes the settings and, on Linux, the user too |
+
+Without systemd (for example on Alpine with OpenRC) the script installs the program and
+shows the command to start it with.
+
+### Desktop version and manual install
+
+The desktop version (with a window and [virtual decks](virtual-panels.md#virtual-decks-in-the-bridge-window))
+and the console version are also available as plain files on the
 [releases page](https://github.com/remostirnimann/StreamAssistant/releases), in the same
 version as the integration:
 
@@ -29,20 +86,16 @@ version as the integration:
 | Linux, Raspberry Pi (64 bit) and other ARM | `…-linux-arm64.tar.gz` | `…-desktop-…-linux-arm64.tar.gz` |
 | Alpine Linux (e.g. Home Assistant OS add-ons) | `…-linux-musl-x64.tar.gz` / `…-linux-musl-arm64.tar.gz` | – |
 
-`SHA256SUMS.txt` lists the checksums of all files.
+`SHA256SUMS.txt` lists the checksums of all files. Run only one bridge per computer
+(the installed service and the desktop version would both use port 5390); to run both,
+give one of them another `--port`.
 
-## Install and start
+**Windows:** unpack the zip into a folder of your choice and start
+`stream-assistant-bridge-desktop.exe` (or `stream-assistant-bridge.exe` in a terminal).
+SmartScreen may warn (*More info → Run anyway*). When the Windows firewall asks, allow
+access for **private networks**.
 
-### Windows
-
-1. Unpack the zip into a folder of your choice, for example `C:\Program Files\Stream Assistant Bridge`.
-2. Start `stream-assistant-bridge-desktop.exe` (or `stream-assistant-bridge.exe` in a
-   terminal).
-3. The files are not signed yet: Windows SmartScreen may warn. Choose *More info → Run anyway*.
-4. When the Windows firewall asks, allow access for **private networks**. Home Assistant
-   connects on TCP port 5390, and the bridge announces itself via mDNS (UDP 5353).
-
-### macOS
+**macOS:**
 
 ```bash
 mkdir -p ~/Applications/StreamAssistantBridge
@@ -54,12 +107,12 @@ xattr -dr com.apple.quarantine ~/Applications/StreamAssistantBridge
 The `xattr` line is needed because the files are not signed yet; without it macOS refuses
 to start them. If macOS asks for permission to accept incoming network connections, allow it.
 
-### Linux
+**Linux:**
 
 ```bash
-sudo mkdir -p /opt/stream-assistant-bridge
-sudo tar -xzf stream-assistant-bridge-<version>-linux-x64.tar.gz -C /opt/stream-assistant-bridge
-/opt/stream-assistant-bridge/stream-assistant-bridge
+mkdir -p ~/stream-assistant-bridge
+tar -xzf stream-assistant-bridge-desktop-<version>-linux-x64.tar.gz -C ~/stream-assistant-bridge
+~/stream-assistant-bridge/stream-assistant-bridge-desktop
 ```
 
 For Stream Decks on USB the bridge needs access to the HID devices. Create
@@ -70,10 +123,9 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0fd9", MODE="0660", TAG+="uaccess"
 ```
 
 then run `sudo udevadm control --reload-rules && sudo udevadm trigger` and plug the
-decks in again. `TAG+="uaccess"` gives the logged-in user access; for a bridge running
-as a service under its own user, use `MODE="0666"` or a group (`GROUP="plugdev"`)
-instead. The bridge also needs `libudev` (installed on almost every distribution;
-Alpine: `apk add eudev-libs`).
+decks in again. `TAG+="uaccess"` gives the logged-in user access (the install script
+sets this up for its service user itself). The bridge also needs `libudev` (installed on
+almost every distribution; Alpine: `apk add eudev-libs`).
 
 ## First start and pairing
 
@@ -108,8 +160,12 @@ shortcut):
 | `--simulate 5x3,plus` | – | Adds [simulated decks](virtual-panels.md#simulated-decks) for testing |
 | `--unpair-all` | – | Forgets all paired Home Assistant instances; they must pair again |
 
-The settings folder is `%APPDATA%\stream-assistant-bridge` on Windows and
-`~/.config/stream-assistant-bridge` on macOS and Linux. It holds the bridge id, the
+The installers also set `--service true` (a service manager restarts the bridge after an
+update) and, on Windows, `--install-kind msi` (updates run the new installer).
+
+Without `--config-dir`, the settings folder is `%APPDATA%\stream-assistant-bridge` on
+Windows and `~/.config/stream-assistant-bridge` on macOS and Linux (the installers use the
+folders named under [Install](#install)). It holds the bridge id, the
 paired clients (only hashes of their tokens), the bridge name and the virtual decks. Keep
 it when you update the bridge, otherwise Home Assistant has to pair again and sees a new bridge.
 
@@ -128,57 +184,38 @@ Which models are supported, and how far they are tested, is listed in
 
 ## Start automatically
 
-### Windows
+The installers do this already. For the desktop version:
 
-Press <kbd>Win</kbd>+<kbd>R</kbd>, enter `shell:startup` and put a shortcut to
-`stream-assistant-bridge-desktop.exe` into the folder that opens. Add options to the
-shortcut's target if needed.
+- **Windows:** press <kbd>Win</kbd>+<kbd>R</kbd>, enter `shell:startup` and put a shortcut
+  to `stream-assistant-bridge-desktop.exe` into the folder that opens. Add options to the
+  shortcut's target if needed.
+- **macOS:** add `stream-assistant-bridge-desktop` in *System Settings → General → Login Items*.
+- **Linux:** most desktops have an *Autostart* setting; add `stream-assistant-bridge-desktop` there.
 
-### macOS
+## Updates
 
-Save as `~/Library/LaunchAgents/ch.streamassistant.bridge.plist` (adjust the path):
+The bridge and the integration are released together, with the same version. Each bridge
+has an **update entity** in Home Assistant (on the bridge's device page and under
+*Settings → Updates*): when the integration is updated and the bridge runs another
+version, the entity offers the matching bridge version.
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>ch.streamassistant.bridge</string>
-  <key>ProgramArguments</key>
-  <array><string>/Users/YOU/Applications/StreamAssistantBridge/stream-assistant-bridge</string></array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-</dict>
-</plist>
-```
+<!-- TODO image: ha-bridge-update (the bridge update in Settings → Updates) -->
 
-Then `launchctl load ~/Library/LaunchAgents/ch.streamassistant.bridge.plist`.
+- **Install** downloads the release on the bridge's computer, checks it against
+  `SHA256SUMS.txt`, replaces the program and restarts the bridge. Home Assistant shows the
+  progress and waits until the bridge is back with the new version; the decks stay
+  configured.
+- **Automatic updates:** on the bridge's entry choose *Configure* and turn on
+  *Update the bridge automatically*. The bridge then follows every integration update on
+  its own. A failed automatic update is not repeated for the same version; install it
+  from the update entity instead.
 
-### Linux (systemd)
+Bridges installed with the installers, and the downloaded console and desktop files, can
+update themselves. Bridges started with `dotnet run` (development) show their version but
+offer no install. Development versions of the integration offer no bridge update.
 
-Save as `/etc/systemd/system/stream-assistant-bridge.service`:
-
-```ini
-[Unit]
-Description=Stream Assistant Bridge
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-ExecStart=/opt/stream-assistant-bridge/stream-assistant-bridge --config-dir /var/lib/stream-assistant-bridge
-Restart=always
-DynamicUser=yes
-StateDirectory=stream-assistant-bridge
-SupplementaryGroups=plugdev
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then `sudo systemctl enable --now stream-assistant-bridge`. With `DynamicUser` the udev
-rule needs a group the service is in, for example `GROUP="plugdev"` (see above; create the
-group if your distribution has none). The pairing code is in the log:
-`journalctl -u stream-assistant-bridge`.
+Without Home Assistant: run the [installer](#install) of the new version again, or replace
+the files by hand (keep the settings folder).
 
 ## Status page
 

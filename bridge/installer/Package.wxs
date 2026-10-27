@@ -1,0 +1,59 @@
+<!--
+  Stream Assistant Bridge as a Windows service (LocalSystem, starts with Windows).
+  Settings and pairing live in %ProgramData%\Stream Assistant Bridge and stay on uninstall.
+  Updates from Home Assistant run a newer MSI silently (the bridge is started with
+  install-kind msi); the major upgrade stops the service, replaces it and starts it again.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
+  <Package Name="Stream Assistant Bridge"
+           Manufacturer="Stream Assistant"
+           Version="$(ProductVersion)"
+           UpgradeCode="6f0d6a4e-2b8c-4a5e-9d7b-3c1f5e2a8b40"
+           Scope="perMachine">
+    <!-- Same-version upgrades: 0.8.0b1 and 0.8.0 share the numeric version -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/remostirnimann/StreamAssistant" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/remostirnimann/StreamAssistant/blob/main/docs/bridge.md" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Stream Assistant Bridge">
+        <Component Id="Bridge" Bitness="always64">
+          <File Id="BridgeExe" Source="$(BridgeDir)stream-assistant-bridge.exe" KeyPath="yes">
+            <!-- The protocol port and mDNS, from any network: Home Assistant is often in another subnet -->
+            <fire:FirewallException Id="BridgeFirewall" Name="Stream Assistant Bridge" Scope="any" />
+          </File>
+          <File Id="License" Source="$(BridgeDir)LICENSE" Name="LICENSE.txt" />
+          <ServiceInstall Id="BridgeService"
+                          Name="StreamAssistantBridge"
+                          DisplayName="Stream Assistant Bridge"
+                          Description="Offers the Stream Decks of this computer to Home Assistant."
+                          Type="ownProcess"
+                          Start="auto"
+                          ErrorControl="normal"
+                          Account="LocalSystem"
+                          Arguments="--config-dir &quot;[CommonAppDataFolder]Stream Assistant Bridge&quot; --install-kind msi">
+            <util:ServiceConfig FirstFailureActionType="restart"
+                                SecondFailureActionType="restart"
+                                ThirdFailureActionType="restart"
+                                RestartServiceDelayInSeconds="10"
+                                ResetPeriodInDays="1" />
+          </ServiceInstall>
+          <ServiceControl Id="BridgeServiceControl" Name="StreamAssistantBridge" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- The status page shows the pairing code to this computer only -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StatusShortcut">
+        <util:InternetShortcut Id="StatusPage" Name="Stream Assistant Bridge" Target="http://localhost:5390/" />
+        <RegistryValue Root="HKMU" Key="Software\Stream Assistant\Bridge" Name="StatusShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+  </Package>
+</Wix>

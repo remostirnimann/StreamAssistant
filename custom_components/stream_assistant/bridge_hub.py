@@ -8,7 +8,9 @@ the deck is offline.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
@@ -19,6 +21,8 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .capabilities import DeckCapabilities, grid_id
 from .const import (
+    BRIDGE_UPDATE_TIMEOUT,
+    CONF_AUTO_UPDATE,
     CONF_BRIDGE_ID,
     CONF_DEVICES,
     CONF_PORT,
@@ -29,10 +33,13 @@ from .const import (
     signal_new_device,
 )
 from .device import BridgeDeckSpec, StreamAssistantConfigEntry, StreamAssistantDevice
-from .protocol.bridge import BridgeClient, BridgeDevice, TouchEvent
+from .protocol.bridge import BridgeClient, BridgeDevice, BridgeError, TouchEvent
 from .transport import AttachedDeck, DeckTransport
 
 _LOGGER = logging.getLogger(__name__)
+
+# Only releases are offered to bridges, not development versions of the integration
+_RELEASE = re.compile(r"\d+\.\d+\.\d+((a|b|rc)\d+)?")
 
 
 class BridgeDeckTransport(DeckTransport):
@@ -184,11 +191,108 @@ class BridgeHub:
         self._pending: dict[str, BridgeDevice] = {}
         self._present: set[str] = set()
         self.hub_device_id: str | None = None
+        # The bridge update in progress: resolved when the bridge is back with the version
+        self._update: asyncio.Future[None] | None = None
+        self._update_target: str | None = None
+        # Versions an automatic update was tried for (once per start of Home Assistant)
+        self._auto_tried: set[str] = set()
 
     @property
     def connected(self) -> bool:
         """The bridge is connected."""
         return self.client.connected
+
+    # Updates of the bridge
+
+    @property
+    def bridge_version(self) -> str | None:
+        """The version the bridge runs (last seen)."""
+        return self.client.info.version if self.client.info else None
+
+    @property
+    def latest_version(self) -> str | None:
+        """The bridge release that fits this integration; None for development versions."""
+        return VERSION if _RELEASE.fullmatch(VERSION) else None
+
+    @property
+    def can_update(self) -> bool:
+        """The bridge can install a release itself."""
+        return bool(self.client.info and "update" in self.client.info.features)
+
+    @property
+    def needs_update(self) -> bool:
+        """The bridge runs another version than the one that fits."""
+        return bool(self.latest_version and self.bridge_version and self.bridge_version != self.latest_version)
+
+    @property
+    def auto_update(self) -> bool:
+        """The entry option to update the bridge on its own."""
+        return bool(self.entry.options.get(CONF_AUTO_UPDATE))
+
+    @property
+    def update_in_progress(self) -> bool:
+        """An update was started and the bridge is not back with the new version yet."""
+        return self._update is not None and not self._update.done()
+
+    async def async_update_bridge(self, version: str) -> None:
+        """Have the bridge install a release; returns when it is back with that version.
+
+        Raises BridgeError when the bridge cannot update, reports a failure, or does not
+        come back in time.
+        """
+        if not self.can_update:
+            raise BridgeError("unsupported", "This bridge cannot update itself; install the new version by hand")
+        if self.update_in_progress:
+            raise BridgeError("busy", "An update is already running")
+        self._update = self.hass.loop.create_future()
+        self._update_target = version
+        self.client.send({"type": "update", "version": version})
+        _LOGGER.info("%s: updating the bridge to %s", self.entry.title, version)
+        async_dispatcher_send(self.hass, signal_hub_state(self.entry.entry_id))
+        try:
+            async with asyncio.timeout(BRIDGE_UPDATE_TIMEOUT):
+                await self._update
+        except TimeoutError as err:
+            raise BridgeError("timeout", f"The bridge did not come back with version {version}") from err
+        finally:
+            self._update = None
+            self._update_target = None
+            async_dispatcher_send(self.hass, signal_hub_state(self.entry.entry_id))
+
+    @callback
+    def async_check_auto_update(self) -> None:
+        """Start an automatic update when wanted and possible (once per version)."""
+        target = self.latest_version
+        if (
+            not self.auto_update
+            or not target
+            or not self.connected
+            or not self.can_update
+            or not self.needs_update
+            or self.update_in_progress
+            or target in self._auto_tried
+        ):
+            return
+        self._auto_tried.add(target)
+        _LOGGER.info(
+            "%s: the bridge runs %s, updating it to %s on its own", self.entry.title, self.bridge_version, target
+        )
+        self.entry.async_create_background_task(
+            self.hass, self._async_auto_update(target), "stream_assistant bridge update"
+        )
+
+    async def _async_auto_update(self, version: str) -> None:
+        try:
+            await self.async_update_bridge(version)
+        except BridgeError as err:
+            _LOGGER.warning("%s: automatic bridge update to %s failed: %s", self.entry.title, version, err)
+
+    @callback
+    def _on_update_status(self, status: dict[str, Any]) -> None:
+        state = status.get("state")
+        _LOGGER.debug("%s: bridge update %s %s", self.entry.title, state, status.get("message") or "")
+        if state == "failed" and self._update and not self._update.done():
+            self._update.set_exception(BridgeError("update_failed", str(status.get("message") or "Update failed")))
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -217,6 +321,7 @@ class BridgeHub:
         self.client.on_dial = self._on_dial
         self.client.on_dial_press = self._on_dial_press
         self.client.on_touch = self._on_touch
+        self.client.on_update_status = self._on_update_status
         self.client.on_button = self._on_button
         self.client.on_nfc = self._on_nfc
         self.client.on_unauthorized = self._on_unauthorized
@@ -344,7 +449,12 @@ class BridgeHub:
             transport.hub_state(connected)
         if connected and self.client.info and self.hub_device_id:
             dr.async_get(self.hass).async_update_device(self.hub_device_id, sw_version=self.client.info.version)
+        if connected and self._update and not self._update.done() and self.bridge_version == self._update_target:
+            _LOGGER.info("%s: the bridge is back with version %s", self.entry.title, self.bridge_version)
+            self._update.set_result(None)
         async_dispatcher_send(self.hass, signal_hub_state(self.entry.entry_id))
+        if connected:
+            self.async_check_auto_update()
 
     @callback
     def _on_devices(self, devices: list[BridgeDevice]) -> None:

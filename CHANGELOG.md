@@ -8,6 +8,20 @@ the same version. Versions before 0.8.0b1 were not released.
 ## [Unreleased]
 
 ### Added
+- Bridge installers:
+  - Windows: `stream-assistant-bridge-<version>-win-x64.msi` installs the bridge for all
+    users as the service *Stream Assistant Bridge* (starts with Windows, restarts on
+    failure), with a firewall rule and a start menu entry for the status page. Settings in
+    `C:\ProgramData\Stream Assistant Bridge`, logged to `bridge.log` there.
+  - Linux and macOS: `bridge/install.sh` downloads the matching release, checks its
+    checksum and sets up a systemd service with its own user and udev rule (Linux) or a
+    LaunchAgent (macOS); `--version`, `--uninstall`, `--purge`.
+- Bridge updates from Home Assistant: an update entity per bridge offers the bridge
+  version that matches the integration and installs it. The bridge downloads the release,
+  checks it against `SHA256SUMS.txt`, replaces itself (or runs the new installer) and
+  restarts; Home Assistant shows the progress and waits until it is back. The bridge's
+  options can turn on automatic updates. Protocol: the `update` feature and command and the
+  `update_status` event.
 - User documentation in `docs/`: installation, setup, the bridge (download, start, pairing,
   autostart), devices with their test status, virtual and simulated panels, the key editor,
   automations and troubleshooting, with screenshots. `docs/images/README.md` lists every
@@ -73,6 +87,9 @@ the same version. Versions before 0.8.0b1 were not released.
 - Line endings are LF everywhere (`.gitattributes`).
 
 ### Fixed
+- Bridge as a service (systemd, launchd): it no longer hangs at start watching the whole
+  disk. The working directory there is `/`, which ASP.NET took as its content root; the
+  bridge now always uses its own folder.
 - Up to 16 columns everywhere: the virtual panel form still said 1–12, the template dialog
   allowed 12 columns and no dials, and virtual decks in the bridge window allowed 12 columns.
 - Key editor: the title of a dial's form no longer breaks over two lines.

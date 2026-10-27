@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 
 from . import websocket
 from .bridge_hub import BridgeHub
-from .const import CONF_DEVICES, CONF_KIND, DOMAIN, KIND_BRIDGE, KIND_PLANNER, PLATFORMS
+from .const import CONF_DEVICES, CONF_KIND, DOMAIN, KIND_BRIDGE, KIND_PLANNER, PLATFORMS, signal_hub_state
 from .device import StreamAssistantConfigEntry, StreamAssistantDevice, async_remove_layout, deck_key
 from .panel import async_register_panel
 from .templates import DATA_TEMPLATES, TemplateManager
@@ -41,7 +42,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: StreamAssistantConfigEnt
     entry.runtime_data = runtime
     await runtime.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if isinstance(runtime, BridgeHub):
+        # Turning automatic updates on applies right away
+        entry.async_on_unload(entry.add_update_listener(_async_bridge_entry_updated))
     return True
+
+
+async def _async_bridge_entry_updated(hass: HomeAssistant, entry: StreamAssistantConfigEntry) -> None:
+    hub: BridgeHub = entry.runtime_data
+    async_dispatcher_send(hass, signal_hub_state(entry.entry_id))
+    hub.async_check_auto_update()
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: StreamAssistantConfigEntry) -> bool:

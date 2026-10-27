@@ -154,7 +154,7 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
             ["type"] = "welcome",
             ["protocol"] = BridgeServer.ProtocolVersion,
             ["bridge"] = server.BridgeJson(),
-            ["features"] = new JsonArray(BridgeServer.Features.Select(f => (JsonNode)f).ToArray()),
+            ["features"] = new JsonArray(server.CurrentFeatures.Select(f => (JsonNode)f).ToArray()),
         });
         return true;
     }
@@ -339,6 +339,12 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
                     }
                     return device.SetDialLedsAsync(dial, Color(command), level.Value, cancellationToken);
                 }
+            case "update":
+                {
+                    var version = Str(command, "version") ?? throw new ProtocolError("invalid_message", "version is missing");
+                    server.Updates.Start(version);
+                    return Task.CompletedTask;
+                }
             case "set_key_color":
                 {
                     var device = Device(command);
@@ -415,6 +421,9 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
         }
         Send(error);
     }
+
+    /// <summary>An event from the bridge itself (update progress).</summary>
+    internal void Notify(JsonObject message) => Send(message);
 
     private void Send(JsonObject message) =>
         _out.Writer.TryWrite(new Outgoing(Encoding.UTF8.GetBytes(message.ToJsonString()), WebSocketMessageType.Text));

@@ -7,6 +7,7 @@ client sends.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import struct
 from typing import Any
@@ -86,6 +87,11 @@ class FakeBridge:
         self._runner: web.AppRunner | None = None
         # Answer the next hello with this error code instead of welcome
         self.refuse_with: str | None = None
+        self.version = "0.8.0"
+        self.features = ["key_images", "brightness", "update"]
+        # What an "update" command does: "restart" (with the new version), "fail" or "ignore"
+        self.on_update = "restart"
+        self.updates: list[str] = []
 
     async def start(self) -> None:
         app = web.Application()
@@ -146,6 +152,28 @@ class FakeBridge:
         await self.send_all({"type": "error", "code": "replaced", "message": "taken over"})
         await self.drop()
 
+    async def _update(self, ws: web.WebSocketResponse, command: dict[str, Any]) -> None:
+        """Pretend to update: report progress, then restart with the new version (or fail)."""
+        version = command.get("version", "")
+        self.updates.append(version)
+        if self.on_update == "ignore":
+            return
+        await ws.send_json({"type": "update_status", "state": "downloading", "version": version})
+        if self.on_update == "fail":
+            await ws.send_json(
+                {"type": "update_status", "state": "failed", "version": version, "message": "Checksum does not match"}
+            )
+            return
+        if self.on_update == "refuse":
+            await ws.send_json(
+                {"type": "error", "code": "unsupported", "message": "cannot update", "request": "update"}
+            )
+            return
+        await ws.send_json({"type": "update_status", "state": "installing", "version": version})
+        self.version = version
+        # Closing from inside this socket's own message loop would wait for itself
+        self._restart = asyncio.get_running_loop().create_task(self.drop())
+
     # Handlers
 
     async def _status(self, request: web.Request) -> web.Response:
@@ -163,8 +191,8 @@ class FakeBridge:
         welcome = {
             "type": "welcome",
             "protocol": 1,
-            "bridge": {"id": BRIDGE_ID, "name": BRIDGE_NAME, "version": "0.8.0", "platform": "test"},
-            "features": ["key_images", "brightness"],
+            "bridge": {"id": BRIDGE_ID, "name": BRIDGE_NAME, "version": self.version, "platform": "test"},
+            "features": self.features,
         }
         if first.get("type") == "pair":
             if first.get("code") != self.code:
@@ -190,7 +218,10 @@ class FakeBridge:
         self.sockets.append(ws)
         async for message in ws:
             if message.type == WSMsgType.TEXT:
-                self.commands.append(json.loads(message.data))
+                command = json.loads(message.data)
+                self.commands.append(command)
+                if command.get("type") == "update":
+                    await self._update(ws, command)
             elif message.type == WSMsgType.BINARY:
                 (length,) = struct.unpack(">H", message.data[:2])
                 header = json.loads(message.data[2 : 2 + length])
