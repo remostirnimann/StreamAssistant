@@ -8,7 +8,7 @@ DOMAIN = "stream_assistant"
 VERSION = "0.8.0b1"
 PANEL_URL = "stream-assistant"
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.NUMBER]
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.NUMBER, Platform.UPDATE]
 
 CONF_DOCK_SERIAL = "dock_serial"
 CONF_DECK_SERIAL = "deck_serial"
@@ -26,6 +26,11 @@ CONF_BRIDGE_ID = "bridge_id"
 CONF_TOKEN = "token"
 # Devices seen on a bridge, so their entities exist while it is offline
 CONF_DEVICES = "devices"
+# Entry option of bridges: install the bridge release that fits the integration on its own
+CONF_AUTO_UPDATE = "auto_update"
+RELEASE_URL = "https://github.com/remostirnimann/StreamAssistant/releases/tag/v{version}"
+# How long Home Assistant waits for a bridge to come back with the new version
+BRIDGE_UPDATE_TIMEOUT = 900
 # A panel that only exists in Home Assistant (dashboard card), with a free grid
 KIND_VIRTUAL = "virtual"
 CONF_COLS = "cols"

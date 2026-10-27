@@ -193,5 +193,16 @@
       "name": "Clear key",
       "description": "Blanks a Stream Deck key and removes its stored appearance."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Bridge options",
+        "description": "Automatic updates: when Stream Assistant is updated, the bridge installs the matching version on its own (only bridges that can update themselves).",
+        "data": {
+          "auto_update": "Update the bridge automatically"
+        }
+      }
+    }
   }
 }

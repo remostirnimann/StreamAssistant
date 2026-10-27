@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using StreamAssistant.Bridge.Configuration;
 using StreamAssistant.Bridge.Devices;
+using StreamAssistant.Bridge.Updates;
 
 namespace StreamAssistant.Bridge.Protocol;
 
@@ -16,6 +17,7 @@ public sealed class BridgeServer(
     SettingsStore store,
     BridgeOptions options,
     TimeProvider time,
+    UpdateService updates,
     ILoggerFactory loggerFactory)
 {
     public const int ProtocolVersion = 1;
@@ -24,6 +26,9 @@ public sealed class BridgeServer(
     public static readonly TimeSpan IdleResetDelay = TimeSpan.FromSeconds(30);
 
     public static readonly string[] Features = ["key_images", "key_colors", "brightness", "dials", "touch", "buttons", "screen", "dial_leds", "nfc"];
+
+    /// <summary>The features of this bridge: <c>update</c> only when it can update itself.</summary>
+    public IReadOnlyList<string> CurrentFeatures => updates.Supported ? [.. Features, "update"] : Features;
 
     public static string Version { get; } =
         typeof(BridgeServer).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
@@ -38,6 +43,7 @@ public sealed class BridgeServer(
     public event Action? ClientChanged;
 
     public DeviceManager Devices => devices;
+    public UpdateService Updates => updates;
     public PairingService Pairing => pairing;
     public TimeProvider Time => time;
     public string Id => store.Settings.Id;
@@ -65,6 +71,17 @@ public sealed class BridgeServer(
 
     public Task RunSessionAsync(WebSocket socket, string remote, CancellationToken aborted) =>
         new ClientSession(this, socket, remote, loggerFactory.CreateLogger<ClientSession>()).RunAsync(aborted);
+
+    /// <summary>Sends an event to the connected client, if any (update progress).</summary>
+    public void Broadcast(JsonObject message)
+    {
+        ClientSession? active;
+        lock (_lock)
+        {
+            active = _active;
+        }
+        active?.Notify(message);
+    }
 
     internal void Activate(ClientSession session)
     {

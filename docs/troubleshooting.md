@@ -39,7 +39,7 @@ background), or start a second one with its own `--config-dir` and `--port`.
 **A deck on USB does not appear.**
 - Close the Elgato Stream Deck app, also in the tray / menu bar, and Companion. The bridge
   takes the deck over as soon as it is free and writes a warning to its log meanwhile.
-- Linux: set up the udev rule ([bridge](bridge.md#linux)) and plug the deck in again.
+- Linux: set up the udev rule ([bridge](bridge.md#desktop-version-and-manual-install); the install script does this itself) and plug the deck in again.
 - Is the model supported? See [Devices](devices.md). Unsupported models are ignored.
 - The bridge log lists every deck it attaches: `Device attached: Stream Deck MK.2 (elgato-…)`.
 

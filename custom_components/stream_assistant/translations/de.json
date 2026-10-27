@@ -193,5 +193,16 @@
       "name": "Taste leeren",
       "description": "Leert eine Stream-Deck-Taste und entfernt das gespeicherte Aussehen."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Bridge-Optionen",
+        "description": "Automatische Updates: Wird Stream Assistant aktualisiert, installiert die Bridge die passende Version selbst (nur Bridges, die sich selbst aktualisieren können).",
+        "data": {
+          "auto_update": "Bridge automatisch aktualisieren"
+        }
+      }
+    }
   }
 }

@@ -62,7 +62,7 @@ The first message on a new connection MUST be `hello` from the client.
 ```json
 {"type": "welcome", "protocol": 1,
  "bridge": {"id": "3f9a1c0be2d44a17", "name": "Office PC", "version": "0.1.0", "platform": "windows-x64"},
- "features": ["key_images", "key_colors", "brightness", "dials", "touch", "buttons", "screen", "dial_leds", "nfc"]}
+ "features": ["key_images", "key_colors", "brightness", "dials", "touch", "buttons", "screen", "dial_leds", "nfc", "update"]}
 ```
 
 `features` lists optional parts of this protocol the bridge implements; a
@@ -194,6 +194,12 @@ Every client message MAY carry an `id` (integer). The bridge then answers with
 {"type": "set_brightness", "device": "elgato-AL12K1A01234", "percent": 70, "id": 12}
 ```
 
+Bridges with the `update` feature can install a release of themselves:
+
+| Message | Fields | Effect |
+|---|---|---|
+| `update` | `version` (e.g. `0.9.0`) | Downloads that release, checks its checksum, installs it and restarts. Progress comes as `update_status` (section 9); the bridge is back with the new `version` in its next `welcome`. Fails with `error` (`request` = `update`) when it cannot start, for example while another update runs. |
+
 Images are sent as binary frames (section 6): `set_key_image` for a key,
 `set_touch_image` for an area of a touch display.
 
@@ -262,6 +268,7 @@ ignored, so newer clients can probe older bridges.
 | `touch` | `device`, `kind`, `x`, `y` (+ `x2`, `y2` for `swipe`) | `kind` is `tap`, `long` or `swipe`. |
 | `button` | `device`, `button`, `pressed` | A button outside the grid went down or up. |
 | `nfc` | `device`, `id` | An NFC tag was read; `id` as the reader reports it. |
+| `update_status` | `state`, `version`, `message` (on failure) | Progress of an `update`: `downloading`, `installing` (the bridge restarts next) or `failed`. |
 
 ```json
 {"type": "key", "device": "elgato-AL12K1A01234", "key": 7, "pressed": true}

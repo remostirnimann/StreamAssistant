@@ -34,12 +34,37 @@ public sealed record SimulatedDeck(int Cols, int Rows, int Dials = 0, int KeySiz
     }
 }
 
+/// <summary>How the bridge was installed, which decides how it updates itself.</summary>
+public enum InstallKind
+{
+    /// <summary>Unpacked by hand or by the install script: files are replaced in place.</summary>
+    Archive,
+
+    /// <summary>Windows installer (service): the new installer does the update.</summary>
+    Msi,
+}
+
 /// <summary>Command line / environment options (read through IConfiguration).</summary>
-public sealed record BridgeOptions(int Port, string ConfigDir, string? Name, IReadOnlyList<SimulatedDeck> Simulate, bool Mdns, bool Usb = true)
+public sealed record BridgeOptions(
+    int Port,
+    string ConfigDir,
+    string? Name,
+    IReadOnlyList<SimulatedDeck> Simulate,
+    bool Mdns,
+    bool Usb = true,
+    string UpdateUrl = BridgeOptions.DefaultUpdateUrl,
+    InstallKind Install = InstallKind.Archive,
+    bool Service = false,
+    int WaitForLock = 0)
 {
     public const int DefaultPort = 5390;
 
+    /// <summary>Release files: {UpdateUrl}/v{version}/{file}.</summary>
+    public const string DefaultUpdateUrl = "https://github.com/remostirnimann/StreamAssistant/releases/download";
+
     // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,4x2:4,plus,neo --mdns false --usb false
+    // Set by installers: --service true (a service manager restarts the bridge), --install-kind msi;
+    // after a self-update: --wait-for-lock 30; for tests: --update-url <base url>
     public static BridgeOptions From(IConfiguration config)
     {
         var simulate = (config["simulate"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -52,8 +77,17 @@ public sealed record BridgeOptions(int Port, string ConfigDir, string? Name, IRe
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.Create),
                 "stream-assistant-bridge");
         }
-        return new BridgeOptions(config.GetValue("port", DefaultPort), configDir, config["name"], simulate, config.GetValue("mdns", true),
-            config.GetValue("usb", true));
+        return new BridgeOptions(
+            config.GetValue("port", DefaultPort),
+            configDir,
+            config["name"],
+            simulate,
+            config.GetValue("mdns", true),
+            config.GetValue("usb", true),
+            config["update-url"]?.TrimEnd('/') ?? DefaultUpdateUrl,
+            string.Equals(config["install-kind"], "msi", StringComparison.OrdinalIgnoreCase) ? InstallKind.Msi : InstallKind.Archive,
+            config.GetValue("service", false),
+            Math.Clamp(config.GetValue("wait-for-lock", 0), 0, 300));
     }
 }
 
@@ -125,16 +159,7 @@ public sealed class SettingsStore : IDisposable
     {
         _logger = logger;
         Directory.CreateDirectory(options.ConfigDir);
-        try
-        {
-            // FileShare.None is an OS lock (flock on Linux/macOS): released when the process ends, even on a crash
-            _instanceLock = new FileStream(
-                Path.Combine(options.ConfigDir, "bridge.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-        }
-        catch (IOException)
-        {
-            throw new AlreadyRunningException(options.ConfigDir);
-        }
+        _instanceLock = TakeLock(options);
         _path = Path.Combine(options.ConfigDir, "bridge.json");
         Settings = Load();
         if (string.IsNullOrEmpty(Settings.Id))
@@ -147,6 +172,30 @@ public sealed class SettingsStore : IDisposable
     public BridgeSettings Settings { get; }
 
     public void Dispose() => _instanceLock.Dispose();
+
+    /// <summary>
+    /// FileShare.None is an OS lock (flock on Linux/macOS): released when the process ends,
+    /// even on a crash. After a self-update the old process may still hold it for a moment.
+    /// </summary>
+    private static FileStream TakeLock(BridgeOptions options)
+    {
+        var until = DateTime.UtcNow.AddSeconds(options.WaitForLock);
+        while (true)
+        {
+            try
+            {
+                return new FileStream(Path.Combine(options.ConfigDir, "bridge.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (DateTime.UtcNow < until)
+            {
+                Thread.Sleep(250);
+            }
+            catch (IOException)
+            {
+                throw new AlreadyRunningException(options.ConfigDir);
+            }
+        }
+    }
 
     public string FilePath => _path;
 

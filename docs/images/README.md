@@ -51,6 +51,8 @@ light theme, about 1280 px wide; crop to the dialog.
 | File | Shows | For | Notes |
 |---|---|---|---|
 | `ha-card-picker.png` | 📷 Dashboard *Add card* with the *Stream Assistant panel* card and its editor (after the next update: before 0.9 the card's text followed the browser language) | [virtual panels](../virtual-panels.md#virtual-panels-in-home-assistant) | |
+| `ha-bridge-update.png` | 📷 *Settings → Updates* (or the bridge's device page) with the bridge update offered | [bridge](../bridge.md#updates) | Needs a bridge one version behind |
+| `bridge-msi-start-menu.png` | 📷 Windows start menu entry *Stream Assistant Bridge* and the status page with the pairing code | [bridge](../bridge.md#windows) | On a Windows PC with the installer |
 | `ha-automation-event.png` | 📷 Automation editor: state trigger on a key's event entity | [automations](../automations.md) | Optional |
 | `photo-dock-mk2.jpg` | 📷 Photo: Network Dock with a Stream Deck MK.2 showing a layout | [README](../README.md), [devices](../devices.md) | Daylight, no reflections; about 1600 px wide |
 | `photo-wall-tablet.jpg` | 📷 Photo: a wall tablet showing a virtual panel | [virtual panels](../virtual-panels.md) | Optional |

@@ -17,8 +17,9 @@ import logging
 import secrets
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_HOST, CONF_MAC, CONF_NAME
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.selector import NumberSelector, NumberSelectorConfig, NumberSelectorMode
@@ -28,6 +29,7 @@ import voluptuous as vol
 
 from .capabilities import MAX_COLS, MAX_ROWS
 from .const import (
+    CONF_AUTO_UPDATE,
     CONF_BRIDGE_ID,
     CONF_COLS,
     CONF_DECK_PRODUCT_ID,
@@ -82,6 +84,18 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
     """Set up a Stream Deck Network Dock."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Options of bridge entries."""
+        return BridgeOptionsFlow()
+
+    @classmethod
+    @callback
+    def async_supports_options_flow(cls, config_entry: ConfigEntry) -> bool:
+        """Only bridges have options (automatic updates)."""
+        return config_entry.data.get(CONF_KIND) == KIND_BRIDGE
 
     def __init__(self) -> None:
         """Initialize the flow."""
@@ -364,3 +378,17 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
             self.hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_HOST: discovery_info.ip})
             self.hass.config_entries.async_schedule_reload(entry.entry_id)
         return self.async_abort(reason="already_configured")
+
+
+class BridgeOptionsFlow(OptionsFlow):
+    """Whether the bridge updates itself to the release that fits the integration."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Show the option."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        current = bool(self.config_entry.options.get(CONF_AUTO_UPDATE))
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({vol.Required(CONF_AUTO_UPDATE, default=current): bool}),
+        )

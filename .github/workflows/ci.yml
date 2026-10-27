@@ -91,6 +91,26 @@ jobs:
       - name: Coverage (minimum 90 %)
         run: python scripts/check_coverage.py --min 90 --exclude /tests/ --exclude /obj/ bridge/tests/*/bin/Debug/net10.0/TestResults/coverage.cobertura.xml
 
+  installers:
+    name: Installers
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Install script
+        shell: bash
+        run: |
+          pip install shellcheck-py
+          shellcheck -s sh bridge/install.sh
+      - name: Windows installer
+        shell: bash
+        run: |
+          dotnet publish bridge/src/StreamAssistant.Bridge -c Release -r win-x64 -o publish -p:DebugType=none
+          cp LICENSE publish/
+          dotnet build bridge/installer -c Release -p:BridgeDir="$PWD/publish/" -p:ProductVersion=0.0.1 -o msi
+
   hassfest:
     name: Hassfest
     runs-on: ubuntu-latest

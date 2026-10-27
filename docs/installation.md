@@ -48,7 +48,8 @@ kept across updates. After an update, reload the browser page once if the key ed
 still shows the old version.
 
 If you use the [bridge](bridge.md), update it to the same version: the integration and
-the bridge are released together.
+the bridge are released together. Home Assistant offers the bridge update as an update
+entity and can install it, also automatically (see [Updates](bridge.md#updates)).
 
 ## Removing
 
