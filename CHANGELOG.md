@@ -5,6 +5,15 @@ All notable changes to Stream Assistant. Format based on
 Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
 the same version. Versions before 0.8.0b1 were not released.
 
+## [0.9.0b2] - 2026-10-28
+
+### Fixed
+
+- Bridge updates from Home Assistant failed with "Could not load file or assembly" when the
+  bridge does not run as a service: the bridge replaced its own program file and then could
+  not load the parts it still needed for the restart. It now loads them before, and puts the
+  old files back if the update fails after all.
+
 ## [0.9.0b1] - 2026-10-27
 
 ### Added
