@@ -33,7 +33,7 @@
       },
       "pair": {
         "title": "Mit {name} koppeln",
-        "description": "Gib den 6-stelligen Kopplungscode ein, den die Bridge unter {host} anzeigt (Fenster, Log oder http://localhost:5390 auf jenem Computer).",
+        "description": "Gib den 6-stelligen Kopplungscode ein, den die Bridge unter {host} anzeigt (Fenster, Log oder http://localhost:{port} auf jenem Computer).",
         "data": {
           "code": "Kopplungscode"
         }
@@ -48,7 +48,7 @@
         },
         "data_description": {
           "name": "Name des Geräts, z. B. «Küche Tablet».",
-          "cols": "Tasten pro Zeile (1–12).",
+          "cols": "Tasten pro Zeile (1–16).",
           "rows": "Anzahl Zeilen (1–8)."
         }
       },
@@ -113,6 +113,47 @@
             }
           }
         }
+      },
+      "dial": {
+        "name": "Drehregler {dial}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "rotate_left": "Nach links gedreht",
+              "rotate_right": "Nach rechts gedreht",
+              "pressed": "Gedrückt",
+              "released": "Losgelassen",
+              "short_press": "Kurz gedrückt",
+              "long_press": "Lang gedrückt"
+            }
+          }
+        }
+      },
+      "touch_strip": {
+        "name": "Touchleiste",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "tap": "Angetippt",
+              "long_press": "Lang gedrückt",
+              "swipe_left": "Nach links gewischt",
+              "swipe_right": "Nach rechts gewischt"
+            }
+          }
+        }
+      },
+      "page_button": {
+        "name": "Seitentaste {button}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "pressed": "Gedrückt",
+              "released": "Losgelassen",
+              "short_press": "Kurz gedrückt",
+              "long_press": "Lang gedrückt"
+            }
+          }
+        }
       }
     },
     "number": {
@@ -151,6 +192,17 @@
     "clear_key": {
       "name": "Taste leeren",
       "description": "Leert eine Stream-Deck-Taste und entfernt das gespeicherte Aussehen."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Bridge-Optionen",
+        "description": "Automatische Updates: Wird Stream Assistant aktualisiert, installiert die Bridge die passende Version selbst (nur Bridges, die sich selbst aktualisieren können).",
+        "data": {
+          "auto_update": "Bridge automatisch aktualisieren"
+        }
+      }
     }
   }
 }

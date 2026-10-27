@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stream Assistant editor</title>
+<style>
+  @font-face { font-family: mdi; src: url("mdi.ttf"); }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: Roboto, "Segoe UI", system-ui, sans-serif; background: #fafafa; color: #212121;
+    --primary-color: #03a9f4; --accent-color: #ff9800; --secondary-text-color: #727272; --primary-text-color: #212121;
+    --card-background-color: #fff; --divider-color: #e0e0e0; --primary-background-color: #fafafa;
+    --secondary-background-color: #f5f5f5; --text-primary-color: #fff; --app-header-background-color: #03a9f4;
+    --app-header-text-color: #fff; --success-color: #43a047; --error-color: #db4437; --mdc-icon-size: 24px; }
+  stream-assistant-panel { display: block; min-height: 100%; }
+</style>
+<script src="images.js"></script>
+<script src="fakehass.js"></script>
+<script src="panel.js"></script>
+</head>
+<body>
+<stream-assistant-panel id="panel"></stream-assistant-panel>
+<script>
+  const panel = document.getElementById("panel");
+  panel.hass = window.fakeHass;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  (async () => {
+    const deck = params.get("deck") || "mk2";
+    const entry = { mk2: "dock", plus: "bridge.plus", neo: "bridge.neo", studio: "bridge.studio", panel: "panel" }[deck];
+    await wait(400);
+    if (entry !== "dock") await panel._loadTarget("entry", entry);
+    await wait(300);
+    if (params.get("page")) {
+      panel.pageId = params.get("page");
+      panel._renderAll();
+      panel._schedulePreview(0);
+      await wait(300);
+    }
+    const select = params.get("select");
+    if (select !== null) {
+      panel.selected = select.startsWith("d") ? select : Number(select);
+      panel._renderDeck();
+      panel._renderForm();
+    }
+    if (params.get("view") === "info") await panel._showView("info");
+    const dialog = params.get("dialog");
+    if (dialog === "template") panel._openTemplateDialog();
+    if (dialog === "entity") panel._openEntityPicker("key:entity_id");
+    if (dialog === "icon") panel._openIconPicker("key:icon");
+    document.body.dataset.ready = "1";
+  })();
+</script>
+</body>
+</html>

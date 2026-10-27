@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 from homeassistant.const import ATTR_FRIENDLY_NAME, ATTR_UNIT_OF_MEASUREMENT, STATE_UNAVAILABLE, STATE_UNKNOWN
@@ -16,16 +17,53 @@ NAV_BG = "#3a3a3a"
 EMPTY_BG = "#000000"
 
 ON_STATES = {
-    "on", "open", "opening", "closing", "playing", "unlocked", "unlocking", "home",
-    "heat", "cool", "heat_cool", "auto", "dry", "fan_only", "cleaning", "active",
-    "armed_away", "armed_home", "armed_night", "armed_vacation", "armed_custom_bypass",
-    "triggered", "above_horizon",
+    "on",
+    "open",
+    "opening",
+    "closing",
+    "playing",
+    "unlocked",
+    "unlocking",
+    "home",
+    "heat",
+    "cool",
+    "heat_cool",
+    "auto",
+    "dry",
+    "fan_only",
+    "cleaning",
+    "active",
+    "armed_away",
+    "armed_home",
+    "armed_night",
+    "armed_vacation",
+    "armed_custom_bypass",
+    "triggered",
+    "above_horizon",
 }
 # Domains without an on/off meaning: always drawn in the "on" colour
 NEUTRAL_DOMAINS = {
-    "sensor", "weather", "number", "input_number", "input_text", "input_select", "select",
-    "scene", "button", "input_button", "counter", "event", "text", "date", "time",
-    "datetime", "input_datetime", "image", "camera", "zone", "person",
+    "sensor",
+    "weather",
+    "number",
+    "input_number",
+    "input_text",
+    "input_select",
+    "select",
+    "scene",
+    "button",
+    "input_button",
+    "counter",
+    "event",
+    "text",
+    "date",
+    "time",
+    "datetime",
+    "input_datetime",
+    "image",
+    "camera",
+    "zone",
+    "person",
 }
 # (icon when on, icon when off) for domains where the state changes the picture
 DOMAIN_STATE_ICONS = {
@@ -49,28 +87,70 @@ BINARY_SENSOR_ICONS = {
     "power": ("power", "power-off"),
 }
 DOMAIN_ICONS = {
-    "light": "lightbulb", "switch": "toggle-switch", "fan": "fan", "cover": "blinds",
-    "lock": "lock", "scene": "palette", "script": "script-text", "media_player": "play-pause",
-    "climate": "thermostat", "sensor": "gauge", "binary_sensor": "checkbox-blank-circle-outline",
-    "input_boolean": "toggle-switch", "button": "gesture-tap-button", "automation": "robot",
-    "vacuum": "robot-vacuum", "weather": "weather-partly-cloudy", "person": "account",
+    "light": "lightbulb",
+    "switch": "toggle-switch",
+    "fan": "fan",
+    "cover": "blinds",
+    "lock": "lock",
+    "scene": "palette",
+    "script": "script-text",
+    "media_player": "play-pause",
+    "climate": "thermostat",
+    "sensor": "gauge",
+    "binary_sensor": "checkbox-blank-circle-outline",
+    "input_boolean": "toggle-switch",
+    "button": "gesture-tap-button",
+    "automation": "robot",
+    "vacuum": "robot-vacuum",
+    "weather": "weather-partly-cloudy",
+    "person": "account",
 }
 
 STATE_LABELS = {
     "de": {
-        "on": "An", "off": "Aus", "open": "Offen", "closed": "Zu", "opening": "Öffnet",
-        "closing": "Schliesst", "locked": "Verriegelt", "unlocked": "Offen", "playing": "Spielt",
-        "paused": "Pausiert", "idle": "Bereit", "standby": "Standby", "home": "Zuhause",
-        "not_home": "Abwesend", "heat": "Heizen", "cool": "Kühlen", "auto": "Auto",
-        "cleaning": "Reinigt", "docked": "Angedockt", "unavailable": "nicht verfügbar",
+        "on": "An",
+        "off": "Aus",
+        "open": "Offen",
+        "closed": "Zu",
+        "opening": "Öffnet",
+        "closing": "Schliesst",
+        "locked": "Verriegelt",
+        "unlocked": "Offen",
+        "playing": "Spielt",
+        "paused": "Pausiert",
+        "idle": "Bereit",
+        "standby": "Standby",
+        "home": "Zuhause",
+        "not_home": "Abwesend",
+        "heat": "Heizen",
+        "cool": "Kühlen",
+        "auto": "Auto",
+        "cleaning": "Reinigt",
+        "docked": "Angedockt",
+        "unavailable": "nicht verfügbar",
         "unknown": "unbekannt",
     },
     "en": {
-        "on": "On", "off": "Off", "open": "Open", "closed": "Closed", "opening": "Opening",
-        "closing": "Closing", "locked": "Locked", "unlocked": "Unlocked", "playing": "Playing",
-        "paused": "Paused", "idle": "Idle", "standby": "Standby", "home": "Home",
-        "not_home": "Away", "heat": "Heat", "cool": "Cool", "auto": "Auto",
-        "cleaning": "Cleaning", "docked": "Docked", "unavailable": "unavailable",
+        "on": "On",
+        "off": "Off",
+        "open": "Open",
+        "closed": "Closed",
+        "opening": "Opening",
+        "closing": "Closing",
+        "locked": "Locked",
+        "unlocked": "Unlocked",
+        "playing": "Playing",
+        "paused": "Paused",
+        "idle": "Idle",
+        "standby": "Standby",
+        "home": "Home",
+        "not_home": "Away",
+        "heat": "Heat",
+        "cool": "Cool",
+        "auto": "Auto",
+        "cleaning": "Cleaning",
+        "docked": "Docked",
+        "unavailable": "unavailable",
         "unknown": "unknown",
     },
 }
@@ -143,6 +223,48 @@ def format_state(hass: HomeAssistant, state: State) -> str:
     return text
 
 
+def _fraction(value: Any, low: Any, high: Any) -> float | None:
+    try:
+        value, low, high = float(value), float(low), float(high)
+    except (TypeError, ValueError):
+        return None
+    if high <= low:
+        return None
+    return max(0.0, min(1.0, (value - low) / (high - low)))
+
+
+def entity_level(state: State | None) -> float | None:
+    """0..1 for entities a dial typically adjusts; None when there is no such value."""
+    if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        return None
+    attrs = state.attributes
+    domain = state.domain
+    if domain == "light":
+        return _fraction(attrs.get("brightness") or 0, 0, 255) if state.state == "on" else 0.0
+    if domain == "media_player":
+        return _fraction(attrs.get("volume_level"), 0, 1)
+    if domain == "cover":
+        return _fraction(attrs.get("current_position"), 0, 100)
+    if domain == "fan":
+        return _fraction(attrs.get("percentage") or 0, 0, 100) if state.state == "on" else 0.0
+    if domain == "climate":
+        return _fraction(attrs.get("temperature"), attrs.get("min_temp"), attrs.get("max_temp"))
+    if domain in ("number", "input_number"):
+        return _fraction(state.state, attrs.get("min"), attrs.get("max"))
+    if attrs.get(ATTR_UNIT_OF_MEASUREMENT) == "%":
+        return _fraction(state.state, 0, 100)
+    return None
+
+
+def page_dial_visual(hass: HomeAssistant, page: dict[str, Any], index: int) -> KeyVisual:
+    """What a dial's part of the touch strip shows right now."""
+    dial = page.get("dials", {}).get(str(index))
+    visual = key_visual(hass, dial)
+    if not dial or not dial.get("entity_id"):
+        return visual
+    return dataclasses.replace(visual, level=entity_level(hass.states.get(dial["entity_id"])))
+
+
 def page_key_slot(page: dict[str, Any], index: int) -> tuple[dict[str, Any] | None, bool]:
     """Return (key config, is_back_key) for a key of a page."""
     if page.get("parent") and index == BACK_KEY:
@@ -158,9 +280,7 @@ def page_key_visual(hass: HomeAssistant, page: dict[str, Any], index: int) -> Ke
 
 def back_visual(hass: HomeAssistant) -> KeyVisual:
     """The reserved first key of a folder."""
-    return KeyVisual(
-        title=UI_LABELS[_lang(hass)]["back"], icon="arrow-left", background=NAV_BG
-    )
+    return KeyVisual(title=UI_LABELS[_lang(hass)]["back"], icon="arrow-left", background=NAV_BG)
 
 
 def key_visual(hass: HomeAssistant, key: dict[str, Any] | None) -> KeyVisual:

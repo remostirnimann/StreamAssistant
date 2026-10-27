@@ -1,113 +1,92 @@
 # Stream Assistant
 
-Home Assistant integration that drives **Elgato Stream Decks** directly, with
-all configuration in Home Assistant: no Stream Deck app, no Companion. A deck
-can be connected in three ways:
+<!-- TODO image: docs/images/logo.png – logo (list: docs/images/README.md) -->
 
-- **Elgato Stream Deck Network Dock**: over the network, no extra computer
-- **Stream Assistant Bridge**: decks on a computer (Windows, macOS, Linux, later
-  a Home Assistant add-on); the desktop version also offers **virtual decks** in a window
-- **Virtual panel** in Home Assistant: a deck that only exists as a dashboard card
-  (wall tablets, phones), with any number of columns and rows
+Home Assistant integration that drives **Elgato Stream Decks** directly, with all
+configuration in Home Assistant: no Stream Deck app, no Companion, no plugins. Design every
+key, dial and page in a key editor in the sidebar; keys follow their entities live.
 
-> Early development. Tested with: Network Dock (firmware 1.01.013) + Stream Deck MK.2.
-> The bridge's Elgato USB driver is not written yet; the bridge is tested with
-> simulated and virtual decks.
+![Keys as Stream Assistant draws them](docs/images/keys-gallery.png)
 
-## Features (so far)
+<!-- TODO image: docs/images/photo-dock-mk2.jpg – photo: Network Dock with a Stream Deck MK.2 showing a layout (list: docs/images/README.md) -->
 
-- **Key editor** in the sidebar (*Stream Assistant*, admins only): pages and folders,
-  per key an entity (drives colours and second line), title, MDI icon, on/off colours,
-  and actions for short and long press (toggle/run, open folder/page, back, any action
-  with data). The preview shows the real rendered keys with live states.
-- **Templates / planned decks**: layouts for a model or a free grid but no hardware,
-  designed in the same editor with live preview. Decks can be linked to a template
-  (shared layout, also across different sizes by row/column) or detached into their own copy.
-- **Info & behaviour** per deck: serials, firmware, address, connection, brightness, layout
-  facts; night brightness (time window or sunset) and fading out when idle (dim or off,
-  optionally the first press only wakes the deck)
-- **Run** buttons simulate a key press (events + action), also for unsaved edits
-- Keys follow their entity live (light brightness, cover position, sensor values …)
-- Short press runs instantly when no long-press action is set
-- One `event` entity per key: `pressed`, `released`, `short_press`, `long_press`
-- Brightness (`number`), restored after restarts; connection state (`binary_sensor`)
-- Actions `stream_assistant.set_key` and `stream_assistant.clear_key` (act on the page shown)
-- Removing an entry also deletes its stored layouts
+A deck can be connected in three ways:
 
-### Network Dock
+- **Elgato Stream Deck Network Dock:** over the network, no computer needed.
+- **Stream Assistant Bridge:** Stream Decks plugged into a computer (Windows, macOS, Linux);
+  the desktop version also shows **virtual decks** in a window.
+- **Virtual panel:** a deck that only exists in Home Assistant, shown and pressed on a
+  dashboard (wall tablets, phones), with any grid.
 
-- Auto discovery (mDNS `_elg._tcp`) or manual setup by IP, one config entry per dock;
-  address changes are followed via mDNS and DHCP
-- Automatic reconnect, deck hot-plug (a different deck triggers a reload)
-- Only one client can be connected to a dock at a time. Close the Stream Deck app
-  or Companion before using this integration.
+> **Beta.** Tested on real hardware so far: Network Dock with a Stream Deck MK.2. The bridge
+> drivers for all other models are complete but untested; see
+> [Devices and status](docs/devices.md).
 
-### Stream Assistant Bridge
+## Documentation
 
-- Found via mDNS (`_stream-assistant._tcp`) or added by address, paired once with the
-  6-digit code the bridge shows; Home Assistant asks for a new code if the bridge forgets it
-- One config entry per bridge; every deck on it is its own device, decks appear and
-  disappear with USB hot-plug and keep their identity
-- Vendor-neutral protocol: [docs/bridge-protocol.md](docs/bridge-protocol.md);
-  the bridge itself: [bridge/README.md](bridge/README.md)
+- [Installation](docs/installation.md): HACS or by hand
+- [Setup](docs/setup.md): docks, bridges, virtual panels
+- [Stream Assistant Bridge](docs/bridge.md): installers, pairing, updates from Home Assistant
+- [Devices and status](docs/devices.md): every model and how far it is tested
+- [Virtual and simulated panels](docs/virtual-panels.md)
+- [Key editor](docs/editor.md): pages, keys, dials, templates, behaviour
+- [Automations](docs/automations.md): events, actions, NFC tags
+- [Troubleshooting](docs/troubleshooting.md)
 
-### Virtual panel and dashboard card
+## Features
 
-- *Settings → Devices & services → Add → Stream Assistant → Virtual panel*: name,
-  columns (1–12) and rows (1–8); the grid can be changed later (*Reconfigure*)
-- Dashboard card `custom:stream-assistant-card` (loaded automatically, appears in the
-  card picker): shows the keys live, press or hold to use them. Every user can view and
-  press; configuring stays with admins.
+- **Key editor** (sidebar, administrators): pages and folders; per key an entity, title,
+  icon, colours and actions for short and long press (automatic per entity, open a page,
+  back, any Home Assistant action). Live preview with real states; *Run* tests a press.
+- **Dials and touch strips:** turning adjusts an entity directly (brightness, volume,
+  position, temperature, values) or runs actions; the strip shows each dial's entity with a
+  level bar.
+- **Templates:** plan layouts before the hardware arrives, share one layout between decks,
+  also of different sizes.
+- **Behaviour:** night brightness (time window or sunset) and fading out when idle.
+- **Entities:** an event entity per key, dial, touch strip and page button; brightness;
+  connection state. Actions `stream_assistant.set_key` and `stream_assistant.clear_key`.
+- **Stream Deck specials:** Neo page buttons and info screen, Studio LED rings and NFC
+  reader (as Home Assistant tag scans), Pedal.
+- **Robust:** docks are followed when their address changes, bridges and decks reconnect
+  on their own, decks keep their layout while unplugged.
 
-Bundled assets: Material Design Icons font (Pictogrammers, Apache 2.0) and
-Roboto Medium (Apache 2.0), see `assets/`.
+## Quick start
 
-## Installation
-
-Copy `custom_components/stream_assistant` into your Home Assistant `config/custom_components`
-folder (or add this repository to HACS as a custom repository), restart Home Assistant,
-then add the integration under *Settings → Devices & services*.
-
-## Example
-
-```yaml
-automation:
-  - triggers:
-      - trigger: state
-        entity_id: event.stream_deck_mk_2_key_1
-    conditions:
-      - condition: template
-        value_template: "{{ trigger.to_state.attributes.event_type == 'short_press' }}"
-    actions:
-      - action: light.toggle
-        target:
-          entity_id: light.wohnzimmer
-```
+1. Install with HACS as a custom repository (`https://github.com/remostirnimann/StreamAssistant`,
+   type *Integration*) and restart Home Assistant ([details](docs/installation.md)).
+2. *Settings → Devices & services → Add integration → Stream Assistant*, choose how the deck
+   is connected ([details](docs/setup.md)).
+3. Open **Stream Assistant** in the sidebar and design the keys.
 
 ## Repository layout
 
 - `custom_components/stream_assistant/`: the integration
-  - `protocol/`: Home Assistant independent clients for the Network Dock (Cora TCP,
-    Gen2 HID reports) and the bridge (`bridge.py`). Will move to its own PyPI package.
+  - `protocol/`: Home Assistant independent clients for the Network Dock (Cora TCP, Gen2
+    HID reports) and the bridge (`bridge.py`)
   - `transport.py`, `capabilities.py`: how a deck is reached and what it can do
   - `bridge_hub.py`: bridge entries with several decks
   - `frontend/panel.js` (editor) and `frontend/card.js` (dashboard card): plain web
     components, no build step
-- `bridge/`: the Stream Assistant Bridge (.NET 10: core library, console and desktop program, tests)
-- `docs/bridge-protocol.md`: the bridge protocol specification
-- `scripts/`: tests without hardware (`selftest_transport.py` with a simulated dock,
-  `selftest_bridge.py` against the real bridge), live test against a dock, render sheet,
-  WebSocket and simulator probes for the HA host
+- `bridge/`: the Stream Assistant Bridge (.NET 10: core library, console and desktop
+  program, tests), see [bridge/README.md](bridge/README.md)
+- `docs/`: user documentation and the [bridge protocol](docs/bridge-protocol.md)
+- `scripts/`: tests without hardware, probes for a Home Assistant host
 
 Protocol knowledge based on [node-elgato-stream-deck](https://github.com/Julusian/node-elgato-stream-deck) (MIT).
 
 ## Development and releases
 
-- Pull requests go to `develop`; CI checks the integration, the bridge, hassfest and HACS.
+- Pull requests go to `develop`; CI checks the integration and the bridge (tests with at
+  least 90 % coverage, linters), hassfest and HACS.
 - A release is a pull request from `develop` into `main`. Merging it builds the integration
-  zip and the bridge for Windows, macOS and Linux, tags `vX.Y.Z` and publishes the files
-  on the GitHub releases page, with the changelog section as release notes.
+  zip and the bridge for Windows, macOS and Linux, tags `vX.Y.Z` and publishes the files on
+  the [releases page](https://github.com/remostirnimann/StreamAssistant/releases), with the
+  changelog section as release notes.
+- [CHANGELOG.md](CHANGELOG.md) lists the changes of every version; [ROADMAP.md](ROADMAP.md)
+  the plans.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). The bundled fonts are licensed under Apache 2.0.
+MIT, see [LICENSE](LICENSE). Bundled assets: Material Design Icons font (Pictogrammers,
+Apache 2.0) and Roboto Medium (Apache 2.0), see `custom_components/stream_assistant/assets/`.

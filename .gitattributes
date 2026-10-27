@@ -1,0 +1,6 @@
+# Keep LF everywhere (Linux CI, dotnet format, Home Assistant); Windows tools handle LF fine
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ttf binary
+*.woff binary

@@ -17,6 +17,29 @@ const DEFAULT_KEY = () => ({
   short: { type: "none" },
   long: { type: "none" },
 });
+// A dial: what its part of the touch strip shows (key fields), push/tap (short/long) and turning
+const DEFAULT_DIAL = () => ({
+  ...DEFAULT_KEY(),
+  rotate: "none",
+  step: null,
+  left: { type: "none" },
+  right: { type: "none" },
+});
+// Entities a dial can adjust directly (actions.py), with the unit of a step
+const ADJUSTABLE = {
+  light: "%",
+  cover: "%",
+  fan: "%",
+  media_player: "%",
+  climate: "°",
+  number: "",
+  input_number: "",
+  select: "",
+  input_select: "",
+};
+// Selection: a key index (number) or "d<index>" for a dial
+const isDial = (sel) => typeof sel === "string";
+const dialIndex = (sel) => Number(sel.slice(1));
 
 const T = {
   de: {
@@ -102,6 +125,24 @@ const T = {
     test: "Ausführen",
     testHint: "Wie ein echter Tastendruck: löst die Events und die Aktion aus (auch ungespeichert)",
     tested: "Ausgeführt",
+    dial: "Drehregler",
+    dials: "Drehregler",
+    dialHint: "Drehregler und ihr Teil der Touchleiste: anklicken zum Bearbeiten.",
+    touchStrip: "Touchleiste",
+    rotate: "Drehen",
+    rotateNone: "Nichts",
+    rotateAdjust: "Entität verstellen",
+    rotateActions: "Je eine Aktion pro Raste",
+    step: "Schrittweite pro Raste",
+    stepAuto: "automatisch",
+    adjustHelp: "Verstellt die Entität direkt: Helligkeit, Lautstärke, Position, Solltemperatur, Wert oder Auswahl.",
+    adjustNeedsEntity: "Zum Verstellen oben eine Entität wählen (Licht, Rollladen, Ventilator, Mediaplayer, Klima, Zahl oder Auswahl).",
+    adjustUnsupported: "Diese Entität lässt sich nicht mit einem Drehregler verstellen.",
+    turnLeft: "Nach links drehen",
+    turnRight: "Nach rechts drehen",
+    dialPress: "Drücken oder Antippen",
+    dialLong: "Lang drücken oder halten (ab 0,5 s)",
+    clearDial: "Drehregler leeren",
     devices: "Geräte",
     templatesGroup: "Vorlagen",
     newTemplate: "+ Vorlage",
@@ -266,6 +307,24 @@ const T = {
     test: "Run",
     testHint: "Like a real key press: fires the events and the action (also unsaved)",
     tested: "Ran",
+    dial: "Dial",
+    dials: "Dials",
+    dialHint: "Dials and their part of the touch strip: click to edit.",
+    touchStrip: "Touch strip",
+    rotate: "Turning",
+    rotateNone: "Nothing",
+    rotateAdjust: "Adjust the entity",
+    rotateActions: "One action per detent",
+    step: "Step per detent",
+    stepAuto: "automatic",
+    adjustHelp: "Changes the entity directly: brightness, volume, position, target temperature, value or option.",
+    adjustNeedsEntity: "Choose an entity above to adjust (light, cover, fan, media player, climate, number or select).",
+    adjustUnsupported: "This entity cannot be adjusted with a dial.",
+    turnLeft: "Turn left",
+    turnRight: "Turn right",
+    dialPress: "Push or tap",
+    dialLong: "Long push or hold (0.5 s)",
+    clearDial: "Clear dial",
     devices: "Devices",
     templatesGroup: "Templates",
     newTemplate: "+ Template",
@@ -422,6 +481,7 @@ class StreamAssistantPanel extends HTMLElement {
     this.pageId = ROOT_PAGE;
     this.selected = null;
     this.images = [];
+    this.dialImages = [];
     this.dirty = false;
     this.message = "";
     this.icons = [];
@@ -530,14 +590,27 @@ class StreamAssistantPanel extends HTMLElement {
     return Boolean(this.page?.parent) && index === 0;
   }
 
-  _key(index) {
-    return this.page?.keys[String(index)] || null;
+  // A key (index) or a dial ("d<index>") of the page
+  _key(sel) {
+    if (isDial(sel)) return this.page?.dials?.[String(dialIndex(sel))] || null;
+    return this.page?.keys[String(sel)] || null;
   }
 
-  _ensureKey(index) {
+  _ensureKey(sel) {
+    if (isDial(sel)) {
+      if (!this.page.dials) this.page.dials = {};
+      const dials = this.page.dials;
+      if (!dials[String(dialIndex(sel))]) dials[String(dialIndex(sel))] = DEFAULT_DIAL();
+      return dials[String(dialIndex(sel))];
+    }
     const keys = this.page.keys;
-    if (!keys[String(index)]) keys[String(index)] = DEFAULT_KEY();
-    return keys[String(index)];
+    if (!keys[String(sel)]) keys[String(sel)] = DEFAULT_KEY();
+    return keys[String(sel)];
+  }
+
+  _removeSelected() {
+    if (isDial(this.selected)) delete this.page.dials?.[String(dialIndex(this.selected))];
+    else delete this.page.keys[String(this.selected)];
   }
 
   _changed() {
@@ -561,6 +634,7 @@ class StreamAssistantPanel extends HTMLElement {
         page: this._cleanPage(this.page),
       });
       this.images = result.images;
+      this.dialImages = result.dials || [];
       this._renderDeck();
     } catch (_err) {
       // Typing in progress (e.g. half an entity id): keep the last preview
@@ -569,7 +643,7 @@ class StreamAssistantPanel extends HTMLElement {
 
   _maybeRefreshForStates() {
     if (!this.page || !this._hass) return;
-    const ids = Object.values(this.page.keys)
+    const ids = [...Object.values(this.page.keys), ...Object.values(this.page.dials || {})]
       .map((k) => k.entity_id)
       .filter(Boolean);
     const stamp = ids.map((id) => this._hass.states[id]?.last_updated || "").join("|");
@@ -586,8 +660,13 @@ class StreamAssistantPanel extends HTMLElement {
       if (!out[field]) out[field] = null;
     }
     if (out.font_size === "" || out.font_size === undefined) out.font_size = null;
-    for (const slot of ["short", "long"]) {
+    if ("rotate" in out) {
+      const step = parseFloat(out.step);
+      out.step = step > 0 ? step : null;
+    }
+    for (const slot of ["short", "long", "left", "right"]) {
       const action = out[slot];
+      if (!action) continue;
       if (action.type === "default") {
         const entity = action.entity_id || out.entity_id;
         out[slot] = entity ? { type: "default", entity_id: entity } : { type: "none" };
@@ -613,7 +692,8 @@ class StreamAssistantPanel extends HTMLElement {
     return (
       !key.title && !key.icon && !key.icon_off && !key.entity_id && !key.image &&
       !(key.second_line === "text" && key.second_text) &&
-      key.short.type === "none" && key.long.type === "none"
+      key.short.type === "none" && key.long.type === "none" &&
+      (key.rotate || "none") === "none"
     );
   }
 
@@ -623,7 +703,12 @@ class StreamAssistantPanel extends HTMLElement {
       const clean = this._cleanKey(key);
       if (!this._isEmptyKey(clean)) keys[index] = clean;
     }
-    return { id: page.id, name: page.name, parent: page.parent || null, keys };
+    const dials = {};
+    for (const [index, dial] of Object.entries(page.dials || {})) {
+      const clean = this._cleanKey(dial);
+      if (!this._isEmptyKey(clean)) dials[index] = clean;
+    }
+    return { id: page.id, name: page.name, parent: page.parent || null, keys, dials };
   }
 
   async _save() {
@@ -706,8 +791,9 @@ class StreamAssistantPanel extends HTMLElement {
         <label>${t.templateName}<input id="tpl-name" maxlength="60" placeholder="${esc(t.templateNamePlaceholder)}"></label>
         <label>${t.model}<select id="tpl-model">${models}</select></label>
         <div class="grid-size" id="tpl-grid" hidden>
-          <label>${t.cols}<input id="tpl-cols" type="number" min="1" max="12" value="5"></label>
+          <label>${t.cols}<input id="tpl-cols" type="number" min="1" max="16" value="5"></label>
           <label>${t.rows}<input id="tpl-rows" type="number" min="1" max="8" value="3"></label>
+          <label>${t.dials}<input id="tpl-dials" type="number" min="0" max="8" value="0"></label>
         </div>
       </div>
       <div class="dlg-foot">
@@ -722,8 +808,9 @@ class StreamAssistantPanel extends HTMLElement {
     const name = this.shadowRoot.getElementById("tpl-name").value.trim();
     let model = this.shadowRoot.getElementById("tpl-model").value;
     if (model === "grid") {
-      const clamp = (id, max) => Math.max(1, Math.min(max, Math.round(Number(this.shadowRoot.getElementById(id).value) || 1)));
-      model = `grid_${clamp("tpl-cols", 12)}x${clamp("tpl-rows", 8)}`;
+      const value = (id, min, max) => Math.max(min, Math.min(max, Math.round(Number(this.shadowRoot.getElementById(id).value) || min)));
+      const dials = value("tpl-dials", 0, 8);
+      model = `grid_${value("tpl-cols", 1, 16)}x${value("tpl-rows", 1, 8)}${dials ? `_d${dials}` : ""}`;
     }
     if (!name) return;
     if (!this._confirmLeave()) return;
@@ -1228,11 +1315,40 @@ class StreamAssistantPanel extends HTMLElement {
         `<button class="key ${this.selected === i ? "selected" : ""} ${!key && !this._isBackKey(i) ? "blank" : ""}" data-role="key" data-key="${i}" aria-label="${esc(label)}">${img}</button>`
       );
     }
+    if (model.dials) cells.push(this._dialsHtml(model));
     deck.innerHTML = cells.join("");
+  }
+
+  // Touch strip segments above the dials; both select the dial
+  _dialsHtml(model) {
+    const t = this.t;
+    const segments = [];
+    const knobs = [];
+    for (let i = 0; i < model.dials; i += 1) {
+      const sel = `d${i}`;
+      const dial = this._key(sel);
+      const label = `${t.dial} ${i + 1}${dial?.title ? `: ${dial.title}` : ""}`;
+      const state = `${this.selected === sel ? "selected" : ""} ${dial ? "" : "blank"}`;
+      const img = this.dialImages[i] ? `<img alt="" src="data:image/jpeg;base64,${this.dialImages[i]}">` : "";
+      if (model.touch_width) {
+        segments.push(`<button class="segment ${state}" data-role="key" data-key="${sel}" aria-label="${esc(`${t.touchStrip} · ${label}`)}">${img}</button>`);
+      }
+      knobs.push(`<button class="knob ${state}" data-role="key" data-key="${sel}" aria-label="${esc(label)}"><ha-icon icon="mdi:knob"></ha-icon></button>`);
+    }
+    const ratio = model.touch_width ? `${model.touch_width / model.dials} / ${model.touch_height}` : "1";
+    return `${segments.length ? `<div class="strip" style="--dials:${model.dials};--segment:${ratio}">${segments.join("")}</div>` : ""}
+      <div class="knobs" style="--dials:${model.dials}">${knobs.join("")}</div>`;
   }
 
   _actionFields(slot, action) {
     const t = this.t;
+    const dial = isDial(this.selected);
+    const labels = {
+      short: dial ? t.dialPress : t.short,
+      long: dial ? t.dialLong : t.long,
+      left: t.turnLeft,
+      right: t.turnRight,
+    };
     const pages = this.draft.pages
       .filter((p) => p.id !== this.pageId)
       .map((p) => `<option value="${esc(p.id)}" ${action.page === p.id ? "selected" : ""}>${esc(p.id === ROOT_PAGE ? t.root : p.name)}</option>`)
@@ -1258,35 +1374,44 @@ class StreamAssistantPanel extends HTMLElement {
       extra = `<label>${t.actionName}<input list="sa-services" data-slot="${slot}" data-afield="action" value="${esc(action.action || "")}" placeholder="light.turn_on"></label>
         <label>${t.actionData}<textarea rows="3" data-slot="${slot}" data-afield="data" placeholder='{"entity_id": "light.kueche"}'>${esc(JSON.stringify(action.data || {}, null, 0) === "{}" ? "" : JSON.stringify(action.data))}</textarea></label>`;
     }
-    return `<div class="field"><span class="field-label">${slot === "short" ? t.short : t.long}</span>
+    return `<div class="field"><span class="field-label">${labels[slot]}</span>
       <div class="action-row">
-        <select data-slot="${slot}" data-afield="type" aria-label="${esc(slot === "short" ? t.short : t.long)}">${types}</select>
-        ${this._testButton(slot === "long")}
+        <select data-slot="${slot}" data-afield="type" aria-label="${esc(labels[slot])}">${types}</select>
+        ${this._testButton(slot)}
       </div></div>${extra}`;
   }
 
-  _testButton(long) {
+  // gesture: short | long, or left | right for dials
+  _testButton(gesture) {
     const t = this.t;
-    return `<button type="button" class="btn small test" data-role="test" data-long="${long ? 1 : 0}" title="${esc(t.testHint)}">
-      <ha-icon icon="mdi:play"></ha-icon>${t.test}</button>`;
+    // Turning has two buttons side by side: name the direction
+    const [icon, label] = { left: ["mdi:rotate-left", t.turnLeft], right: ["mdi:rotate-right", t.turnRight] }[gesture] || ["mdi:play", t.test];
+    return `<button type="button" class="btn small test" data-role="test" data-gesture="${gesture}" title="${esc(t.testHint)}">
+      <ha-icon icon="${icon}"></ha-icon>${esc(label)}</button>`;
   }
 
-  async _test(long) {
+  async _test(gesture) {
     const t = this.t;
     if (Object.keys(this._jsonErrors).length) {
       this.message = t.invalidJson;
       this._renderStatus();
       return;
     }
+    const dial = isDial(this.selected);
+    const control = dial ? { dial: dialIndex(this.selected) } : { key: this.selected };
+    const rotate = gesture === "left" || gesture === "right" ? { rotate: gesture } : {};
+    const names = { short: dial ? t.dialPress : t.short, long: dial ? t.dialLong : t.long, left: t.turnLeft, right: t.turnRight };
     try {
       await this._hass.callWS({
         type: "stream_assistant/press",
         ...this._targetParams,
-        key: this.selected,
-        long,
+        ...control,
+        ...rotate,
+        long: gesture === "long",
         page: this._cleanPage(this.page),
       });
-      this.message = `${t.tested}: ${t.key} ${this.selected + 1} · ${long ? t.long : t.short}`;
+      const name = dial ? `${t.dial} ${dialIndex(this.selected) + 1}` : `${t.key} ${this.selected + 1}`;
+      this.message = `${t.tested}: ${name} · ${names[gesture]}`;
       if (!this.isTemplate) {
         // A folder/back action switches the deck page
         await this._refreshLists();
@@ -1310,12 +1435,13 @@ class StreamAssistantPanel extends HTMLElement {
       return;
     }
     const index = this.selected;
-    const position = `${t.row} ${Math.floor(index / model.cols) + 1} · ${t.col} ${(index % model.cols) + 1}`;
-    if (this._isBackKey(index)) {
-      form.innerHTML = `<h2>${t.key} ${index + 1}</h2><p class="sub">${position}</p><p>${t.backKey}</p>${this._testButton(false)}`;
+    const dial = isDial(index);
+    const position = dial ? t.dialHint : `${t.row} ${Math.floor(index / model.cols) + 1} · ${t.col} ${(index % model.cols) + 1}`;
+    if (!dial && this._isBackKey(index)) {
+      form.innerHTML = `<h2>${t.key} ${index + 1}</h2><p class="sub">${position}</p><p>${t.backKey}</p>${this._testButton("short")}`;
       return;
     }
-    const key = this._key(index) || DEFAULT_KEY();
+    const key = this._key(index) || (dial ? DEFAULT_DIAL() : DEFAULT_KEY());
     const serviceOptions = Object.entries(this._hass.services || {})
       .flatMap(([domain, services]) => Object.keys(services).map((s) => `<option value="${esc(domain)}.${esc(s)}"></option>`))
       .join("");
@@ -1323,8 +1449,8 @@ class StreamAssistantPanel extends HTMLElement {
     form.innerHTML = `
       <datalist id="sa-services">${serviceOptions}</datalist>
       <div class="form-head">
-        <h2>${t.key} ${index + 1}</h2>
-        <span class="sub">${position}</span>
+        <h2>${dial ? `${t.dial} ${dialIndex(index) + 1}` : `${t.key} ${index + 1}`}</h2>
+        <span class="sub">${esc(position)}</span>
       </div>
       <div class="section">
         <h3>${t.sectionState}</h3>
@@ -1354,13 +1480,40 @@ class StreamAssistantPanel extends HTMLElement {
       </div>
       <div class="section">
         <h3>${t.sectionActions}</h3>
+        ${dial ? this._rotateFields(key) : ""}
         ${this._actionFields("short", key.short)}
         ${this._actionFields("long", key.long)}
       </div>
       <div class="form-foot">
-        <button class="btn danger" data-role="clear-key">${t.clearKey}</button>
+        <button class="btn danger" data-role="clear-key">${dial ? t.clearDial : t.clearKey}</button>
       </div>`;
     this._hydrateStateIcons(form);
+  }
+
+  _rotateFields(dial) {
+    const t = this.t;
+    const rotate = dial.rotate || "none";
+    const options = [
+      ["none", t.rotateNone],
+      ["adjust", t.rotateAdjust],
+      ["actions", t.rotateActions],
+    ]
+      .map(([value, label]) => `<option value="${value}" ${rotate === value ? "selected" : ""}>${label}</option>`)
+      .join("");
+    let extra = "";
+    if (rotate === "adjust") {
+      const domain = dial.entity_id?.split(".")[0];
+      const unit = ADJUSTABLE[domain];
+      let help = t.adjustHelp;
+      if (!dial.entity_id) help = t.adjustNeedsEntity;
+      else if (unit === undefined) help = t.adjustUnsupported;
+      extra = `<p class="help">${esc(help)}</p>
+        <label>${t.step}${unit ? ` (${unit})` : ""}<input type="number" min="0" step="any" data-field="step" value="${esc(dial.step ?? "")}" placeholder="${esc(t.stepAuto)}"></label>
+        <div class="action-row">${this._testButton("left")}${this._testButton("right")}</div>`;
+    } else if (rotate === "actions") {
+      extra = this._actionFields("left", dial.left || { type: "none" }) + this._actionFields("right", dial.right || { type: "none" });
+    }
+    return `<label>${t.rotate}<select data-field="rotate">${options}</select></label>${extra}`;
   }
 
   // Pickers
@@ -1379,6 +1532,10 @@ class StreamAssistantPanel extends HTMLElement {
     // A new key with an entity should do the obvious thing right away
     if (scope === "key" && field === "entity_id" && value && key.short.type === "none") {
       key.short = { type: "default" };
+    }
+    // ... and a dial turns it, when it can be adjusted
+    if (scope === "key" && field === "entity_id" && value && isDial(this.selected) && (key.rotate || "none") === "none" && ADJUSTABLE[value.split(".")[0]] !== undefined) {
+      key.rotate = "adjust";
     }
     this._changed();
     this._renderForm();
@@ -1601,7 +1758,7 @@ class StreamAssistantPanel extends HTMLElement {
     }
     const role = target.dataset.role;
     if (role === "test") {
-      this._test(target.dataset.long === "1");
+      this._test(target.dataset.gesture);
     } else if (role === "view") {
       // Leaving the info view drops unsaved behaviour; leaving the keys keeps the key draft
       const leavingInfo = this.view === "info";
@@ -1641,13 +1798,15 @@ class StreamAssistantPanel extends HTMLElement {
       this._closePicker();
       this._setTarget(field, role === "ic-pick" ? target.dataset.icon : null);
     } else if (role === "key") {
-      this.selected = Number(target.dataset.key);
+      const sel = target.dataset.key;
+      this.selected = sel.startsWith("d") ? sel : Number(sel);
       this._renderDeck();
       this._renderForm();
     } else if (role === "page") {
       this.pageId = target.dataset.page;
       this.selected = null;
       this.images = [];
+      this.dialImages = [];
       this._renderTabs();
       this._renderDeck();
       this._renderForm();
@@ -1665,7 +1824,7 @@ class StreamAssistantPanel extends HTMLElement {
     } else if (role === "discard") {
       this._discard();
     } else if (role === "clear-key") {
-      delete this.page.keys[String(this.selected)];
+      this._removeSelected();
       this._changed();
       this._renderDeck();
       this._renderForm();
@@ -1751,7 +1910,7 @@ class StreamAssistantPanel extends HTMLElement {
       key.text_color = el.checked ? null : "#ffffff";
       this._changed();
       this._renderForm();
-    } else if (el.dataset.field === "second_line") {
+    } else if (el.dataset.field === "second_line" || el.dataset.field === "rotate") {
       this._renderForm();
     } else if (el.dataset.slot && (el.dataset.afield === "type" || el.dataset.afield === "page")) {
       const key = this._ensureKey(this.selected);
@@ -1808,8 +1967,19 @@ const STYLE = `
   .key.blank { border: 2px dashed #4a4d52; }
   .key.selected { outline: 3px solid var(--primary-color); }
   .key:focus-visible { outline: 3px solid var(--accent-color, #ff9800); }
+  .strip, .knobs { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(var(--dials), minmax(0, 1fr)); }
+  .strip { gap: 2px; border-radius: 10px; overflow: hidden; background: #000; }
+  .segment { position: relative; aspect-ratio: var(--segment); padding: 0; border: 2px solid transparent; background: #000; overflow: hidden; cursor: pointer; }
+  .segment img { width: 100%; height: 100%; display: block; }
+  .segment.blank { border: 2px dashed #4a4d52; }
+  .knobs { gap: 12px; justify-items: center; }
+  .knob { width: 48px; height: 48px; border-radius: 50%; border: 2px solid transparent; background: radial-gradient(circle at 40% 35%, #555, #222); color: #bbb; cursor: pointer; }
+  .knob.blank { border: 2px dashed #4a4d52; }
+  .segment.selected::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px var(--primary-color); }
+  .knob.selected { outline: 3px solid var(--primary-color); }
   .hint { margin: 0; font-size: 13px; color: var(--secondary-text-color); text-align: center; }
   .form-head { display: flex; align-items: baseline; gap: 12px; }
+  .form-head h2 { white-space: nowrap; }
   h2 { margin: 0; font-size: 18px; font-weight: 500; }
   .sub { font-size: 13px; color: var(--secondary-text-color); }
   .section { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }

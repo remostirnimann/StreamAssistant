@@ -22,7 +22,8 @@ async def async_setup_entry(
 
     @callback
     def add(device: StreamAssistantDevice) -> None:
-        if device.model is not None and device.deck_serial is not None:
+        # Pedals have no display to dim
+        if device.model is not None and device.deck_serial is not None and device.model.has_display:
             async_add_entities([StreamDeckBrightness(device)])
 
     async_setup_decks(hass, entry, add)

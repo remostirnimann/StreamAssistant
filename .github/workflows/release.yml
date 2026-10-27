@@ -87,6 +87,8 @@ jobs:
         run: |
           mkdir -p out
           base="${{ matrix.name }}-${{ needs.prepare.outputs.version }}-${{ matrix.rid }}"
+          # Native debug symbols (SkiaSharp, HarfBuzz) and the empty static web assets list are not needed
+          find publish \( -name '*.pdb' -o -name '*.staticwebassets.endpoints.json' \) -delete
           cp LICENSE publish/
           if [[ "${{ matrix.rid }}" == win-* ]]; then
             (cd publish && zip -r -X "../out/$base.zip" .)
@@ -98,9 +100,37 @@ jobs:
           name: ${{ matrix.name }}-${{ matrix.rid }}
           path: out/
 
+  msi:
+    name: Windows installer
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Publish
+        run: >
+          dotnet publish bridge/src/StreamAssistant.Bridge -c Release -r win-x64 -o publish
+          -p:Version=${{ needs.prepare.outputs.numeric }}
+          -p:InformationalVersion=${{ needs.prepare.outputs.version }}
+          -p:DebugType=none
+      - name: Build the installer
+        shell: bash
+        run: |
+          cp LICENSE publish/
+          dotnet build bridge/installer -c Release -p:BridgeDir="$PWD/publish/" -p:ProductVersion=${{ needs.prepare.outputs.numeric }} -o msi
+          mkdir -p out
+          # The name the bridge's self-update looks for (SelfInstaller.AssetName)
+          cp msi/stream-assistant-bridge-win-x64.msi "out/stream-assistant-bridge-${{ needs.prepare.outputs.version }}-win-x64.msi"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stream-assistant-bridge-msi
+          path: out/
+
   release:
     name: Publish release
-    needs: [prepare, integration, bridge]
+    needs: [prepare, integration, bridge, msi]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

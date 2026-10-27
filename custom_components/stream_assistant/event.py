@@ -1,16 +1,15 @@
-"""One event entity per Stream Deck key."""
+"""Event entities: one per key, dial and page button, one for the touch strip."""
 
 from __future__ import annotations
 
 from typing import Any
-
-import voluptuous as vol
 
 from homeassistant.components.event import EventDeviceClass, EventEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv, entity_platform, entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+import voluptuous as vol
 
 from .const import (
     ATTR_BACKGROUND_COLOR,
@@ -18,10 +17,15 @@ from .const import (
     ATTR_IMAGE,
     ATTR_TEXT,
     ATTR_TEXT_COLOR,
+    DIAL_EVENT_TYPES,
     KEY_EVENT_TYPES,
     SERVICE_CLEAR_KEY,
     SERVICE_SET_KEY,
+    TOUCH_EVENT_TYPES,
+    signal_button,
+    signal_dial,
     signal_key,
+    signal_touch,
 )
 from .device import StreamAssistantConfigEntry, StreamAssistantDevice
 from .entity import StreamAssistantEntity, async_setup_decks
@@ -37,7 +41,7 @@ def _color(value: Any) -> str:
         r, g, b = vol.Schema(vol.ExactSequence([cv.byte, cv.byte, cv.byte]))(list(value))
         return f"#{r:02x}{g:02x}{b:02x}"
     value = cv.string(value)
-    from PIL import ImageColor  # noqa: PLC0415
+    from PIL import ImageColor
 
     try:
         r, g, b = ImageColor.getrgb(value)[:3]
@@ -60,14 +64,19 @@ async def async_setup_entry(
     entry: StreamAssistantConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Create one event entity per key of every deck."""
+    """Create the event entities of every deck."""
 
     @callback
     def add(device: StreamAssistantDevice) -> None:
         if device.model is None or device.deck_serial is None:
             return
         _remove_surplus_keys(hass, entry, device)
-        async_add_entities(StreamDeckKeyEvent(device, key) for key in range(device.model.key_count))
+        entities: list[EventEntity] = [StreamDeckKeyEvent(device, key) for key in range(device.model.key_count)]
+        entities.extend(StreamDeckDialEvent(device, dial) for dial in range(device.model.dials))
+        entities.extend(StreamDeckButtonEvent(device, button) for button in range(device.model.buttons))
+        if device.model.has_touch:
+            entities.append(StreamDeckTouchEvent(device))
+        async_add_entities(entities)
 
     async_setup_decks(hass, entry, add)
 
@@ -76,19 +85,25 @@ async def async_setup_entry(
     platform.async_register_entity_service(SERVICE_CLEAR_KEY, None, "async_clear_key")
 
 
-def _remove_surplus_keys(
-    hass: HomeAssistant, entry: StreamAssistantConfigEntry, device: StreamAssistantDevice
-) -> None:
-    """Drop key entities beyond the grid (a virtual panel was made smaller)."""
+def _remove_surplus_keys(hass: HomeAssistant, entry: StreamAssistantConfigEntry, device: StreamAssistantDevice) -> None:
+    """Drop key and dial entities the deck no longer has (a smaller grid, other controls)."""
     assert device.model
     registry = er.async_get(hass)
-    prefix = f"{device.deck_serial}_key_"
+    limits = {
+        f"{device.deck_serial}_key_": device.model.key_count,
+        f"{device.deck_serial}_dial_": device.model.dials,
+        f"{device.deck_serial}_button_": device.model.buttons,
+    }
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
-        if entity.domain != "event" or not entity.unique_id.startswith(prefix):
+        if entity.domain != "event":
             continue
-        index = entity.unique_id.removeprefix(prefix)
-        if index.isdigit() and int(index) >= device.model.key_count:
+        if entity.unique_id == f"{device.deck_serial}_touch" and not device.model.has_touch:
             registry.async_remove(entity.entity_id)
+            continue
+        for prefix, count in limits.items():
+            index = entity.unique_id.removeprefix(prefix)
+            if entity.unique_id.startswith(prefix) and index.isdigit() and int(index) >= count:
+                registry.async_remove(entity.entity_id)
 
 
 class StreamDeckKeyEvent(StreamAssistantEntity, EventEntity):
@@ -133,3 +148,87 @@ class StreamDeckKeyEvent(StreamAssistantEntity, EventEntity):
     async def async_clear_key(self) -> None:
         """Service: blank this key."""
         await self.device.async_clear_key(self.key)
+
+
+class StreamDeckDialEvent(StreamAssistantEntity, EventEntity):
+    """A dial: fires rotate_left/rotate_right (with steps) and the press events."""
+
+    _attr_device_class = EventDeviceClass.BUTTON
+    _attr_event_types = DIAL_EVENT_TYPES
+    _attr_translation_key = "dial"
+
+    def __init__(self, device: StreamAssistantDevice, dial: int) -> None:
+        """Initialize."""
+        super().__init__(device)
+        assert device.deck_serial
+        self.dial = dial
+        self._attr_unique_id = f"{device.deck_serial}_dial_{dial}"
+        self._attr_device_info = device.deck_device_info
+        self._attr_translation_placeholders = {"dial": str(dial + 1)}
+        self._attr_extra_state_attributes = {"dial": dial}
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to this dial's events."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, signal_dial(self.device.key, self.dial), self._on_dial_event)
+        )
+
+    @callback
+    def _on_dial_event(self, event_type: str, data: dict[str, Any] | None = None) -> None:
+        self._trigger_event(event_type, data)
+        self.async_write_ha_state()
+
+
+class StreamDeckTouchEvent(StreamAssistantEntity, EventEntity):
+    """The touch strip: fires tap, long_press, swipe_left and swipe_right with the position."""
+
+    _attr_event_types = TOUCH_EVENT_TYPES
+    _attr_translation_key = "touch_strip"
+
+    def __init__(self, device: StreamAssistantDevice) -> None:
+        """Initialize."""
+        super().__init__(device)
+        assert device.deck_serial
+        self._attr_unique_id = f"{device.deck_serial}_touch"
+        self._attr_device_info = device.deck_device_info
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to the strip's events."""
+        await super().async_added_to_hass()
+        self.async_on_remove(async_dispatcher_connect(self.hass, signal_touch(self.device.key), self._on_touch_event))
+
+    @callback
+    def _on_touch_event(self, event_type: str, data: dict[str, Any]) -> None:
+        self._trigger_event(event_type, data)
+        self.async_write_ha_state()
+
+
+class StreamDeckButtonEvent(StreamAssistantEntity, EventEntity):
+    """A page button beside the keys (Neo): fires the press events; it also turns the page."""
+
+    _attr_device_class = EventDeviceClass.BUTTON
+    _attr_event_types = KEY_EVENT_TYPES
+    _attr_translation_key = "page_button"
+
+    def __init__(self, device: StreamAssistantDevice, button: int) -> None:
+        """Initialize."""
+        super().__init__(device)
+        assert device.deck_serial
+        self.button = button
+        self._attr_unique_id = f"{device.deck_serial}_button_{button}"
+        self._attr_device_info = device.deck_device_info
+        self._attr_translation_placeholders = {"button": str(button + 1)}
+        self._attr_extra_state_attributes = {"button": button}
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to this button's events."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, signal_button(self.device.key, self.button), self._on_button_event)
+        )
+
+    @callback
+    def _on_button_event(self, event_type: str) -> None:
+        self._trigger_event(event_type)
+        self.async_write_ha_state()

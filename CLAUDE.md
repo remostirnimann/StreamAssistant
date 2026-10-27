@@ -13,7 +13,17 @@ Stream Assistant drives Elgato Stream Decks directly from Home Assistant, with a
 
 ## Commands
 
-The integration has no build step and no pytest suite yet. Hardware-free checks use the local venv (`.venv`, Python 3.13 with Pillow, zeroconf and aiohttp):
+Integration tests use pytest-homeassistant-custom-component (`requirements_test.txt`, Python 3.14 like HA 2026.10). Home Assistant does not run on Windows, so they run in WSL Ubuntu with the venv `~/.venvs/streamassistant`. From Git Bash, set `MSYS_NO_PATHCONV=1`, or paths get rewritten. Coverage must stay at 90 % or more (`pyproject.toml`), and ruff must pass:
+
+```bash
+wsl.exe -d Ubuntu -- bash -lc 'cd /mnt/d/Projekte/StreamAssistant && ~/.venvs/streamassistant/bin/pytest'
+wsl.exe -d Ubuntu -- bash -lc 'cd /mnt/d/Projekte/StreamAssistant && ~/.venvs/streamassistant/bin/pytest tests/test_layout.py -k remap --no-cov'
+wsl.exe -d Ubuntu -- bash -lc 'cd /mnt/d/Projekte/StreamAssistant && ~/.venvs/streamassistant/bin/ruff check --fix . && ~/.venvs/streamassistant/bin/ruff format .'
+```
+
+The tests run the simulated dock (`scripts/fake_dock.py`, fixed port 5343) and `tests/fake_bridge.py` as real servers on 127.0.0.1. `tests/common.py` holds the entry helpers and `wait_for`.
+
+Quick checks without HA use the Windows venv (`.venv`, Python 3.13 with Pillow, zeroconf and aiohttp):
 
 ```bash
 .venv/Scripts/python.exe -m py_compile custom_components/stream_assistant/*.py custom_components/stream_assistant/protocol/*.py
@@ -22,11 +32,14 @@ The integration has no build step and no pytest suite yet. Hardware-free checks 
 node --check custom_components/stream_assistant/frontend/panel.js
 ```
 
-Bridge (`bridge/global.json` selects Microsoft.Testing.Platform; the tests use xUnit v3, pinned to 3.2.2 because Avalonia.Headless.XUnit needs it):
+Bridge (`bridge/global.json` selects Microsoft.Testing.Platform; the tests use xUnit v3, pinned to 3.2.2 because Avalonia.Headless.XUnit needs it, and the coverage extension is pinned to 18.0.4 for the same platform version). Analyzer warnings are errors (`bridge/Directory.Build.props`, `bridge/.editorconfig`), and `dotnet format` must leave no changes:
 
 ```bash
 dotnet test bridge
 dotnet test --project bridge/tests/StreamAssistant.Bridge.Tests --filter-method "*Key_presses_are_reported"
+dotnet format bridge --verify-no-changes
+dotnet test bridge --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
+MSYS_NO_PATHCONV=1 .venv/Scripts/python.exe scripts/check_coverage.py --exclude /tests/ --exclude /obj/ bridge/tests/*/bin/Debug/net10.0/TestResults/coverage.cobertura.xml
 dotnet run --project bridge/src/StreamAssistant.Bridge -- --simulate 5x3 --config-dir <dir>
 dotnet publish bridge/src/StreamAssistant.Bridge -c Release -r linux-musl-arm64 -o dist/bridge-linux-musl-arm64
 dotnet publish bridge/src/StreamAssistant.Bridge.Desktop -c Release -r win-x64 -o dist/bridge-desktop-win-x64
@@ -55,7 +68,7 @@ cd custom_components && tar --exclude=__pycache__ -cf - stream_assistant | ssh -
 - `develop` is the default branch and the target of all pull requests; `main` only holds released states.
 - Both branches are protected by a ruleset: changes only via PR, no force push, no deletion. Repository admins (the owner) may bypass it.
 - Release tags `v*` cannot be moved or deleted.
-- `.github/workflows/ci.yml` runs on every PR and push. Its jobs are required checks: *Integration*, *Bridge*, *Hassfest*, *HACS* and *Release check*.
+- `.github/workflows/ci.yml` runs on every PR and push. Its jobs are required checks: *Integration*, *Tests*, *Lint*, *Bridge*, *Hassfest*, *HACS* and *Release check*.
 - Every merge into `main` runs `.github/workflows/release.yml`, which builds `stream_assistant.zip` (HACS downloads it, see `hacs.json`) and the console and desktop bridge for all platforms. It tags `vX.Y.Z` and publishes a GitHub release whose notes are the changelog section. Versions like `0.8.0b1` become pre-releases.
 - One version covers the integration and the bridge. The bridge is built with that version.
 - To release:
@@ -73,14 +86,16 @@ cd custom_components && tar --exclude=__pycache__ -cf - stream_assistant | ssh -
 - `BehaviorController` (night brightness, idle fade, a press that only wakes the deck)
 - the entities' dispatcher signals
 
+Dials share the press logic with keys (`_on_press`, keyed `("dial", index)`). Turning either runs `left`/`right` actions or adjusts the dial's entity (`actions.adjust_call`), collected for `DIAL_SETTLE_SECONDS` into one call. Each dial owns an equal part of the touch strip (`render_segment`, `display.page_dial_visual`); taps there run the dial's actions. Decks with LED rings (Studio) show the dial's colour and level there instead. Page buttons (Neo) turn to the previous/next page in layout order and are lit when there is one; the screen shows the page name. NFC reads become tag scans (`tag` is an after-dependency).
+
 It never talks to hardware directly, only through a `DeckTransport` (`transport.py`):
 - `NetworkDockTransport` (Elgato Network Dock, Cora over TCP, client in `protocol/`)
 - `VirtualTransport` (HA-only virtual panel, consumed by the dashboard card)
 - `BridgeDeckTransport` (in `bridge_hub.py`)
 
-**Capabilities, not models.** `capabilities.py` `DeckCapabilities` (grid, key size, format, rotation) is what layout, rendering, templates and the editor use:
+**Capabilities, not models.** `capabilities.py` `DeckCapabilities` (grid, key size, format, rotation, dials, touch strip) is what layout, rendering, templates and the editor use:
 - Elgato models are mapped to it in the transport.
-- Free grids have ids like `grid_5x3` (virtual panels, templates, bridge decks).
+- Free grids have ids like `grid_5x3`, with dials `grid_4x2_d4` (virtual panels, templates, bridge decks).
 - The render cache key includes the key size, because grid ids are shared across sizes.
 
 **Entry kinds** (`CONF_KIND`), set up in `__init__.py`:
@@ -116,7 +131,8 @@ The code is split into three projects:
 A self-contained exe cannot reference another exe, so shared code goes into Core.
 
 Inside Core:
-- **Devices:** `IControlDevice` is implemented by `VirtualDevice` (desktop virtual decks and `--simulate` decks), and later by vendor USB drivers. `DeviceManager` raises `Added`/`Removed`/`Input` events. Drivers must return quickly and keep only the newest image per key.
+- **Devices:** `IControlDevice` is implemented by `VirtualDevice` (desktop virtual decks and `--simulate` decks) and `Elgato/ElgatoDeck` (USB). `DeviceManager` raises `Added`/`Removed`/`Input` events. Drivers must return quickly and keep only the newest image per key.
+- **USB:** `ElgatoModel` lists the supported Stream Decks; its `ElgatoFamily` (Original, Mini, Gen2, Plus, Pedal, Neo, Studio) decides image format and orientation, report layouts, feature reports and input parsing (`InputParser`), following node-elgato-stream-deck. `ElgatoWatcher` scans through `IHidBackend` (`HidSharpBackend` in production, excluded from coverage; `FakeHidBackend` in the tests) on plug events and every 5 s, and adds, removes and reopens decks. `KeyImages` converts images with StbImageSharp (fully managed; ImageSharp 4 needs a licence key for release builds and 3.x has known vulnerabilities).
 - **Protocol:**
   - `BridgeServer` keeps one active `ClientSession`; a new client replaces the old one, and devices reset to the idle screen 30 s after the client left.
   - `ClientSession` does the handshake, pairing or token check, commands and binary image envelopes.

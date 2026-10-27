@@ -58,7 +58,20 @@ async def main() -> None:
         sys.exit(f"Build the bridge first: dotnet build bridge ({BRIDGE_DLL} missing)")
     config = tempfile.mkdtemp(prefix="sab-selftest-")
     process = subprocess.Popen(
-        ["dotnet", str(BRIDGE_DLL), "--port", str(PORT), "--simulate", "5x3", "--mdns", "false", "--config-dir", config, "--name", "Selftest"],
+        [
+            "dotnet",
+            str(BRIDGE_DLL),
+            "--port",
+            str(PORT),
+            "--simulate",
+            "5x3",
+            "--mdns",
+            "false",
+            "--config-dir",
+            config,
+            "--name",
+            "Selftest",
+        ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -110,8 +123,14 @@ async def run(session: aiohttp.ClientSession) -> None:
 
     check(await wait_for(lambda: bool(devices)), "connects and receives the device list")
     deck = devices[0][0] if devices and devices[0] else None
-    check(deck is not None and (deck.id, deck.cols, deck.rows, deck.key_size) == ("sim-1", 5, 3, 72), "simulated 5x3 deck with 72 px keys")
-    check(deck is not None and "jpeg" in deck.formats and deck.brightness and deck.virtual, "capabilities: jpeg, brightness, virtual")
+    check(
+        deck is not None and (deck.id, deck.cols, deck.rows, deck.key_size) == ("sim-1", 5, 3, 72),
+        "simulated 5x3 deck with 72 px keys",
+    )
+    check(
+        deck is not None and "jpeg" in deck.formats and deck.brightness and deck.virtual,
+        "capabilities: jpeg, brightness, virtual",
+    )
     check(states[:1] == [True], "connection state reported")
 
     async with session.ws_connect(f"ws://127.0.0.1:{PORT}/sim/ws") as sim:
@@ -133,16 +152,24 @@ async def run(session: aiohttp.ClientSession) -> None:
         watcher = asyncio.create_task(watch())
         check(await wait_for(lambda: seen.get("brightness") == 33), "brightness reaches the simulated deck")
         image = seen.get("key4")
-        check(isinstance(image, dict) and image["image"] == "data:image/jpeg;base64," + base64.b64encode(JPEG).decode(), "key image reaches the simulated deck unchanged")
+        check(
+            isinstance(image, dict) and image["image"] == "data:image/jpeg;base64," + base64.b64encode(JPEG).decode(),
+            "key image reaches the simulated deck unchanged",
+        )
 
         await sim.send_json({"type": "press", "device": "sim-1", "key": 9, "pressed": True})
         await sim.send_json({"type": "press", "device": "sim-1", "key": 9, "pressed": False})
-        check(await wait_for(lambda: keys == [("sim-1", 9, True), ("sim-1", 9, False)]), "key press and release reported")
+        check(
+            await wait_for(lambda: keys == [("sim-1", 9, True), ("sim-1", 9, False)]), "key press and release reported"
+        )
 
         await sim.send_json({"type": "plug", "device": "sim-1", "plugged": False})
         check(await wait_for(lambda: removed == ["sim-1"]), "unplug reported as device_removed")
         await sim.send_json({"type": "plug", "device": "sim-1", "plugged": True})
-        check(await wait_for(lambda: [d.id for d in added] == ["sim-1"]), "replug reported as device_added with the same id")
+        check(
+            await wait_for(lambda: [d.id for d in added] == ["sim-1"]),
+            "replug reported as device_added with the same id",
+        )
         watcher.cancel()
 
     # A second client with the same token takes over; the first one backs off

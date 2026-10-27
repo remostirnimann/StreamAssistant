@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stream Assistant card</title>
+<style>
+  @font-face { font-family: mdi; src: url("mdi.ttf"); }
+  body { margin: 0; padding: 24px; font-family: Roboto, "Segoe UI", system-ui, sans-serif; background: #fafafa;
+    --primary-color: #03a9f4; --secondary-text-color: #727272; --primary-text-color: #212121; --card-background-color: #fff;
+    --divider-color: #e0e0e0; --ha-card-border-radius: 12px; }
+  ha-card { display: block; background: var(--card-background-color); border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.12); overflow: hidden; }
+  .wrap { max-width: 520px; }
+</style>
+<script src="images.js"></script>
+<script src="fakehass.js"></script>
+<script src="card.js"></script>
+</head>
+<body>
+<div class="wrap"><stream-assistant-card id="card"></stream-assistant-card></div>
+<script>
+  const card = document.getElementById("card");
+  card.setConfig({ type: "custom:stream-assistant-card", entry_id: "panel", gap: 8, show_title: true });
+  card.hass = window.fakeHass;
+</script>
+</body>
+</html>

@@ -1,6 +1,9 @@
 {
   "domain": "stream_assistant",
   "name": "Stream Assistant",
+  "after_dependencies": [
+    "tag"
+  ],
   "codeowners": [
     "@remostirnimann"
   ],
@@ -21,7 +24,7 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/remostirnimann/StreamAssistant/issues",
   "requirements": [],
-  "version": "0.8.0b1",
+  "version": "0.9.0b1",
   "zeroconf": [
     "_elg._tcp.local.",
     "_stream-assistant._tcp.local."

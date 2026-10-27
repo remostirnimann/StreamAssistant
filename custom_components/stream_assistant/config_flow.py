@@ -12,23 +12,24 @@ Dock address changes are picked up from two sources:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
 import secrets
-from collections.abc import Mapping
 from typing import Any
 
-import voluptuous as vol
-
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_HOST, CONF_MAC, CONF_NAME
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.selector import NumberSelector, NumberSelectorConfig, NumberSelectorMode
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+import voluptuous as vol
 
 from .capabilities import MAX_COLS, MAX_ROWS
 from .const import (
+    CONF_AUTO_UPDATE,
     CONF_BRIDGE_ID,
     CONF_COLS,
     CONF_DECK_PRODUCT_ID,
@@ -46,15 +47,20 @@ from .const import (
     PLANNER_UNIQUE_ID,
     VERSION as CLIENT_VERSION,
 )
-from .protocol.bridge import DEFAULT_PORT as BRIDGE_PORT, SERVICE_TYPE as BRIDGE_SERVICE, BridgeError, BridgeInfo, fetch_info, pair
 from .protocol import NETWORK_DOCK_DEVICE_TYPE, ChildInfo, CoraError, DockInfo, find_model, probe
+from .protocol.bridge import (
+    DEFAULT_PORT as BRIDGE_PORT,
+    SERVICE_TYPE as BRIDGE_SERVICE,
+    BridgeError,
+    BridgeInfo,
+    fetch_info,
+    pair,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _entry_data(
-    host: str, mac: str | None, dock: DockInfo, child: ChildInfo | None
-) -> dict[str, Any]:
+def _entry_data(host: str, mac: str | None, dock: DockInfo, child: ChildInfo | None) -> dict[str, Any]:
     return {
         CONF_HOST: host,
         CONF_MAC: mac,
@@ -78,6 +84,18 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
     """Set up a Stream Deck Network Dock."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Options of bridge entries."""
+        return BridgeOptionsFlow()
+
+    @classmethod
+    @callback
+    def async_supports_options_flow(cls, config_entry: ConfigEntry) -> bool:
+        """Only bridges have options (automatic updates)."""
+        return config_entry.data.get(CONF_KIND) == KIND_BRIDGE
 
     def __init__(self) -> None:
         """Initialize the flow."""
@@ -127,17 +145,13 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
             updates[CONF_MAC] = mac
         return updates
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Add a dock, a bridge or a virtual panel, or only enable planning (templates)."""
         return self.async_show_menu(step_id="user", menu_options=["dock", "bridge", "virtual", "planner"])
 
     # Bridge
 
-    async def async_step_bridge(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_bridge(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manual bridge setup by address."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -155,7 +169,10 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="bridge",
             data_schema=vol.Schema(
-                {vol.Required(CONF_HOST): str, vol.Required(CONF_PORT, default=BRIDGE_PORT): vol.All(vol.Coerce(int), vol.Range(1, 65535))}
+                {
+                    vol.Required(CONF_HOST): str,
+                    vol.Required(CONF_PORT, default=BRIDGE_PORT): vol.All(vol.Coerce(int), vol.Range(1, 65535)),
+                }
             ),
             errors=errors,
         )
@@ -168,9 +185,7 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
         except BridgeError as err:
             return "invalid_code" if err.code == "invalid_code" else "cannot_connect_bridge"
 
-    async def async_step_pair(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_pair(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Enter the pairing code the bridge shows."""
         assert self._bridge
         errors: dict[str, str] = {}
@@ -194,7 +209,11 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="pair",
             data_schema=vol.Schema({vol.Required("code"): str}),
-            description_placeholders={"name": self._bridge.name, "host": f"{self._host}:{self._port}"},
+            description_placeholders={
+                "name": self._bridge.name,
+                "host": f"{self._host}:{self._port}",
+                "port": str(self._port),
+            },
             errors=errors,
         )
 
@@ -218,9 +237,7 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
         self._port = entry_data[CONF_PORT]
         return await self.async_step_reauth_confirm()
 
-    async def async_step_reauth_confirm(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Enter a new pairing code."""
         entry = self._get_reauth_entry()
         errors: dict[str, str] = {}
@@ -239,9 +256,7 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_virtual(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_virtual(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """A panel that only exists in Home Assistant, shown by a dashboard card."""
         if user_input is not None:
             # Stable id for the device and its entities, independent of the name
@@ -261,9 +276,7 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({vol.Required(CONF_NAME): str, **_grid_schema(5, 3)}),
         )
 
-    async def async_step_reconfigure(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Change the grid of a virtual panel."""
         entry = self._get_reconfigure_entry()
         if entry.data.get(CONF_KIND) != KIND_VIRTUAL:
@@ -278,9 +291,7 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(_grid_schema(entry.data[CONF_COLS], entry.data[CONF_ROWS])),
         )
 
-    async def async_step_planner(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_planner(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Entry without hardware: loads the editor so templates can be planned."""
         await self.async_set_unique_id(PLANNER_UNIQUE_ID)
         self._abort_if_unique_id_configured()
@@ -288,9 +299,7 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(title="Stream Assistant", data={CONF_KIND: KIND_PLANNER})
         return self.async_show_form(step_id="planner")
 
-    async def async_step_dock(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_dock(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manual setup by IP address or hostname."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -309,9 +318,7 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_zeroconf(
-        self, discovery_info: ZeroconfServiceInfo
-    ) -> ConfigFlowResult:
+    async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
         """A dock (_elg._tcp) or a bridge (_stream-assistant._tcp) announced itself via mDNS."""
         if discovery_info.type == BRIDGE_SERVICE:
             return await self._async_step_bridge_zeroconf(discovery_info)
@@ -327,24 +334,18 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
         if serial := properties.get("sn"):
             await self.async_set_unique_id(serial)
             # Known dock: only refresh its address (reloads the entry if it changed)
-            self._abort_if_unique_id_configured(
-                updates=self._address_updates(host, self._mac)
-            )
+            self._abort_if_unique_id_configured(updates=self._address_updates(host, self._mac))
 
         if await self._probe(host):
             return self.async_abort(reason="cannot_connect")
         assert self._dock
         await self.async_set_unique_id(self._dock.serial)
-        self._abort_if_unique_id_configured(
-            updates=self._address_updates(host, self._mac)
-        )
+        self._abort_if_unique_id_configured(updates=self._address_updates(host, self._mac))
 
         self.context["title_placeholders"] = {"name": self._title()}
         return await self.async_step_zeroconf_confirm()
 
-    async def async_step_zeroconf_confirm(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_zeroconf_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Ask the user to confirm a discovered dock."""
         if user_input is not None:
             return self._create_entry()
@@ -374,8 +375,20 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
                 entry.data.get(CONF_HOST),
                 discovery_info.ip,
             )
-            self.hass.config_entries.async_update_entry(
-                entry, data={**entry.data, CONF_HOST: discovery_info.ip}
-            )
+            self.hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_HOST: discovery_info.ip})
             self.hass.config_entries.async_schedule_reload(entry.entry_id)
         return self.async_abort(reason="already_configured")
+
+
+class BridgeOptionsFlow(OptionsFlow):
+    """Whether the bridge updates itself to the release that fits the integration."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Show the option."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        current = bool(self.config_entry.options.get(CONF_AUTO_UPDATE))
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({vol.Required(CONF_AUTO_UPDATE, default=current): bool}),
+        )

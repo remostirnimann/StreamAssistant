@@ -26,6 +26,8 @@ class KeyVisual:
     foreground: str | None = None
     font_size: int | None = None
     image: str | None = None
+    # 0..1 shown as a bar on touch strip segments (brightness, volume, position, ...)
+    level: float | None = None
 
 
 @cache
@@ -58,7 +60,9 @@ def _contrast(background: tuple[int, int, int]) -> tuple[int, int, int]:
     return (26, 26, 26) if luminance > 0.55 else (242, 242, 242)
 
 
-def _fit_text(draw: ImageDraw.ImageDraw, text: str, size: int, max_width: int) -> tuple[str, ImageFont.ImageFont | ImageFont.FreeTypeFont]:
+def _fit_text(
+    draw: ImageDraw.ImageDraw, text: str, size: int, max_width: int
+) -> tuple[str, ImageFont.ImageFont | ImageFont.FreeTypeFont]:
     """Shrink the font until the text fits, then cut it with an ellipsis."""
     for font_size in range(size, max(7, size - 6) - 1, -1):
         font = _text_font(font_size)
@@ -88,6 +92,48 @@ def render_key(caps: DeckCapabilities, visual: KeyVisual) -> bytes:
 def render_preview(size: int, visual: KeyVisual) -> bytes:
     """Upright JPEG for the editor, at the deck's key size."""
     return _jpeg(_draw(size, visual))
+
+
+def render_segment(width: int, height: int, visual: KeyVisual) -> bytes:
+    """Upright JPEG of a dial's part of the touch strip: icon, title, state and level."""
+    background = ImageColor.getrgb(visual.background)
+    image = Image.new("RGB", (width, height), background)
+    foreground = ImageColor.getrgb(visual.foreground) if visual.foreground else _contrast(background)
+    draw = ImageDraw.Draw(image)
+    margin = max(4, height // 12)
+    bar = max(4, height // 16) if visual.level is not None else 0
+    content_height = height - (bar + margin if bar else 0)
+
+    codepoint = _mdi_codepoints().get(visual.icon) if visual.icon else None
+    left = margin
+    if codepoint is not None:
+        icon_size = round(content_height * 0.55)
+        font = _icon_font(icon_size)
+        glyph = chr(codepoint)
+        box = draw.textbbox((0, 0), glyph, font=font)
+        draw.text((left - box[0], (content_height - (box[3] - box[1])) / 2 - box[1]), glyph, font=font, fill=foreground)
+        left += box[2] - box[0] + margin
+
+    title_size = visual.font_size or max(10, round(height * 0.2))
+    lines = []
+    if visual.title:
+        lines.append(_fit_text(draw, visual.title, title_size, width - left - margin))
+    if visual.subtitle:
+        lines.append(_fit_text(draw, visual.subtitle, max(9, round(title_size * 0.9)), width - left - margin))
+    heights = [font.getbbox("Hg")[3] for _, font in lines]
+    y = (content_height - sum(heights) - 3 * max(0, len(lines) - 1)) / 2
+    for (text, font), line_height in zip(lines, heights, strict=False):
+        draw.text((left, y), text, font=font, fill=foreground)
+        y += line_height + 3
+
+    if bar and visual.level is not None:
+        top = height - margin - bar
+        track = tuple((f + b * 2) // 3 for f, b in zip(foreground, background, strict=False))
+        draw.rounded_rectangle((margin, top, width - margin, top + bar), radius=bar // 2, fill=track)
+        filled = round((width - 2 * margin) * max(0.0, min(1.0, visual.level)))
+        if filled > 0:
+            draw.rounded_rectangle((margin, top, margin + filled, top + bar), radius=bar // 2, fill=foreground)
+    return _jpeg(image)
 
 
 def _draw(size: int, visual: KeyVisual) -> Image.Image:
@@ -129,7 +175,7 @@ def _draw(size: int, visual: KeyVisual) -> Image.Image:
     else:
         y = (size - text_height) / 2
 
-    for (text, font), height in zip(lines, line_heights):
+    for (text, font), height in zip(lines, line_heights, strict=False):
         width = draw.textlength(text, font=font)
         draw.text(((size - width) / 2, y), text, font=font, fill=foreground)
         y += height + 2

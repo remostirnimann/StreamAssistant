@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using StreamAssistant.Bridge.Devices.Simulated;
 using StreamAssistant.Bridge.Devices.Virtual;
@@ -12,9 +13,11 @@ using StreamAssistant.Bridge.Protocol;
 namespace StreamAssistant.Bridge.Tests;
 
 /// <summary>An in-memory bridge with one simulated 5×3 deck and its own settings folder.</summary>
-public sealed class TestBridge : WebApplicationFactory<Program>
+public sealed class TestBridge(Action<IServiceCollection>? services = null, string simulate = "5x3", bool usb = false) : WebApplicationFactory<Program>
 {
     private readonly string _configDir = Path.Combine(Path.GetTempPath(), "sab-test-" + Guid.NewGuid().ToString("N"));
+
+    public string ConfigDir => _configDir;
 
     public PairingService Pairing => Services.GetRequiredService<PairingService>();
 
@@ -25,9 +28,14 @@ public sealed class TestBridge : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("config-dir", _configDir);
-        builder.UseSetting("simulate", "5x3");
+        builder.UseSetting("simulate", simulate);
         builder.UseSetting("name", "Test bridge");
         builder.UseSetting("mdns", "false");
+        builder.UseSetting("usb", usb ? "true" : "false");
+        if (services is not null)
+        {
+            builder.ConfigureTestServices(services);
+        }
     }
 
     public async Task<TestClient> ConnectAsync()
@@ -79,6 +87,9 @@ public sealed class TestClient(WebSocket socket) : IAsyncDisposable
 
     public Task SendAsync(JsonObject message) =>
         socket.SendAsync(Encoding.UTF8.GetBytes(message.ToJsonString()), WebSocketMessageType.Text, true, CancellationToken.None);
+
+    public Task SendRawAsync(byte[] data, WebSocketMessageType type) =>
+        socket.SendAsync(data, type, true, CancellationToken.None);
 
     public Task SendBinaryAsync(JsonObject header, byte[] payload)
     {

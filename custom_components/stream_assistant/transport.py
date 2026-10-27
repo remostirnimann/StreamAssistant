@@ -4,7 +4,7 @@ The device (layout, rendering, behaviour, entities) only uses DeckTransport.
 Implementations:
 - NetworkDockTransport: Elgato Stream Deck Network Dock (Cora over TCP)
 - VirtualTransport: a panel that only exists in Home Assistant (dashboard card)
-- later: bridge (vendor-neutral protocol)
+- BridgeDeckTransport (bridge_hub.py): a deck behind a Stream Assistant Bridge
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from typing import Any
 
 from .capabilities import DeckCapabilities, find_capabilities
 from .protocol import CoraError, DeckInfo, DockClient
+from .protocol.bridge import TouchEvent
 
 
 class TransportError(Exception):
@@ -42,6 +43,11 @@ class DeckTransport(ABC):
         self.on_deck_connected: Callable[[AttachedDeck], None] | None = None
         self.on_deck_disconnected: Callable[[], None] | None = None
         self.on_key: Callable[[int, bool], None] | None = None
+        self.on_dial: Callable[[int, int], None] | None = None
+        self.on_dial_press: Callable[[int, bool], None] | None = None
+        self.on_touch: Callable[[TouchEvent], None] | None = None
+        self.on_button: Callable[[int, bool], None] | None = None
+        self.on_nfc: Callable[[str], None] | None = None
 
     @property
     @abstractmethod
@@ -77,6 +83,22 @@ class DeckTransport(ABC):
     @abstractmethod
     def set_key_image(self, index: int, image: bytes) -> None:
         """Show an image (already encoded for the deck's capabilities) on a key."""
+
+    def set_touch_image(self, x: int, y: int, width: int, height: int, image: bytes) -> None:
+        """Show an upright JPEG on an area of the touch strip."""
+        raise TransportError("This deck has no touch strip")
+
+    def set_screen_image(self, image: bytes) -> None:
+        """Show an upright JPEG on the screen."""
+        raise TransportError("This deck has no screen")
+
+    def set_button_color(self, index: int, color: str) -> None:
+        """Light a button outside the grid (#rrggbb, black is off)."""
+        raise TransportError("This deck has no lit buttons")
+
+    def set_dial_leds(self, index: int, color: str, level: float) -> None:
+        """Light the given share (0-1) of a dial's LED ring in a colour."""
+        raise TransportError("This deck has no dial LEDs")
 
 
 class NetworkDockTransport(DeckTransport):

@@ -13,9 +13,10 @@
    - ~~integration side~~ (one entry per bridge, decks appear and disappear on their own,
      reauth when the bridge forgets the pairing) — 0.7.0
    - ~~desktop app~~ (Avalonia) with virtual decks of any grid
-   - **open: Elgato USB driver** (HidSharp): MK.2 / Original v2 / XL first (JPEG, rotation in
-     the bridge), several decks per computer, USB hot-plug. Can be prepared now, needs the
-     real deck to verify. The Elgato app must not run at the same time (exclusive USB access).
+   - ~~Elgato USB driver~~ (HidSharp): MK.2 / Original v2 / XL (JPEG, rotation in the bridge),
+     several decks per computer, USB hot-plug
+   - **open: verify the USB driver with a real deck** (the Elgato app must not run at the
+     same time)
 4. **Home Assistant add-on and platform packages**
    - add-on with the console bridge (linux-musl, USB passthrough), pairing skipped for the
      Supervisor network as the protocol allows
@@ -30,9 +31,11 @@
   Loupedeck / Razer Stream Controller (USB serial, dials, touch), MIDI controllers such
   as Novation Launchpad / Akai APC (colour-only LED pads), DIY ESP32 decks. Drivers live in
   the bridge; the protocol already describes image keys, colour-only keys, dials and touch.
-  The integration still needs colour-only keys, dials and touch (skipped so far with a warning).
-- **More Elgato models**: Stream Deck Plus (dials, touch strip), Neo, Studio, Mini and
-  Original v1 (BMP images, done by the bridge)
+  The integration handles dials and touch strips; colour-only keys are still skipped with
+  a warning.
+- **More Elgato models**: Stream Deck + XL. All other current models have USB drivers but,
+  apart from the MK.2, still need trying on real hardware. The Studio can also be reached
+  over the network (like the Network Dock); not used yet.
 
 ## Done
 

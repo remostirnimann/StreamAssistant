@@ -23,8 +23,6 @@ from datetime import datetime, time, timedelta
 import logging
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.event import (
     async_call_later,
@@ -32,6 +30,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.util import dt as dt_util
+import voluptuous as vol
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -119,14 +118,10 @@ class BehaviorController:
         self._running = True
         night, idle = self.settings["night"], self.settings["idle"]
         if night["enabled"] or (idle["enabled"] and idle["when"] != WHEN_ALWAYS):
-            self._unsubs.append(
-                async_track_time_interval(self.hass, self._check_schedule, CHECK_INTERVAL)
-            )
+            self._unsubs.append(async_track_time_interval(self.hass, self._check_schedule, CHECK_INTERVAL))
         uses_night = night["enabled"] or (idle["enabled"] and idle["when"] == WHEN_NIGHT)
         if uses_night and night["mode"] == MODE_SUN:
-            self._unsubs.append(
-                async_track_state_change_event(self.hass, ["sun.sun"], self._check_schedule)
-            )
+            self._unsubs.append(async_track_state_change_event(self.hass, ["sun.sun"], self._check_schedule))
         self.dimmed = False
         self._evaluate(notify=False)
         self._restart_idle_timer()
@@ -192,9 +187,7 @@ class BehaviorController:
             return
         if self.last_activity is None:
             self.last_activity = dt_util.utcnow()
-        self._idle_timer = async_call_later(
-            self.hass, self.settings["idle"]["timeout"], self._on_idle
-        )
+        self._idle_timer = async_call_later(self.hass, self.settings["idle"]["timeout"], self._on_idle)
 
     @callback
     def _on_idle(self, _now: Any) -> None:

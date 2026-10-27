@@ -62,7 +62,7 @@ The first message on a new connection MUST be `hello` from the client.
 ```json
 {"type": "welcome", "protocol": 1,
  "bridge": {"id": "3f9a1c0be2d44a17", "name": "Office PC", "version": "0.1.0", "platform": "windows-x64"},
- "features": ["key_images", "key_colors", "brightness", "dials", "touch"]}
+ "features": ["key_images", "key_colors", "brightness", "dials", "touch", "buttons", "screen", "dial_leds", "nfc", "update"]}
 ```
 
 `features` lists optional parts of this protocol the bridge implements; a
@@ -164,10 +164,13 @@ with the **same id**.
 
 | Capability | Fields | Meaning |
 |---|---|---|
-| `keys` | `cols`, `rows`, `image` or `colors` | Grid of keys. With `image` the keys show pictures of `width`×`height` pixels in one of `formats` (`jpeg`, `png`). With `"colors": true` (and no `image`) the keys only show a colour (LED pads). |
+| `keys` | `cols`, `rows`, `image` or `colors` | Grid of keys. With `image` the keys show pictures of `width`×`height` pixels in one of `formats` (`jpeg`, `png`). With `"colors": true` (and no `image`) the keys only show a colour (LED pads). With neither, the keys have no display and only report presses (pedals): images and colours are refused with `unsupported`. |
 | `brightness` | `true` | The display brightness can be set. |
-| `dials` | `count`, `press` | Rotary encoders, left to right; `press` true when they can be pushed. |
+| `dials` | `count`, `press`, `ring` | Rotary encoders, left to right; `press` true when they can be pushed; `ring` the number of LEDs around each (0 or missing: none). |
 | `touch` | `width`, `height` | A touch display (e.g. strip of the Stream Deck Plus), addressed in pixels. |
+| `buttons` | `count`, `colors` | Buttons outside the key grid (e.g. the page buttons of the Stream Deck Neo); `colors` true when they can be lit. |
+| `screen` | `width`, `height`, `formats` | A display without touch input (e.g. the info display of the Stream Deck Neo). |
+| `nfc` | – | `true` when the device reads NFC tags (Stream Deck Studio). |
 
 Keys are numbered from 0, row by row, starting top left, **as the user sees
 the device**. Pixel coordinates (touch) start at the top left as well.
@@ -184,10 +187,18 @@ Every client message MAY carry an `id` (integer). The bridge then answers with
 | `clear_key` | `device`, `key` | Key shows black / off. |
 | `reset` | `device` | Device shows its idle screen (vendor logo or blank). |
 | `identify` | `device` | Device draws attention for a few seconds (flash), to find it. |
+| `set_button_color` | `device`, `button`, `color` (`#rrggbb`) | Lights a button outside the grid; black is off. |
+| `set_dial_leds` | `device`, `dial`, `color`, `level` (0–1, default 1) | Lights that share of the dial's LED ring, and its centre, in the colour. |
 
 ```json
 {"type": "set_brightness", "device": "elgato-AL12K1A01234", "percent": 70, "id": 12}
 ```
+
+Bridges with the `update` feature can install a release of themselves:
+
+| Message | Fields | Effect |
+|---|---|---|
+| `update` | `version` (e.g. `0.9.0`) | Downloads that release, checks its checksum, installs it and restarts. Progress comes as `update_status` (section 9); the bridge is back with the new `version` in its next `welcome`. Fails with `error` (`request` = `update`) when it cannot start, for example while another update runs. |
 
 Images are sent as binary frames (section 6): `set_key_image` for a key,
 `set_touch_image` for an area of a touch display.
@@ -210,6 +221,7 @@ A binary frame is:
 |---|---|---|
 | `set_key_image` | `device`, `key`, `format` | Encoded image, upright, `width`×`height` from the device's `keys.image`. |
 | `set_touch_image` | `device`, `x`, `y`, `width`, `height`, `format` | Encoded image for that area of the touch display. |
+| `set_screen_image` | `device`, `format` | Encoded image for the whole screen, upright, `width`×`height` from `screen`. |
 
 The bridge converts images as the device needs (rotation, mirroring, BMP,
 scaling when the size differs). For each key only the newest image counts:
@@ -254,6 +266,9 @@ ignored, so newer clients can probe older bridges.
 | `dial` | `device`, `dial`, `delta` | Dial turned by `delta` steps, positive = clockwise. |
 | `dial_press` | `device`, `dial`, `pressed` | Dial pushed / released. |
 | `touch` | `device`, `kind`, `x`, `y` (+ `x2`, `y2` for `swipe`) | `kind` is `tap`, `long` or `swipe`. |
+| `button` | `device`, `button`, `pressed` | A button outside the grid went down or up. |
+| `nfc` | `device`, `id` | An NFC tag was read; `id` as the reader reports it. |
+| `update_status` | `state`, `version`, `message` (on failure) | Progress of an `update`: `downloading`, `installing` (the bridge restarts next) or `failed`. |
 
 ```json
 {"type": "key", "device": "elgato-AL12K1A01234", "key": 7, "pressed": true}

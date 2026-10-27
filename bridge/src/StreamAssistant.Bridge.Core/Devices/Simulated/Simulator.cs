@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -23,21 +24,27 @@ public sealed class Simulator
         _manager = manager;
         _logger = logger;
         var number = 0;
-        foreach (var (cols, rows) in options.Simulate)
+        foreach (var deck in options.Simulate)
         {
             number++;
             var id = $"sim-{number}";
+            var dials = deck.Dials > 0 ? new DialSet(deck.Dials, Press: true) : null;
+            var touch = deck.Dials > 0 ? new TouchArea(deck.Dials * SimulatedDeck.SegmentWidth, SimulatedDeck.StripHeight) : null;
             var info = new DeviceInfo(
                 Id: id,
                 Vendor: "Stream Assistant",
-                Model: $"Simulated deck {cols}×{rows}",
+                Model: deck.Like is { } like
+                    ? $"Simulated {like.Name}"
+                    : $"Simulated deck {deck.Cols}×{deck.Rows}" + (deck.Dials > 0 ? $" with {deck.Dials} dials" : ""),
                 Name: $"Simulated deck {number}",
                 Serial: id,
                 Firmware: BridgeServer.Version,
                 Virtual: true,
-                Capabilities: new DeviceCapabilities(KeyGrid.Images(cols, rows, 72), Brightness: true));
+                // Shaped like an Elgato model: the same capabilities as its driver
+                Capabilities: deck.Like?.Capabilities() ?? new DeviceCapabilities(KeyGrid.Images(deck.Cols, deck.Rows, deck.KeySize), Brightness: true, dials, touch));
             var device = new VirtualDevice(info);
             device.Changed += (d, key) => Publish(key is { } k ? KeyJson(d, k) : DeviceJson(d));
+            device.TouchChanged += (d, image) => Publish(new JsonObject { ["type"] = "touch", ["device"] = d.Info.Id, ["image"] = TouchJson(image) });
             device.Identified += d => Publish(new JsonObject { ["type"] = "identify", ["device"] = d.Info.Id });
             _devices.Add(device);
         }
@@ -113,6 +120,9 @@ public sealed class Simulator
                 var result = await socket.ReceiveAsync(buffer, cancellationToken);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
+                    // Confirm the close, as the WebSocket protocol asks
+                    await sendLock.WaitAsync(cancellationToken);
+                    await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, cancellationToken);
                     break;
                 }
                 HandlePageMessage(Encoding.UTF8.GetString(buffer, 0, result.Count));
@@ -163,6 +173,26 @@ public sealed class Simulator
             case "press" when IsPlugged(device):
                 device.Press(message["key"]?.GetValue<int>() ?? -1, message["pressed"]?.GetValue<bool>() ?? false);
                 break;
+            case "turn" when IsPlugged(device):
+                device.Turn(message["dial"]?.GetValue<int>() ?? -1, message["delta"]?.GetValue<int>() ?? 0);
+                break;
+            case "dial_press" when IsPlugged(device):
+                device.PressDial(message["dial"]?.GetValue<int>() ?? -1, message["pressed"]?.GetValue<bool>() ?? false);
+                break;
+            case "button" when IsPlugged(device):
+                device.PressButton(message["button"]?.GetValue<int>() ?? -1, message["pressed"]?.GetValue<bool>() ?? false);
+                break;
+            case "nfc" when IsPlugged(device):
+                device.ReadTag(message["id"]?.GetValue<string>() ?? "");
+                break;
+            case "touch" when IsPlugged(device):
+                device.Touch(
+                    message["kind"]?.GetValue<string>() ?? "",
+                    message["x"]?.GetValue<int>() ?? 0,
+                    message["y"]?.GetValue<int>() ?? 0,
+                    message["x2"]?.GetValue<int>(),
+                    message["y2"]?.GetValue<int>());
+                break;
             case "plug":
                 _logger.LogInformation("Simulator: {Id} {Action}", device.Info.Id, message["plugged"]?.GetValue<bool>() == true ? "plugged in" : "unplugged");
                 SetPlugged(device.Info.Id, message["plugged"]?.GetValue<bool>() ?? true);
@@ -180,7 +210,7 @@ public sealed class Simulator
         {
             if (ContentJson(device.GetKey(key)) is { } content)
             {
-                keys[key.ToString()] = content;
+                keys[key.ToString(CultureInfo.InvariantCulture)] = content;
             }
         }
         return new JsonObject
@@ -193,6 +223,30 @@ public sealed class Simulator
             ["plugged"] = IsPlugged(device),
             ["brightness"] = device.Brightness,
             ["keys"] = keys,
+            ["dials"] = device.Info.Capabilities.Dials?.Count ?? 0,
+            ["dial_leds"] = new JsonArray(Enumerable.Range(0, device.Info.Capabilities.Dials is { Ring: > 0 } ring ? ring.Count : 0)
+                .Select(dial => (JsonNode?)(device.GetDialLeds(dial) is { } leds ? new JsonObject { ["color"] = leds.Color, ["level"] = leds.Level } : null))
+                .ToArray()),
+            ["buttons"] = new JsonArray(Enumerable.Range(0, device.Info.Capabilities.Buttons?.Count ?? 0)
+                .Select(button => (JsonNode?)device.GetButtonColor(button))
+                .ToArray()),
+            ["screen"] = device.Info.Capabilities.Screen is { } screen
+                ? new JsonObject
+                {
+                    ["width"] = screen.Width,
+                    ["height"] = screen.Height,
+                    ["src"] = device.Screen is { } shown ? $"data:image/{shown.Format};base64,{Convert.ToBase64String(shown.Image)}" : null,
+                }
+                : null,
+            ["nfc"] = device.Info.Capabilities.Nfc,
+            ["touch"] = device.Info.Capabilities.Touch is { } touch
+                ? new JsonObject
+                {
+                    ["width"] = touch.Width,
+                    ["height"] = touch.Height,
+                    ["images"] = new JsonArray(device.TouchImages.Select(i => (JsonNode)TouchJson(i)).ToArray()),
+                }
+                : null,
         };
     }
 
@@ -202,6 +256,15 @@ public sealed class Simulator
         ["device"] = device.Info.Id,
         ["key"] = key,
         ["content"] = ContentJson(device.GetKey(key)),
+    };
+
+    private static JsonObject TouchJson(VirtualDevice.TouchImage image) => new()
+    {
+        ["x"] = image.X,
+        ["y"] = image.Y,
+        ["width"] = image.Width,
+        ["height"] = image.Height,
+        ["src"] = $"data:image/{image.Format};base64,{Convert.ToBase64String(image.Image)}",
     };
 
     private static JsonObject? ContentJson(VirtualDevice.KeyContent? content) => content switch

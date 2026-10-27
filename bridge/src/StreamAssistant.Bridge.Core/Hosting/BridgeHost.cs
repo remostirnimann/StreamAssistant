@@ -1,11 +1,14 @@
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Logging.Console;
 using StreamAssistant.Bridge.Configuration;
 using StreamAssistant.Bridge.Devices;
+using StreamAssistant.Bridge.Devices.Elgato;
 using StreamAssistant.Bridge.Devices.Simulated;
 using StreamAssistant.Bridge.Devices.Virtual;
 using StreamAssistant.Bridge.Discovery;
 using StreamAssistant.Bridge.Protocol;
+using StreamAssistant.Bridge.Updates;
 using StreamAssistant.Bridge.Web;
 
 namespace StreamAssistant.Bridge.Hosting;
@@ -16,7 +19,14 @@ public static class BridgeHost
     /// <summary>The web application with all services and endpoints, not started yet.</summary>
     public static WebApplication Build(string[] args, Action<ILoggingBuilder>? logging = null)
     {
-        var builder = WebApplication.CreateSlimBuilder(args);
+        var service = WindowsServiceHelpers.IsWindowsService();
+        // Always next to the program, never the working directory: services start in System32
+        // or in "/", and the configuration watcher would then watch the whole disk
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
+        {
+            Args = args,
+            ContentRootPath = AppContext.BaseDirectory,
+        });
         builder.Logging.ClearProviders();
         builder.Logging.AddSimpleConsole(o =>
         {
@@ -24,6 +34,16 @@ public static class BridgeHost
             o.TimestampFormat = "HH:mm:ss ";
             o.ColorBehavior = LoggerColorBehavior.Default;
         });
+        if (service)
+        {
+            // No console as a service: log to the settings folder
+            var dir = BridgeOptions.From(builder.Configuration).ConfigDir;
+            Directory.CreateDirectory(dir);
+            builder.Logging.AddProvider(new FileLoggerProvider(Path.Combine(dir, "bridge.log")));
+        }
+        // Both do nothing unless the bridge runs as a Windows service or under systemd
+        builder.Services.AddWindowsService(o => o.ServiceName = "StreamAssistantBridge");
+        builder.Services.AddSystemd();
         builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
         logging?.Invoke(builder.Logging);
 
@@ -35,6 +55,16 @@ public static class BridgeHost
         builder.Services.AddSingleton<BridgeServer>();
         builder.Services.AddSingleton<Simulator>();
         builder.Services.AddSingleton<VirtualDecks>();
+        builder.Services.AddSingleton<IUpdateInstaller, SelfInstaller>();
+        builder.Services.AddSingleton(_ =>
+        {
+            var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd($"stream-assistant-bridge/{BridgeServer.Version}");
+            return http;
+        });
+        builder.Services.AddSingleton<UpdateService>();
+        builder.Services.AddSingleton<IHidBackend, HidSharpBackend>();
+        builder.Services.AddHostedService<ElgatoWatcher>();
         builder.Services.AddHostedService<MdnsAdvertiser>();
         // Read lazily: tests and the command line can set the port
         builder.WebHost.ConfigureKestrel((context, kestrel) =>
@@ -126,6 +156,9 @@ public static class BridgeHost
         var bridge = app.Services.GetRequiredService<BridgeServer>();
         logger.LogInformation("Stream Assistant Bridge {Version} \"{Name}\" (id {Id}), port {Port}", BridgeServer.Version, bridge.Name, bridge.Id, options.Port);
         logger.LogInformation("Settings: {Path}", app.Services.GetRequiredService<SettingsStore>().FilePath);
+        SelfInstaller.CleanUp();
+        // Update progress goes to Home Assistant
+        app.Services.GetRequiredService<UpdateService>().Status += bridge.Broadcast;
         app.Services.GetRequiredService<Simulator>().Start();
         if (virtualDecks)
         {

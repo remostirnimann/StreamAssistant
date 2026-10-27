@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+import contextlib
 from dataclasses import dataclass
 import json
 import logging
@@ -46,6 +47,20 @@ class BridgeInfo:
     name: str
     version: str
     platform: str = ""
+    # Optional parts of the protocol the bridge offers, e.g. "update"
+    features: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class TouchEvent:
+    """A touch on a touch display (protocol section 9), pixels from the top left."""
+
+    kind: str  # tap | long | swipe
+    x: int
+    y: int
+    # End of a swipe
+    x2: int | None = None
+    y2: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +80,18 @@ class BridgeDevice:
     key_size: int
     formats: tuple[str, ...]
     brightness: bool
+    # Colour-only keys (LED pads); keys without image and colours have no display (pedals)
+    colors: bool = False
+    dials: int = 0
+    dial_press: bool = False
+    touch_width: int = 0
+    touch_height: int = 0
+    dial_ring: int = 0
+    buttons: int = 0
+    button_colors: bool = False
+    screen_width: int = 0
+    screen_height: int = 0
+    nfc: bool = False
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> BridgeDevice:
@@ -72,6 +99,10 @@ class BridgeDevice:
         caps = data.get("capabilities") or {}
         keys = caps.get("keys") or {}
         image = keys.get("image") or {}
+        dials = caps.get("dials") or {}
+        touch = caps.get("touch") or {}
+        buttons = caps.get("buttons") or {}
+        screen = caps.get("screen") or {}
         return cls(
             id=str(data["id"]),
             vendor=str(data.get("vendor") or ""),
@@ -85,11 +116,22 @@ class BridgeDevice:
             key_size=int(min(image.get("width") or 0, image.get("height") or 0)),
             formats=tuple(image.get("formats") or ()),
             brightness=bool(caps.get("brightness")),
+            colors=bool(keys.get("colors")),
+            dials=int(dials.get("count") or 0),
+            dial_press=bool(dials.get("press")),
+            touch_width=int(touch.get("width") or 0),
+            touch_height=int(touch.get("height") or 0),
+            dial_ring=int(dials.get("ring") or 0),
+            buttons=int(buttons.get("count") or 0),
+            button_colors=bool(buttons.get("colors")),
+            screen_width=int(screen.get("width") or 0),
+            screen_height=int(screen.get("height") or 0),
+            nfc=bool(caps.get("nfc")),
         )
 
     def to_json(self) -> dict[str, Any]:
         """Serializable form, to remember devices across restarts."""
-        return {
+        data: dict[str, Any] = {
             "id": self.id,
             "vendor": self.vendor,
             "model": self.model,
@@ -106,6 +148,25 @@ class BridgeDevice:
                 "brightness": self.brightness,
             },
         }
+        keys = data["capabilities"]["keys"]
+        if not self.key_size:
+            del keys["image"]
+        if self.colors:
+            keys["colors"] = True
+        caps = data["capabilities"]
+        if self.dials:
+            caps["dials"] = {"count": self.dials, "press": self.dial_press}
+            if self.dial_ring:
+                caps["dials"]["ring"] = self.dial_ring
+        if self.touch_width and self.touch_height:
+            caps["touch"] = {"width": self.touch_width, "height": self.touch_height}
+        if self.buttons:
+            caps["buttons"] = {"count": self.buttons, "colors": self.button_colors}
+        if self.screen_width and self.screen_height:
+            caps["screen"] = {"width": self.screen_width, "height": self.screen_height, "formats": ["jpeg", "png"]}
+        if self.nfc:
+            caps["nfc"] = True
+        return data
 
 
 def _url(host: str, port: int, path: str, scheme: str = "http") -> str:
@@ -128,18 +189,25 @@ async def fetch_info(session: aiohttp.ClientSession, host: str, port: int = DEFA
                 response.raise_for_status()
                 data = await response.json(content_type=None)
         bridge = data["bridge"]
-        return BridgeInfo(str(bridge["id"]), str(bridge["name"]), str(bridge.get("version", "")), str(bridge.get("platform", "")))
+        return BridgeInfo(
+            str(bridge["id"]), str(bridge["name"]), str(bridge.get("version", "")), str(bridge.get("platform", ""))
+        )
     except (aiohttp.ClientError, TimeoutError, KeyError, TypeError, ValueError) as err:
         raise BridgeError("cannot_connect", str(err)) from err
 
 
 async def _handshake(
-    session: aiohttp.ClientSession, host: str, port: int, first: dict[str, Any]
+    session: aiohttp.ClientSession, host: str, port: int, first: dict[str, Any], *, heartbeat: float | None = None
 ) -> tuple[aiohttp.ClientWebSocketResponse, dict[str, Any], str | None]:
-    """Open a connection and send hello or pair; returns welcome (and a new token)."""
+    """Open a connection and send hello or pair; returns welcome (and a new token).
+
+    Only the lasting session needs a heartbeat; the pairing connection is closed right away.
+    """
     try:
         async with asyncio.timeout(CONNECT_TIMEOUT):
-            ws = await session.ws_connect(_url(host, port, "/ws", "ws"), heartbeat=HEARTBEAT, max_msg_size=4 * 1024 * 1024)
+            ws = await session.ws_connect(
+                _url(host, port, "/ws", "ws"), heartbeat=heartbeat, max_msg_size=4 * 1024 * 1024
+            )
     except (aiohttp.ClientError, TimeoutError) as err:
         raise BridgeError("cannot_connect", str(err)) from err
     token = None
@@ -172,7 +240,13 @@ async def _receive_json(ws: aiohttp.ClientWebSocketResponse) -> dict[str, Any]:
 
 def _info(welcome: dict[str, Any]) -> BridgeInfo:
     bridge = welcome.get("bridge") or {}
-    return BridgeInfo(str(bridge.get("id", "")), str(bridge.get("name", "")), str(bridge.get("version", "")), str(bridge.get("platform", "")))
+    return BridgeInfo(
+        str(bridge.get("id", "")),
+        str(bridge.get("name", "")),
+        str(bridge.get("version", "")),
+        str(bridge.get("platform", "")),
+        tuple(str(f) for f in welcome.get("features") or ()),
+    )
 
 
 async def pair(
@@ -183,7 +257,13 @@ async def pair(
         session,
         host,
         port,
-        {"type": "pair", "protocol": PROTOCOL_VERSION, "client": "Home Assistant", "client_version": client_version, "code": code},
+        {
+            "type": "pair",
+            "protocol": PROTOCOL_VERSION,
+            "client": "Home Assistant",
+            "client_version": client_version,
+            "code": code,
+        },
     )
     await ws.close()
     assert token
@@ -197,9 +277,7 @@ class BridgeClient:
     arrives through on_devices; the owner then sends brightness and all images.
     """
 
-    def __init__(
-        self, session: aiohttp.ClientSession, host: str, port: int, token: str, client_version: str
-    ) -> None:
+    def __init__(self, session: aiohttp.ClientSession, host: str, port: int, token: str, client_version: str) -> None:
         """Initialize."""
         self.host = host
         self.port = port
@@ -215,6 +293,13 @@ class BridgeClient:
         self.on_device_added: Callable[[BridgeDevice], None] | None = None
         self.on_device_removed: Callable[[str], None] | None = None
         self.on_key: Callable[[str, int, bool], None] | None = None
+        self.on_dial: Callable[[str, int, int], None] | None = None
+        self.on_dial_press: Callable[[str, int, bool], None] | None = None
+        self.on_touch: Callable[[str, TouchEvent], None] | None = None
+        self.on_button: Callable[[str, int, bool], None] | None = None
+        self.on_nfc: Callable[[str, str], None] | None = None
+        # Progress of a self-update: {"state": downloading | installing | failed, "version", "message"}
+        self.on_update_status: Callable[[dict[str, Any]], None] | None = None
         # The token was refused: the user has to pair again
         self.on_unauthorized: Callable[[], None] | None = None
 
@@ -226,16 +311,16 @@ class BridgeClient:
     def start(self) -> None:
         """Connect and keep reconnecting until stopped."""
         if self._task is None:
-            self._task = asyncio.get_running_loop().create_task(self._run(), name=f"stream_assistant bridge {self.host}")
+            self._task = asyncio.get_running_loop().create_task(
+                self._run(), name=f"stream_assistant bridge {self.host}"
+            )
 
     async def stop(self) -> None:
         """Disconnect for good."""
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         if self._ws:
             await self._ws.close()
@@ -255,6 +340,29 @@ class BridgeClient:
                 envelope({"type": "set_key_image", "device": device, "key": key, "format": image_format}, image)
             )
 
+    def send_touch_image(
+        self, device: str, x: int, y: int, width: int, height: int, image: bytes, image_format: str = "jpeg"
+    ) -> None:
+        """Queue an image for an area of a touch display."""
+        if self.connected:
+            header = {
+                "type": "set_touch_image",
+                "device": device,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "format": image_format,
+            }
+            self._outgoing.put_nowait(envelope(header, image))
+
+    def send_screen_image(self, device: str, image: bytes, image_format: str = "jpeg") -> None:
+        """Queue an image for the whole screen."""
+        if self.connected:
+            self._outgoing.put_nowait(
+                envelope({"type": "set_screen_image", "device": device, "format": image_format}, image)
+            )
+
     # Connection loop
 
     async def _run(self) -> None:
@@ -272,6 +380,7 @@ class BridgeClient:
                         "client_version": self._client_version,
                         "token": self._token,
                     },
+                    heartbeat=HEARTBEAT,
                 )
                 self.info = _info(welcome)
                 backoff = BACKOFF_MIN
@@ -341,9 +450,33 @@ class BridgeClient:
                 self.on_device_removed(str(message["device"]))
             elif kind == "key" and self.on_key:
                 self.on_key(str(message["device"]), int(message["key"]), bool(message["pressed"]))
+            elif kind == "dial" and self.on_dial:
+                self.on_dial(str(message["device"]), int(message["dial"]), int(message["delta"]))
+            elif kind == "dial_press" and self.on_dial_press:
+                self.on_dial_press(str(message["device"]), int(message["dial"]), bool(message["pressed"]))
+            elif kind == "button" and self.on_button:
+                self.on_button(str(message["device"]), int(message["button"]), bool(message["pressed"]))
+            elif kind == "nfc" and self.on_nfc:
+                self.on_nfc(str(message["device"]), str(message["id"]))
+            elif kind == "touch" and self.on_touch:
+                swipe = message["kind"] == "swipe"
+                self.on_touch(
+                    str(message["device"]),
+                    TouchEvent(
+                        str(message["kind"]),
+                        int(message["x"]),
+                        int(message["y"]),
+                        int(message["x2"]) if swipe else None,
+                        int(message["y2"]) if swipe else None,
+                    ),
+                )
+            elif kind == "update_status" and self.on_update_status:
+                self.on_update_status(message)
             elif kind == "error":
                 if message.get("code") == "replaced":
                     raise BridgeError("replaced")
+                if message.get("request") == "update" and self.on_update_status:
+                    self.on_update_status({"state": "failed", "message": message.get("message")})
                 _LOGGER.debug("Bridge %s reported %s: %s", self.host, message.get("code"), message.get("message"))
         except (KeyError, TypeError, ValueError) as err:
             _LOGGER.debug("Bridge %s sent an unexpected %s message: %s", self.host, kind, err)

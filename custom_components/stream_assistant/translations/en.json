@@ -33,7 +33,7 @@
       },
       "pair": {
         "title": "Pair with {name}",
-        "description": "Enter the 6-digit pairing code the bridge at {host} shows (its window, log, or http://localhost:5390 on that computer).",
+        "description": "Enter the 6-digit pairing code the bridge at {host} shows (its window, log, or http://localhost:{port} on that computer).",
         "data": {
           "code": "Pairing code"
         }
@@ -48,7 +48,7 @@
         },
         "data_description": {
           "name": "Name of the device, e.g. \"Kitchen tablet\".",
-          "cols": "Keys per row (1-12).",
+          "cols": "Keys per row (1-16).",
           "rows": "Number of rows (1-8)."
         }
       },
@@ -113,6 +113,47 @@
             }
           }
         }
+      },
+      "dial": {
+        "name": "Dial {dial}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "rotate_left": "Turned left",
+              "rotate_right": "Turned right",
+              "pressed": "Pressed",
+              "released": "Released",
+              "short_press": "Short press",
+              "long_press": "Long press"
+            }
+          }
+        }
+      },
+      "touch_strip": {
+        "name": "Touch strip",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "tap": "Tap",
+              "long_press": "Long press",
+              "swipe_left": "Swiped left",
+              "swipe_right": "Swiped right"
+            }
+          }
+        }
+      },
+      "page_button": {
+        "name": "Page button {button}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "pressed": "Pressed",
+              "released": "Released",
+              "short_press": "Short press",
+              "long_press": "Long press"
+            }
+          }
+        }
       }
     },
     "number": {
@@ -151,6 +192,17 @@
     "clear_key": {
       "name": "Clear key",
       "description": "Blanks a Stream Deck key and removes its stored appearance."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Bridge options",
+        "description": "Automatic updates: when Stream Assistant is updated, the bridge installs the matching version on its own (only bridges that can update themselves).",
+        "data": {
+          "auto_update": "Update the bridge automatically"
+        }
+      }
     }
   }
 }

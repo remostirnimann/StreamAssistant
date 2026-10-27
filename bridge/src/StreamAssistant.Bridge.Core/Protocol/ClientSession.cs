@@ -154,7 +154,7 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
             ["type"] = "welcome",
             ["protocol"] = BridgeServer.ProtocolVersion,
             ["bridge"] = server.BridgeJson(),
-            ["features"] = new JsonArray(BridgeServer.Features.Select(f => (JsonNode)f).ToArray()),
+            ["features"] = new JsonArray(server.CurrentFeatures.Select(f => (JsonNode)f).ToArray()),
         });
         return true;
     }
@@ -250,50 +250,117 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
         switch (type)
         {
             case "set_brightness":
-            {
-                var device = Device(command);
-                if (!device.Info.Capabilities.Brightness)
                 {
-                    throw new ProtocolError("unsupported", "The device has no adjustable brightness");
+                    var device = Device(command);
+                    if (!device.Info.Capabilities.Brightness)
+                    {
+                        throw new ProtocolError("unsupported", "The device has no adjustable brightness");
+                    }
+                    return device.SetBrightnessAsync(Range(command, "percent", 0, 100), cancellationToken);
                 }
-                return device.SetBrightnessAsync(Range(command, "percent", 0, 100), cancellationToken);
-            }
             case "set_key_image":
-            {
-                var device = Device(command);
-                var grid = Keys(device);
-                if (!grid.HasImages)
                 {
-                    throw new ProtocolError("unsupported", "The keys of this device only show colours");
+                    var device = Device(command);
+                    var grid = Keys(device);
+                    if (!grid.HasImages)
+                    {
+                        throw new ProtocolError("unsupported", grid.InputOnly ? "The keys of this device have no display" : "The keys of this device only show colours");
+                    }
+                    var key = Range(command, "key", 0, grid.Count - 1);
+                    var format = Str(command, "format");
+                    if (format is null || !grid.Formats.Contains(format))
+                    {
+                        throw new ProtocolError("invalid_message", $"format must be one of {string.Join(", ", grid.Formats)}");
+                    }
+                    if (payload.IsEmpty)
+                    {
+                        throw new ProtocolError("invalid_message", "set_key_image is sent as a binary envelope with the image");
+                    }
+                    return device.SetKeyImageAsync(key, format, payload, cancellationToken);
                 }
-                var key = Range(command, "key", 0, grid.Count - 1);
-                var format = Str(command, "format");
-                if (format is null || !grid.Formats.Contains(format))
+            case "set_touch_image":
                 {
-                    throw new ProtocolError("invalid_message", $"format must be one of {string.Join(", ", grid.Formats)}");
+                    var device = Device(command);
+                    var touch = device.Info.Capabilities.Touch ?? throw new ProtocolError("unsupported", "The device has no touch display");
+                    var x = Range(command, "x", 0, touch.Width - 1);
+                    var y = Range(command, "y", 0, touch.Height - 1);
+                    var width = Range(command, "width", 1, touch.Width - x);
+                    var height = Range(command, "height", 1, touch.Height - y);
+                    var format = Str(command, "format");
+                    if (format is not ("jpeg" or "png"))
+                    {
+                        throw new ProtocolError("invalid_message", "format must be jpeg or png");
+                    }
+                    if (payload.IsEmpty)
+                    {
+                        throw new ProtocolError("invalid_message", "set_touch_image is sent as a binary envelope with the image");
+                    }
+                    return device.SetTouchImageAsync(x, y, width, height, format, payload, cancellationToken);
                 }
-                if (payload.IsEmpty)
+            case "set_screen_image":
                 {
-                    throw new ProtocolError("invalid_message", "set_key_image is sent as a binary envelope with the image");
+                    var device = Device(command);
+                    if (device.Info.Capabilities.Screen is null)
+                    {
+                        throw new ProtocolError("unsupported", "The device has no screen");
+                    }
+                    var format = Str(command, "format");
+                    if (format is not ("jpeg" or "png"))
+                    {
+                        throw new ProtocolError("invalid_message", "format must be jpeg or png");
+                    }
+                    if (payload.IsEmpty)
+                    {
+                        throw new ProtocolError("invalid_message", "set_screen_image is sent as a binary envelope with the image");
+                    }
+                    return device.SetScreenImageAsync(format, payload, cancellationToken);
                 }
-                return device.SetKeyImageAsync(key, format, payload, cancellationToken);
-            }
+            case "set_button_color":
+                {
+                    var device = Device(command);
+                    if (device.Info.Capabilities.Buttons is not { Colors: true } buttons)
+                    {
+                        throw new ProtocolError("unsupported", "The device has no lit buttons");
+                    }
+                    return device.SetButtonColorAsync(Range(command, "button", 0, buttons.Count - 1), Color(command), cancellationToken);
+                }
+            case "set_dial_leds":
+                {
+                    var device = Device(command);
+                    if (device.Info.Capabilities.Dials is not { Ring: > 0 } dials)
+                    {
+                        throw new ProtocolError("unsupported", "The device has no dial LEDs");
+                    }
+                    var dial = Range(command, "dial", 0, dials.Count - 1);
+                    var level = command["level"] is null ? 1.0 : Number(command, "level");
+                    if (level is not (>= 0 and <= 1))
+                    {
+                        throw new ProtocolError("invalid_message", "level must be between 0 and 1");
+                    }
+                    return device.SetDialLedsAsync(dial, Color(command), level.Value, cancellationToken);
+                }
+            case "update":
+                {
+                    var version = Str(command, "version") ?? throw new ProtocolError("invalid_message", "version is missing");
+                    server.Updates.Start(version);
+                    return Task.CompletedTask;
+                }
             case "set_key_color":
-            {
-                var device = Device(command);
-                var key = Range(command, "key", 0, Keys(device).Count - 1);
-                var color = Str(command, "color");
-                if (color is null || !ColorPattern().IsMatch(color))
                 {
-                    throw new ProtocolError("invalid_message", "color must look like #rrggbb");
+                    var device = Device(command);
+                    var key = Range(command, "key", 0, Display(device).Count - 1);
+                    var color = Str(command, "color");
+                    if (color is null || !ColorPattern().IsMatch(color))
+                    {
+                        throw new ProtocolError("invalid_message", "color must look like #rrggbb");
+                    }
+                    return device.SetKeyColorAsync(key, color.ToLowerInvariant(), cancellationToken);
                 }
-                return device.SetKeyColorAsync(key, color.ToLowerInvariant(), cancellationToken);
-            }
             case "clear_key":
-            {
-                var device = Device(command);
-                return device.ClearKeyAsync(Range(command, "key", 0, Keys(device).Count - 1), cancellationToken);
-            }
+                {
+                    var device = Device(command);
+                    return device.ClearKeyAsync(Range(command, "key", 0, Display(device).Count - 1), cancellationToken);
+                }
             case "reset":
                 return Device(command).ResetAsync(cancellationToken);
             case "identify":
@@ -311,6 +378,13 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
 
     private static KeyGrid Keys(IControlDevice device) =>
         device.Info.Capabilities.Keys ?? throw new ProtocolError("unsupported", "The device has no keys");
+
+    /// <summary>Keys that show something (image or colour).</summary>
+    private static KeyGrid Display(IControlDevice device)
+    {
+        var grid = Keys(device);
+        return grid.InputOnly ? throw new ProtocolError("unsupported", "The keys of this device have no display") : grid;
+    }
 
     private static int Range(JsonObject command, string field, int min, int max)
     {
@@ -347,6 +421,9 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
         }
         Send(error);
     }
+
+    /// <summary>An event from the bridge itself (update progress).</summary>
+    internal void Notify(JsonObject message) => Send(message);
 
     private void Send(JsonObject message) =>
         _out.Writer.TryWrite(new Outgoing(Encoding.UTF8.GetBytes(message.ToJsonString()), WebSocketMessageType.Text));
@@ -423,6 +500,17 @@ internal sealed partial class ClientSession(BridgeServer server, WebSocket socke
 
     private static int? Int(JsonObject message, string field) =>
         message[field] is JsonValue value && value.TryGetValue<int>(out var number) ? number : null;
+
+    private static double? Number(JsonObject message, string field) =>
+        message[field] is JsonValue value && value.TryGetValue<double>(out var number) ? number : null;
+
+    private static string Color(JsonObject command)
+    {
+        var color = Str(command, "color");
+        return color is not null && ColorPattern().IsMatch(color)
+            ? color.ToLowerInvariant()
+            : throw new ProtocolError("invalid_message", "color must look like #rrggbb");
+    }
 
     [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
     private static partial Regex ColorPattern();

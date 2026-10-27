@@ -5,7 +5,110 @@ All notable changes to Stream Assistant. Format based on
 Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
 the same version. Versions before 0.8.0b1 were not released.
 
-## [Unreleased]
+## [0.9.0b1] - 2026-10-27
+
+### Added
+- Bridge installers:
+  - Windows: `stream-assistant-bridge-<version>-win-x64.msi` installs the bridge for all
+    users as the service *Stream Assistant Bridge* (starts with Windows, restarts on
+    failure), with a firewall rule and a start menu entry for the status page. Settings in
+    `C:\ProgramData\Stream Assistant Bridge`, logged to `bridge.log` there.
+  - Linux and macOS: `bridge/install.sh` downloads the matching release, checks its
+    checksum and sets up a systemd service with its own user and udev rule (Linux) or a
+    LaunchAgent (macOS); `--version`, `--uninstall`, `--purge`.
+- Bridge updates from Home Assistant: an update entity per bridge offers the bridge
+  version that matches the integration and installs it. The bridge downloads the release,
+  checks it against `SHA256SUMS.txt`, replaces itself (or runs the new installer) and
+  restarts; Home Assistant shows the progress and waits until it is back. The bridge's
+  options can turn on automatic updates. Protocol: the `update` feature and command and the
+  `update_status` event.
+- User documentation in `docs/`: installation, setup, the bridge (download, start, pairing,
+  autostart), devices with their test status, virtual and simulated panels, the key editor,
+  automations and troubleshooting, with screenshots. `docs/images/README.md` lists every
+  image, the ones still to take on a real Home Assistant or hardware, and how to make the
+  others again (`scripts/docs_demo.py`, `scripts/docs-pages/`, English desktop screenshots
+  with `SAB_TEST_LANGUAGE=en`).
+- Bridge: USB drivers for the Stream Deck Neo and Studio (not yet tried on real hardware):
+  - Neo: the two page buttons turn to the previous and next page and are lit when there is
+    one; the info screen shows the page name and its number. Event entities per page button.
+  - Studio: 32 keys of 144×112 (Home Assistant draws them square, the bridge centres them on
+    black), two dials whose LED rings show the dial's colour and its entity's level, and the
+    NFC reader: tags read there are Home Assistant tag scans (Tags integration).
+  - Protocol: `buttons`, `screen`, `dials.ring` and `nfc` capabilities, the commands
+    `set_button_color`, `set_screen_image` and `set_dial_leds`, the inputs `button` and `nfc`.
+  - `--simulate` takes Elgato models by name (`mk2`, `xl`, `plus`, `mini`, `original`,
+    `pedal`, `neo`, `studio`); the simulator page shows page buttons, screen, LED rings and
+    can read NFC tags.
+  - Free grids and templates can have up to 16 columns; templates for the Neo and Studio.
+- Bridge: USB drivers for more Stream Decks, following the reference implementation
+  node-elgato-stream-deck (not yet tried on real hardware):
+  - Stream Deck +: keys, four dials (turn and push) and the touch strip (images per area;
+    tap, hold and swipe).
+  - Stream Deck Mini and 6 Module, and the first Stream Deck: BMP images, first-generation
+    reports, the first Stream Deck's keys counted from the right.
+  - Stream Deck Pedal: three keys without display.
+  - The 15 and 32 key modules (like the MK.2 and XL).
+  - Colours fill keys with one small report on decks that can, instead of an image.
+- Keys without a display (pedals) in the protocol and the integration: they only press,
+  get no images and no brightness entity, and pressing never only wakes the deck.
+  `--simulate pedal` simulates one.
+- Dials and touch strips (the groundwork for the Stream Deck +):
+  - Every page has dials next to its keys. A dial shows its part of the touch strip (icon,
+    title, state and a level bar for brightness, volume, position, temperature or values)
+    and either adjusts its entity directly when turned (lights, covers, fans, media players,
+    climate, numbers, selects; step per detent configurable) or runs one action per detent
+    to the left or right. Pushing the dial or tapping/holding its segment runs the short
+    and long actions. Fast turning is collected into one service call, starting from the
+    value just set until the entity reports it.
+  - Event entities per dial (turned left/right with the number of detents, pressed,
+    released, short and long press) and for the touch strip (tap, long press, swipe left
+    or right, with position and dial).
+  - Editor: touch strip and dials below the keys, a dial form with turning mode, step and
+    test buttons for both directions. Templates keep dials (`grid_4x2_d4`, `plus`).
+  - Bridge: touch images (`set_touch_image`) and touch input; `--simulate plus` or
+    `--simulate 4x2:4` simulate decks with dials, the simulator page turns, pushes, taps,
+    holds and swipes; desktop virtual decks can have up to 6 dials.
+- Bridge: Elgato USB driver for the Stream Deck MK.2, Original v2 and XL (HidSharp). Decks
+  are found on their own and follow USB plugging (scan on plug events and every 5 s), several
+  per computer. Key images are scaled, turned by 180° and sent as JPEG (StbImageSharp, fully
+  managed, so the single-file builds need no native libraries), only the newest image per
+  key is sent, and on exit the decks show the Elgato logo again. `--usb false` turns it off.
+  Not yet verified with a real deck.
+- Unit tests for the integration (pytest-homeassistant-custom-component, 91 tests, 94 %
+  coverage) with a fake bridge and the simulated dock as real local servers.
+- More bridge tests: mDNS packets and announcement, status and simulator pages, idle
+  reset, driver failures and capability checks (47 tests, 93 % coverage).
+- Quality checks in CI, required for every pull request: tests with at least 90 %
+  coverage for the integration and the bridge, ruff (lint and format), .NET analyzers
+  with warnings as errors and `dotnet format`.
+
+### Changed
+- mDNS packet code moved into `MdnsService`, separate from the socket handling.
+- Line endings are LF everywhere (`.gitattributes`).
+
+### Fixed
+- Bridge as a service (systemd, launchd): it no longer hangs at start watching the whole
+  disk. The working directory there is `/`, which ASP.NET took as its content root; the
+  bridge now always uses its own folder.
+- Up to 16 columns everywhere: the virtual panel form still said 1–12, the template dialog
+  allowed 12 columns and no dials, and virtual decks in the bridge window allowed 12 columns.
+- Key editor: the title of a dial's form no longer breaks over two lines.
+- Pairing with a bridge on another port than 5390: the dialog pointed to `localhost:5390`
+  instead of the bridge's port.
+- The dashboard card's name in the card picker follows Home Assistant's language, not the
+  browser's.
+- A key that switches the page no longer runs the key at its place on the new page when it
+  is released.
+- The pairing connection to a bridge left a heartbeat timer running.
+- Stored layouts are validated when loaded; a damaged one starts empty instead of failing
+  later.
+- Bridge on Windows: an unreachable mDNS asker no longer stops the announcements.
+- Bridge: when mDNS multicast fails (no multicast route, e.g. in containers), direct
+  queries are still answered instead of stopping mDNS.
+- Bridge simulator page: closing the page's connection is confirmed properly.
+- Bridge: the pairing code and simulator key ids are formatted culture independent.
+- Release archives no longer contain native debug symbols (about 100 MB in the Windows
+  desktop zip) or the empty static web assets list.
 
 ## [0.8.0b1] - 2026-10-24
 

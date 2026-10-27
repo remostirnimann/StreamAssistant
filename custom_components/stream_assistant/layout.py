@@ -4,7 +4,7 @@ Stored per config entry. Shape (all plain JSON):
 
     {
       "pages": [
-        {"id": "main", "name": "Startseite", "parent": null, "keys": {"0": KEY, ...}},
+        {"id": "main", "name": "Startseite", "parent": null, "keys": {"0": KEY, ...}, "dials": {"0": DIAL, ...}},
         {"id": "a1b2c3", "name": "Licht OG", "parent": "main", "keys": {...}}
       ]
     }
@@ -28,6 +28,18 @@ KEY:
       "long": ACTION
     }
 
+DIAL (a rotary encoder and its part of the touch strip above it):
+    KEY fields: what the strip segment shows; "short" / "long" run on pushing the
+    dial and on tapping / holding its segment, plus
+    {
+      "rotate": "adjust",               # none | adjust | actions
+      "step": null,                     # adjust: change per detent, null = the entity's default
+      "left": ACTION,                   # rotate == "actions": per detent to the left / right
+      "right": ACTION
+    }
+    "adjust" changes the dial's entity directly: brightness, volume, position,
+    target temperature, number value.
+
 ACTION:
     {"type": "none"}
     {"type": "default", "entity_id": "..."}          # toggle / activate, depending on domain
@@ -42,9 +54,8 @@ import copy
 import secrets
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.helpers import config_validation as cv
+import voluptuous as vol
 
 ROOT_PAGE_ID = "main"
 BACK_KEY = 0
@@ -54,6 +65,10 @@ ACTION_DEFAULT = "default"
 ACTION_CALL = "action"
 ACTION_PAGE = "page"
 ACTION_BACK = "back"
+
+ROTATE_NONE = "none"
+ROTATE_ADJUST = "adjust"
+ROTATE_ACTIONS = "actions"
 
 SECOND_LINE_STATE = "state"
 SECOND_LINE_TEXT = "text"
@@ -98,12 +113,25 @@ KEY_SCHEMA = vol.Schema(
     }
 )
 
+DIAL_SCHEMA = KEY_SCHEMA.extend(
+    {
+        vol.Optional("rotate", default=ROTATE_NONE): vol.In([ROTATE_NONE, ROTATE_ADJUST, ROTATE_ACTIONS]),
+        vol.Optional("step", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.001, max=1000))),
+        vol.Optional("left", default=lambda: {"type": ACTION_NONE}): ACTION_SCHEMA,
+        vol.Optional("right", default=lambda: {"type": ACTION_NONE}): ACTION_SCHEMA,
+    }
+)
+
+# Action slots of keys and dials that can link to pages
+ACTION_SLOTS = ("short", "long", "left", "right")
+
 PAGE_SCHEMA = vol.Schema(
     {
         vol.Required("id"): vol.Match(r"^[A-Za-z0-9_-]{1,32}$"),
         vol.Required("name"): vol.All(cv.string, vol.Length(min=1, max=40)),
         vol.Optional("parent", default=None): vol.Any(None, cv.string),
         vol.Optional("keys", default=dict): {vol.Match(r"^\d{1,3}$"): KEY_SCHEMA},
+        vol.Optional("dials", default=dict): {vol.Match(r"^\d$"): DIAL_SCHEMA},
     }
 )
 
@@ -117,11 +145,14 @@ def new_page_id() -> str:
 
 def empty_layout() -> dict[str, Any]:
     """Layout with just the root page."""
-    return {"pages": [{"id": ROOT_PAGE_ID, "name": "Startseite", "parent": None, "keys": {}}]}
+    return {"pages": [{"id": ROOT_PAGE_ID, "name": "Startseite", "parent": None, "keys": {}, "dials": {}}]}
 
 
-def validate_layout(data: Any, key_count: int | None) -> dict[str, Any]:
-    """Validate a full layout. Raises vol.Invalid with a readable message."""
+def validate_layout(data: Any, key_count: int | None, dial_count: int | None = None) -> dict[str, Any]:
+    """Validate a full layout. Raises vol.Invalid with a readable message.
+
+    key_count / dial_count: what the deck has; None accepts any number.
+    """
     layout = LAYOUT_SCHEMA(copy.deepcopy(data))
     ids = [page["id"] for page in layout["pages"]]
     if len(ids) != len(set(ids)):
@@ -133,13 +164,14 @@ def validate_layout(data: Any, key_count: int | None) -> dict[str, Any]:
             page["parent"] = None
         elif page["parent"] not in ids or page["parent"] == page["id"]:
             raise vol.Invalid(f"Page {page['name']}: unknown parent")
-        for index, key in page["keys"].items():
-            if key_count is not None and int(index) >= key_count:
-                raise vol.Invalid(f"Page {page['name']}: key {int(index) + 1} does not exist")
-            for slot in ("short", "long"):
-                action = key[slot]
-                if action["type"] == ACTION_PAGE and action["page"] not in ids:
-                    raise vol.Invalid(f"Page {page['name']}: key {int(index) + 1} links to an unknown page")
+        for kind, controls, count in (("key", page["keys"], key_count), ("dial", page["dials"], dial_count)):
+            for index, control in controls.items():
+                if count is not None and int(index) >= count:
+                    raise vol.Invalid(f"Page {page['name']}: {kind} {int(index) + 1} does not exist")
+                for slot in ACTION_SLOTS:
+                    action = control.get(slot)
+                    if action and action["type"] == ACTION_PAGE and action["page"] not in ids:
+                        raise vol.Invalid(f"Page {page['name']}: {kind} {int(index) + 1} links to an unknown page")
     return layout
 
 
@@ -163,21 +195,26 @@ def migrate_v1(old: dict[str, Any]) -> dict[str, Any]:
 
 
 def remap_layout(
-    layout: dict[str, Any], from_cols: int, to_cols: int, to_rows: int
+    layout: dict[str, Any], from_cols: int, to_cols: int, to_rows: int, to_dials: int | None = None
 ) -> tuple[dict[str, Any], int]:
     """Move keys to another grid size, keeping row and column.
 
-    Returns the new layout and how many keys did not fit.
+    Dials keep their position; with to_dials, those beyond it are dropped.
+    Returns the new layout and how many keys and dials did not fit.
     """
     result = copy.deepcopy(layout)
+    dropped = 0
+    if to_dials is not None:
+        for page in result["pages"]:
+            for index in [i for i in page.get("dials", {}) if int(i) >= to_dials]:
+                del page["dials"][index]
+                dropped += 1
     if from_cols == to_cols:
-        dropped = 0
         for page in result["pages"]:
             for index in [i for i in page["keys"] if int(i) >= to_cols * to_rows]:
                 del page["keys"][index]
                 dropped += 1
         return result, dropped
-    dropped = 0
     for page in result["pages"]:
         moved: dict[str, Any] = {}
         for index, key in page["keys"].items():
@@ -197,28 +234,40 @@ def merge_into_template(
     template_layout: dict[str, Any],
     template_cols: int,
     template_rows: int,
+    deck_dials: int = 0,
+    template_dials: int = 0,
 ) -> dict[str, Any]:
     """Write a smaller (or differently shaped) deck's edit back into its template.
 
-    Only the part of the template the deck can show is replaced; keys
-    outside the deck's grid are kept, so editing on a small deck never
-    deletes keys of a bigger template.
+    Only the part of the template the deck can show is replaced; keys and
+    dials outside the deck's reach are kept, so editing on a small deck never
+    deletes controls of a bigger template.
     """
-    mapped, _ = remap_layout(deck_layout, deck_cols, template_cols, template_rows)
+    mapped, _ = remap_layout(deck_layout, deck_cols, template_cols, template_rows, template_dials)
     old_pages = {page["id"]: page for page in template_layout["pages"]}
     pages = []
     for page in mapped["pages"]:
         keys = {}
+        dials = {}
         if (old := old_pages.get(page["id"])) is not None:
             for index, key in old["keys"].items():
                 row, col = divmod(int(index), template_cols)
                 if row >= deck_rows or col >= deck_cols:
                     keys[index] = copy.deepcopy(key)
+            for index, dial in old.get("dials", {}).items():
+                if int(index) >= deck_dials:
+                    dials[index] = copy.deepcopy(dial)
         keys.update(page["keys"])
-        pages.append({**page, "keys": keys})
+        dials.update(page.get("dials", {}))
+        pages.append({**page, "keys": keys, "dials": dials})
     return {"pages": pages}
 
 
 def default_key() -> dict[str, Any]:
     """A blank key with all defaults filled in."""
     return KEY_SCHEMA({})
+
+
+def default_dial() -> dict[str, Any]:
+    """A blank dial with all defaults filled in."""
+    return DIAL_SCHEMA({})

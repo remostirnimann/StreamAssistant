@@ -20,20 +20,19 @@ from functools import cache
 import json
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
+import voluptuous as vol
 
 from .actions import async_run_action
 from .behavior import BEHAVIOR_SCHEMA
+from .capabilities import CATALOG, DeckCapabilities, find_capabilities
 from .const import DOMAIN
 from .device import StreamAssistantDevice
 from .display import page_key_slot
 from .entity import entry_devices
 from .layout import ACTION_CALL, ACTION_DEFAULT, PAGE_SCHEMA, validate_layout
-from .capabilities import CATALOG, DeckCapabilities, find_capabilities
 from .render import ASSETS
 from .templates import DATA_TEMPLATES, TemplateManager
 from .transport import VirtualTransport
@@ -99,9 +98,8 @@ def _target(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
     if "entry_id" in msg:
         if (device := _device(hass, msg["entry_id"])) is not None:
             return Target(model=device.model, device=device)
-    elif "template_id" in msg:
-        if _templates(hass).get(msg["template_id"]) is not None:
-            return Target(model=_templates(hass).model(msg["template_id"]), template_id=msg["template_id"])
+    elif "template_id" in msg and _templates(hass).get(msg["template_id"]) is not None:
+        return Target(model=_templates(hass).model(msg["template_id"]), template_id=msg["template_id"])
     connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Dock or template not found")
     return None
 
@@ -116,6 +114,9 @@ def _model_info(model: DeckCapabilities | None) -> dict[str, Any] | None:
         "rows": model.rows,
         "key_count": model.key_count,
         "key_size": model.key_size,
+        "dials": model.dials,
+        "touch_width": model.touch_width,
+        "touch_height": model.touch_height,
     }
 
 
@@ -209,7 +210,11 @@ async def ws_save_layout(hass: HomeAssistant, connection: websocket_api.ActiveCo
         connection.send_error(msg["id"], "conflict", "The layout was changed elsewhere")
         return
     try:
-        layout = validate_layout(msg["layout"], target.model.key_count if target.model else None)
+        layout = validate_layout(
+            msg["layout"],
+            target.model.key_count if target.model else None,
+            target.model.dials if target.model else None,
+        )
     except vol.Invalid as err:
         connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
         return
@@ -242,9 +247,8 @@ async def ws_preview(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         return
     renderer = _templates(hass).renderer
     images = await renderer.async_page_preview(target.model, page)
-    connection.send_result(
-        msg["id"], {"images": [base64.b64encode(img).decode("ascii") for img in images]}
-    )
+    dials = await renderer.async_dial_preview(target.model, page)
+    connection.send_result(msg["id"], {"images": [_b64(img) for img in images], "dials": [_b64(img) for img in dials]})
 
 
 @websocket_api.require_admin
@@ -270,23 +274,29 @@ async def ws_show_page(hass: HomeAssistant, connection: websocket_api.ActiveConn
     {
         vol.Required("type"): "stream_assistant/press",
         **TARGET,
-        vol.Required("key"): vol.All(int, vol.Range(min=0)),
+        vol.Exclusive("key", "control"): vol.All(int, vol.Range(min=0)),
+        vol.Exclusive("dial", "control"): vol.All(int, vol.Range(min=0)),
         vol.Optional("long", default=False): bool,
+        # Dials only: turn by one detent instead of pushing
+        vol.Optional("rotate"): vol.In(["left", "right"]),
         # The editor's draft of the page, so unsaved changes can be tested
         vol.Optional("page"): dict,
     }
 )
 @websocket_api.async_response
 async def ws_press(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Simulate a key press.
+    """Simulate a key press, or pushing or turning a dial.
 
-    On a dock: fires the key events and runs the action, like a real press.
-    On a template: there are no key entities, so only the Home Assistant action runs.
+    On a deck: fires the events and runs the action, like the real thing.
+    On a template: there are no entities, so only the Home Assistant action runs.
     """
     if (target := _target(hass, connection, msg)) is None:
         return
-    if target.model is None or msg["key"] >= target.model.key_count:
-        connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, "Key does not exist")
+    is_dial = "dial" in msg
+    index = msg["dial"] if is_dial else msg.get("key")
+    count = (target.model.dials if is_dial else target.model.key_count) if target.model else 0
+    if index is None or index >= count:
+        connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, "Key or dial does not exist")
         return
     page = None
     if "page" in msg:
@@ -295,11 +305,21 @@ async def ws_press(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
         except vol.Invalid as err:
             connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
             return
+    gesture = msg.get("rotate") or ("long" if msg["long"] else "short")
     if target.device:
-        await target.device.async_simulate_press(msg["key"], msg["long"], page)
+        if is_dial:
+            await target.device.async_simulate_dial(index, gesture, page)
+        else:
+            await target.device.async_simulate_press(index, msg["long"], page)
     elif page is not None:
-        key, _ = page_key_slot(page, msg["key"])
-        action = key["long" if msg["long"] else "short"] if key else None
+        if is_dial:
+            control = page["dials"].get(str(index))
+            # Adjusting needs a deck's state handling; a template runs only actions
+            slot = gesture if control and (gesture in ("short", "long") or control["rotate"] == "actions") else None
+        else:
+            control, _ = page_key_slot(page, index)
+            slot = gesture
+        action = control[slot] if control and slot else None
         if action and action["type"] in (ACTION_DEFAULT, ACTION_CALL):
             await async_run_action(hass, action)
     connection.send_result(msg["id"])
@@ -330,7 +350,9 @@ async def ws_icons(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
     }
 )
 @websocket_api.async_response
-async def ws_template_create(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+async def ws_template_create(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
     """Create a template: empty for a model, or from a dock's layout."""
     manager = _templates(hass)
     layout = None
@@ -362,7 +384,9 @@ async def ws_template_create(hass: HomeAssistant, connection: websocket_api.Acti
     }
 )
 @websocket_api.async_response
-async def ws_template_rename(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+async def ws_template_rename(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
     """Rename a template."""
     manager = _templates(hass)
     if manager.get(msg["template_id"]) is None:
@@ -377,7 +401,9 @@ async def ws_template_rename(hass: HomeAssistant, connection: websocket_api.Acti
     {vol.Required("type"): "stream_assistant/template/delete", vol.Required("template_id"): str}
 )
 @websocket_api.async_response
-async def ws_template_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+async def ws_template_delete(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
     """Delete a template; linked decks keep a copy of its layout."""
     manager = _templates(hass)
     if manager.get(msg["template_id"]) is None:
@@ -443,9 +469,7 @@ async def ws_set_behavior(hass: HomeAssistant, connection: websocket_api.ActiveC
 
 
 @websocket_api.require_admin
-@websocket_api.websocket_command(
-    {vol.Required("type"): "stream_assistant/detach", vol.Required("entry_id"): str}
-)
+@websocket_api.websocket_command({vol.Required("type"): "stream_assistant/detach", vol.Required("entry_id"): str})
 @websocket_api.async_response
 async def ws_detach(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Give a dock its own copy of the template layout and stop following it."""

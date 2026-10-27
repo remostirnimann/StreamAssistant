@@ -31,12 +31,15 @@ public sealed class DesktopFixture : IDisposable
     public DesktopFixture()
     {
         ConfigDir = Path.Combine(Path.GetTempPath(), "sab-desktop-" + Guid.NewGuid().ToString("N"));
-        Texts.Current = Texts.German;
-        Bridge = BridgeHost.Build(["--config-dir", ConfigDir, "--mdns", "false", "--name", "Testrechner"]);
+        // SAB_TEST_LANGUAGE=en gives English screenshots for the documentation
+        Texts.Current = English ? Texts.English : Texts.German;
+        Bridge = BridgeHost.Build(["--config-dir", ConfigDir, "--mdns", "false", "--name", English ? "Office PC" : "Testrechner"]);
         Assert.True(BridgeHost.Prepare(Bridge, virtualDecks: true));
         Window = new MainWindow(Bridge.Services) { Width = 760, Height = 900 };
         Window.Show();
     }
+
+    public static bool English => Environment.GetEnvironmentVariable("SAB_TEST_LANGUAGE") == "en";
 
     public string ConfigDir { get; }
 
@@ -58,7 +61,7 @@ public sealed class DesktopFixture : IDisposable
         var frame = Window.CaptureRenderedFrame();
         var dir = Path.Combine(AppContext.BaseDirectory, "screenshots");
         Directory.CreateDirectory(dir);
-        frame?.Save(Path.Combine(dir, name + ".png"));
+        frame?.Save(Path.Combine(dir, name + ".png"), new PngBitmapEncoderOptions());
     }
 
     public void Dispose()
@@ -90,7 +93,7 @@ public sealed class WindowTests
             context.DrawText(formatted, new Point((144 - formatted.Width) / 2, (144 - formatted.Height) / 2));
         }
         using var stream = new MemoryStream();
-        target.Save(stream);
+        target.Save(stream, new PngBitmapEncoderOptions());
         return stream.ToArray();
     }
 
@@ -100,7 +103,7 @@ public sealed class WindowTests
         using var app = new DesktopFixture();
         DesktopFixture.Flush();
 
-        Assert.Contains("noch nicht gekoppelt", app.Window.StatusText);
+        Assert.Contains(Texts.Current.NeverPaired, app.Window.StatusText);
         var pairing = app.Bridge.Services.GetRequiredService<PairingService>();
         Assert.Equal($"{pairing.Code[..3]} {pairing.Code[3..]}", app.Window.CodeText);
         Assert.NotNull(app.Find<TextBlock>("noDecks"));
@@ -136,11 +139,11 @@ public sealed class WindowTests
     public async Task Key_images_brightness_and_presses()
     {
         using var app = new DesktopFixture();
-        var deck = app.Decks.Add("Küche", 5, 3);
+        var deck = app.Decks.Add(DesktopFixture.English ? "Kitchen" : "Küche", 5, 3);
         DesktopFixture.Flush();
         var view = Assert.Single(app.Window.DeckViews);
 
-        string[] labels = ["Licht", "Rollo", "Szene", "Musik", "Heizung"];
+        string[] labels = DesktopFixture.English ? ["Light", "Blinds", "Scene", "Music", "Heating"] : ["Licht", "Rollo", "Szene", "Musik", "Heizung"];
         string[] colors = ["#f2b134", "#2b2b2b", "#2f6fb0", "#1e4d3a", "#8a3b2b"];
         for (var key = 0; key < 15; key++)
         {
@@ -211,5 +214,68 @@ public sealed class WindowTests
             Assert.NotNull(again.Services.GetRequiredService<DeviceManager>().Get(id));
             ((IDisposable)again).Dispose();
         }
+    }
+
+    [AvaloniaFact]
+    public async Task Dials_and_touch_strip()
+    {
+        using var app = new DesktopFixture();
+        var deck = app.Decks.Add("Plus", 4, 2, dials: 4);
+        DesktopFixture.Flush();
+        var view = Assert.Single(app.Window.DeckViews);
+        Assert.Equal(800, deck.Info.Capabilities.Touch!.Width);
+
+        string[] labels = DesktopFixture.English ? ["Light", "Volume", "Blinds", "Heating"] : ["Licht", "Lautst.", "Rollo", "Heizung"];
+        for (var key = 0; key < 8; key++)
+        {
+            await deck.SetKeyImageAsync(key, "jpeg", KeyImage(labels[key % 4], "#2b2b2b"), CancellationToken.None);
+        }
+        for (var dial = 0; dial < 4; dial++)
+        {
+            await deck.SetTouchImageAsync(dial * 200, 0, 200, 100, "jpeg", KeyImage(labels[dial], "#1e4d3a"), CancellationToken.None);
+        }
+        await deck.SetTouchImageAsync(0, 0, 200, 100, "jpeg", new byte[] { 1, 2, 3 }, CancellationToken.None); // broken: left empty
+        DesktopFixture.Flush();
+        Assert.Equal(3, view.TouchImageCount);
+        app.Screenshot("05-dials");
+
+        var inputs = new List<DeviceInput>();
+        deck.Input += (_, input) => inputs.Add(input);
+        app.Find<Button>("right1").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        app.Find<Button>("left2").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+        Point Center(Control control) =>
+            control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), app.Window)!.Value;
+        var knob = Center(app.Find<Avalonia.Controls.Shapes.Ellipse>("knob0"));
+        app.Window.MouseDown(knob, MouseButton.Left);
+        DesktopFixture.Flush();
+        app.Window.MouseUp(knob, MouseButton.Left);
+        DesktopFixture.Flush();
+        app.Window.MouseWheel(knob, new Vector(0, -1));
+        DesktopFixture.Flush();
+
+        var strip = app.Find<Canvas>("strip");
+        var left = strip.TranslatePoint(new Point(250, 50), app.Window)!.Value;
+        var right = strip.TranslatePoint(new Point(750, 50), app.Window)!.Value;
+        app.Window.MouseDown(left, MouseButton.Left);
+        DesktopFixture.Flush();
+        app.Window.MouseUp(left, MouseButton.Left);
+        DesktopFixture.Flush();
+        app.Window.MouseDown(left, MouseButton.Left);
+        app.Window.MouseMove(right);
+        app.Window.MouseUp(right, MouseButton.Left);
+        DesktopFixture.Flush();
+
+        Assert.Equal(new DialInput(1, 1), inputs[0]);
+        Assert.Equal(new DialInput(2, -1), inputs[1]);
+        Assert.Equal(new DialPressInput(0, true), inputs[2]);
+        Assert.Equal(new DialPressInput(0, false), inputs[3]);
+        Assert.Equal(new DialInput(0, 1), inputs[4]);
+        var tap = Assert.IsType<TouchInput>(inputs[5]);
+        Assert.Equal(TouchInput.Tap, tap.Kind);
+        Assert.InRange(tap.X, 240, 260);
+        var swipe = Assert.IsType<TouchInput>(inputs[6]);
+        Assert.Equal(TouchInput.Swipe, swipe.Kind);
+        Assert.InRange(swipe.X2!.Value, 740, 760);
     }
 }

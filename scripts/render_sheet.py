@@ -16,7 +16,6 @@ _pkg.__path__ = [str(_PKG_DIR)]
 sys.modules["sa"] = _pkg
 
 from PIL import Image  # noqa: E402
-
 from sa.render import KeyVisual, render_preview  # noqa: E402
 
 SAMPLES = [
