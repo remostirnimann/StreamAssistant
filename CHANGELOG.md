@@ -76,6 +76,10 @@ the same version. Versions before 0.8.0b1 were not released.
 - Up to 16 columns everywhere: the virtual panel form still said 1–12, the template dialog
   allowed 12 columns and no dials, and virtual decks in the bridge window allowed 12 columns.
 - Key editor: the title of a dial's form no longer breaks over two lines.
+- Pairing with a bridge on another port than 5390: the dialog pointed to `localhost:5390`
+  instead of the bridge's port.
+- The dashboard card's name in the card picker follows Home Assistant's language, not the
+  browser's.
 - A key that switches the page no longer runs the key at its place on the new page when it
   is released.
 - The pairing connection to a bridge left a heartbeat timer running.

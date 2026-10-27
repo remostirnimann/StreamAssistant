@@ -19,7 +19,7 @@ Stream Assistant is not in the HACS default list yet; add it as a custom reposit
 2. Open the menu (⋮, top right) and choose **Custom repositories**.
 3. Repository: `https://github.com/remostirnimann/StreamAssistant`, type: **Integration**. Add it.
 
-   <!-- TODO image: images/ha-hacs-custom-repository.png – HACS custom repositories dialog, filled in (list: docs/images/README.md) -->
+   ![Adding the repository in HACS](images/ha-hacs-custom-repository.png)
 
 4. Search for **Stream Assistant** in HACS, open it and choose **Download**.
    As long as only beta versions exist, turn on *Show beta versions* in the

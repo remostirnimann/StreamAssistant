@@ -33,7 +33,7 @@
       },
       "pair": {
         "title": "Mit {name} koppeln",
-        "description": "Gib den 6-stelligen Kopplungscode ein, den die Bridge unter {host} anzeigt (Fenster, Log oder http://localhost:5390 auf jenem Computer).",
+        "description": "Gib den 6-stelligen Kopplungscode ein, den die Bridge unter {host} anzeigt (Fenster, Log oder http://localhost:{port} auf jenem Computer).",
         "data": {
           "code": "Kopplungscode"
         }

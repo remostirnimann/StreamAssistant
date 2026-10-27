@@ -2,7 +2,7 @@
 
 The key editor is in the Home Assistant sidebar: **Stream Assistant** (administrators only).
 
-<!-- TODO image: images/ha-sidebar.png – the sidebar with the Stream Assistant entry (list: docs/images/README.md) -->
+![The Stream Assistant entry in the sidebar](images/ha-sidebar.png)
 
 At the top you choose a **device** (a deck or virtual panel) or a **template**. Two views:
 

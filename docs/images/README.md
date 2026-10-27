@@ -30,6 +30,13 @@ Home Assistant or with real hardware.
 | `sim-neo.png` | Simulated Stream Deck Neo with page buttons and screen | [devices](../devices.md) | headless browser |
 | `sim-studio.png` | Simulated Stream Deck Studio with LED rings and NFC field | [devices](../devices.md) | headless browser |
 | `sim-pedal.png` | Simulated Stream Deck Pedal | [devices](../devices.md) | headless browser |
+| `ha-hacs-custom-repository.png` | HACS → ⋮ → Custom repositories, with the repository URL and type *Integration* filled in | [installation](../installation.md#install-with-hacs-recommended) | test Home Assistant |
+| `ha-add-menu.png` | *Add integration → Stream Assistant*: the menu with Dock / Bridge / Virtual panel / Only plan | [setup](../setup.md) | test Home Assistant |
+| `ha-discovered.png` | *Devices & services* with "Discovered: Stream Deck Network Dock" and/or "Stream Assistant Bridge" | [setup](../setup.md#network-dock) | test Home Assistant |
+| `ha-bridge-pairing.png` | The pairing step asking for the 6-digit code | [setup](../setup.md#stream-assistant-bridge) | test Home Assistant |
+| `ha-virtual-panel-form.png` | The virtual panel form (name, columns, rows) | [setup](../setup.md#virtual-panel) | test Home Assistant |
+| `ha-device-page.png` | A deck's device page with its entities (keys, brightness, connection) | [setup](../setup.md#what-you-get-in-home-assistant) | test Home Assistant |
+| `ha-sidebar.png` | The sidebar with the *Stream Assistant* entry | [editor](../editor.md) | test Home Assistant |
 
 ## Still to take
 
@@ -43,14 +50,7 @@ light theme, about 1280 px wide; crop to the dialog.
 
 | File | Shows | For | Notes |
 |---|---|---|---|
-| `ha-hacs-custom-repository.png` | 📷 HACS → ⋮ → Custom repositories, with the repository URL and type *Integration* filled in | [installation](../installation.md#install-with-hacs-recommended) | |
-| `ha-add-menu.png` | 📷 *Add integration → Stream Assistant*: the menu with Dock / Bridge / Virtual panel / Only plan | [setup](../setup.md) | |
-| `ha-discovered.png` | 📷 *Devices & services* with "Discovered: Stream Deck Network Dock" and/or "Stream Assistant Bridge" | [setup](../setup.md#network-dock) | |
-| `ha-bridge-pairing.png` | 📷 The pairing step asking for the 6-digit code | [setup](../setup.md#stream-assistant-bridge) | Next to `bridge-desktop-pairing.png` |
-| `ha-virtual-panel-form.png` | 📷 The virtual panel form (name, columns, rows) | [setup](../setup.md#virtual-panel) | |
-| `ha-device-page.png` | 📷 A deck's device page with its entities (keys, brightness, connection) | [setup](../setup.md#what-you-get-in-home-assistant) | |
-| `ha-card-picker.png` | 📷 Dashboard *Add card* with the *Stream Assistant panel* card and its editor | [virtual panels](../virtual-panels.md#virtual-panels-in-home-assistant) | |
-| `ha-sidebar.png` | 📷 The sidebar with the *Stream Assistant* entry | [editor](../editor.md) | Small crop |
+| `ha-card-picker.png` | 📷 Dashboard *Add card* with the *Stream Assistant panel* card and its editor (after the next update: before 0.9 the card's text followed the browser language) | [virtual panels](../virtual-panels.md#virtual-panels-in-home-assistant) | |
 | `ha-automation-event.png` | 📷 Automation editor: state trigger on a key's event entity | [automations](../automations.md) | Optional |
 | `photo-dock-mk2.jpg` | 📷 Photo: Network Dock with a Stream Deck MK.2 showing a layout | [README](../README.md), [devices](../devices.md) | Daylight, no reflections; about 1600 px wide |
 | `photo-wall-tablet.jpg` | 📷 Photo: a wall tablet showing a virtual panel | [virtual panels](../virtual-panels.md) | Optional |

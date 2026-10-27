@@ -33,7 +33,7 @@
       },
       "pair": {
         "title": "Pair with {name}",
-        "description": "Enter the 6-digit pairing code the bridge at {host} shows (its window, log, or http://localhost:5390 on that computer).",
+        "description": "Enter the 6-digit pairing code the bridge at {host} shows (its window, log, or http://localhost:{port} on that computer).",
         "data": {
           "code": "Pairing code"
         }
