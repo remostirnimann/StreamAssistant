@@ -71,37 +71,105 @@ public sealed class SelfInstaller(BridgeOptions options, IHostApplicationLifetim
             return Task.CompletedTask;
         }
 
+        // A single-file program loads its assemblies from its own file when first used; once that
+        // file is replaced, they cannot be found any more (e.g. System.IO.Pipes for Process.Start)
+        LoadAllAssemblies();
+
         var folder = Path.GetDirectoryName(ProgramPath)!;
-        foreach (var file in Directory.EnumerateFiles(package.Staging!, "*", SearchOption.AllDirectories))
+        var replaced = new List<(string Target, bool HadOld)>();
+        try
         {
-            var target = Path.Combine(folder, Path.GetRelativePath(package.Staging!, file));
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            if (File.Exists(target))
+            foreach (var file in Directory.EnumerateFiles(package.Staging!, "*", SearchOption.AllDirectories))
             {
-                File.Move(target, target + ".old", overwrite: true);
+                var target = Path.Combine(folder, Path.GetRelativePath(package.Staging!, file));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                var hadOld = File.Exists(target);
+                if (hadOld)
+                {
+                    File.Move(target, target + ".old", overwrite: true);
+                }
+                replaced.Add((target, hadOld));
+                File.Move(file, target);
+                if (!OperatingSystem.IsWindows())
+                {
+                    File.SetUnixFileMode(target, File.GetUnixFileMode(target) | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+                }
             }
-            File.Move(file, target);
-            if (!OperatingSystem.IsWindows())
+
+            if (!options.Service)
             {
-                File.SetUnixFileMode(target, File.GetUnixFileMode(target) | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+                // Same arguments, and wait until this process has let go of the settings
+                var start = new ProcessStartInfo(ProgramPath!) { UseShellExecute = false };
+                foreach (var arg in RestartArguments(Environment.GetCommandLineArgs().Skip(1)))
+                {
+                    start.ArgumentList.Add(arg);
+                }
+                Process.Start(start);
             }
         }
-
-        if (!options.Service)
+        catch
         {
-            // Same arguments, and wait until this process has let go of the settings
-            var start = new ProcessStartInfo(ProgramPath!) { UseShellExecute = false };
-            foreach (var arg in RestartArguments(Environment.GetCommandLineArgs().Skip(1)))
+            // Put the old files back: this process keeps running, and a later try starts from them
+            replaced.Reverse();
+            foreach (var (target, hadOld) in replaced)
             {
-                start.ArgumentList.Add(arg);
+                try
+                {
+                    if (hadOld)
+                    {
+                        File.Move(target + ".old", target, overwrite: true);
+                    }
+                    else
+                    {
+                        File.Delete(target);
+                    }
+                }
+                catch (Exception err) when (err is IOException or UnauthorizedAccessException)
+                {
+                    logger.LogWarning("Could not restore {File}: {Message}", target, err.Message);
+                }
             }
-            Process.Start(start);
+            throw;
         }
         logger.LogInformation("Version {Version} is in place, restarting", package.Version);
         // The desktop app keeps its window open after the bridge stops: end the whole process
         lifetime.ApplicationStopped.Register(() => Environment.Exit(0));
         lifetime.StopApplication();
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Loads every assembly the loaded ones reference, and so on, so the process no longer needs
+    /// its own file. (A single-file program lists no trusted platform assemblies to go by.)
+    /// </summary>
+    private void LoadAllAssemblies()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Queue<Assembly>(AppDomain.CurrentDomain.GetAssemblies());
+        while (pending.TryDequeue(out var assembly))
+        {
+            if (!seen.Add(assembly.GetName().Name ?? ""))
+            {
+                continue;
+            }
+            foreach (var reference in assembly.GetReferencedAssemblies())
+            {
+                if (seen.Contains(reference.Name ?? ""))
+                {
+                    continue;
+                }
+                try
+                {
+                    pending.Enqueue(Assembly.Load(reference));
+                }
+                catch (Exception err) when (err is FileNotFoundException or FileLoadException or BadImageFormatException)
+                {
+                    // Not part of this program (an optional dependency); the restart does not need it
+                    seen.Add(reference.Name ?? "");
+                }
+            }
+        }
+        logger.LogInformation("Loaded {Count} assemblies before replacing the program", seen.Count);
     }
 
     /// <summary>The arguments for the new process: the old ones, waiting for the settings lock.</summary>
