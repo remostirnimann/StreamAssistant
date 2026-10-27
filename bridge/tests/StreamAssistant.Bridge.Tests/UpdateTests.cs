@@ -305,6 +305,8 @@ public sealed class UpdateTests
         Assert.True((bool)(await again.ReceiveAsync())["ok"]!);
         Assert.Equal("downloading", (string?)(await again.ReceiveAsync())["state"]);
         Assert.Equal("installing", (string?)(await again.ReceiveAsync())["state"]);
+        // "installing" is sent just before the installer runs
+        await bridge.Services.GetRequiredService<UpdateService>().Current;
         Assert.Equal("0.9.0", installer.Installed!.Version);
 
         await again.SendAsync(new JsonObject { ["type"] = "update", ["id"] = 6 });
