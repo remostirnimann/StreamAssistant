@@ -6,7 +6,8 @@
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
-     xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
+     xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="Stream Assistant Bridge"
            Manufacturer="Stream Assistant"
            Version="$(ProductVersion)"
@@ -16,6 +17,10 @@
     <MajorUpgrade AllowSameVersionUpgrades="yes"
                   DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
     <MediaTemplate EmbedCab="yes" />
+
+    <!-- One page: terms of use and licence, to accept before installing (silent updates skip it) -->
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
 
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/remostirnimann/StreamAssistant" />
     <Property Id="ARPHELPLINK" Value="https://github.com/remostirnimann/StreamAssistant/blob/main/docs/bridge.md" />
