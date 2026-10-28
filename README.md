@@ -88,5 +88,6 @@ Protocol knowledge based on [node-elgato-stream-deck](https://github.com/Julusia
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Bundled assets: Material Design Icons font (Pictogrammers,
+MIT, see [LICENSE](LICENSE). What the software is meant for, and that it is used at your
+own risk, is described in the [terms of use](docs/terms.md). Bundled assets: Material Design Icons font (Pictogrammers,
 Apache 2.0) and Roboto Medium (Apache 2.0), see `custom_components/stream_assistant/assets/`.

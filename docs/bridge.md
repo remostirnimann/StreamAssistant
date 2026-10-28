@@ -23,6 +23,7 @@ without anyone logged in, and Home Assistant can update it (see [Updates](#updat
 
 Download `stream-assistant-bridge-<version>-win-x64.msi` from the
 [releases page](https://github.com/remostirnimann/StreamAssistant/releases) and run it.
+It first shows the [terms of use](terms.md) and the licence, which you accept to go on.
 It installs the bridge for all users:
 
 - program in `C:\Program Files\Stream Assistant Bridge`, settings and log
@@ -46,7 +47,8 @@ pairing) stay in `C:\ProgramData\Stream Assistant Bridge`.
 curl -fsSL https://raw.githubusercontent.com/remostirnimann/StreamAssistant/main/bridge/install.sh | sudo sh
 ```
 
-On macOS, run it without `sudo`. The script picks the right file for the computer
+On macOS, run it without `sudo`. The script first shows a short summary of the
+[terms of use](terms.md) and asks you to accept them. It then picks the right file for the computer
 (also Alpine and ARM), checks its checksum, and
 
 - **Linux:** installs the program in `/opt/stream-assistant-bridge`, keeps the settings
@@ -64,6 +66,7 @@ Options go after `sh -s --`, for example
 | Option | What it does |
 |---|---|
 | `--version X.Y.Z` | Installs this version instead of the newest one |
+| `--accept-terms` | Accepts the [terms of use](terms.md) without asking (for installs without a terminal, for example with Ansible) |
 | `--uninstall` | Removes the service and the program; the settings (pairing) stay |
 | `--uninstall --purge` | Removes the settings and, on Linux, the user too |
 
@@ -159,6 +162,7 @@ shortcut):
 | `--mdns false` | on | Turns the network announcement off; add the bridge in Home Assistant by address |
 | `--simulate 5x3,plus` | – | Adds [simulated decks](virtual-panels.md#simulated-decks) for testing |
 | `--unpair-all` | – | Forgets all paired Home Assistant instances; they must pair again |
+| `--allow-public true` | off | Also accepts connections from public (internet) addresses. Not intended, at your own risk, see [Terms of use](terms.md) |
 
 The installers also set `--service true` (a service manager restarts the bridge after an
 update) and, on Windows, `--install-kind msi` (updates run the new installer).
@@ -168,6 +172,20 @@ Windows and `~/.config/stream-assistant-bridge` on macOS and Linux (the installe
 folders named under [Install](#install)). It holds the bridge id, the
 paired clients (only hashes of their tokens), the bridge name and the virtual decks. Keep
 it when you update the bridge, otherwise Home Assistant has to pair again and sees a new bridge.
+
+## Local network only
+
+The bridge is meant for the local network ([Terms of use](terms.md)). It accepts
+connections only from:
+
+- this computer (loopback)
+- private networks (`10.x`, `172.16.x`–`172.31.x`, `192.168.x`, IPv6 `fc00::/7`)
+- link-local addresses (`169.254.x`, `fe80::/10`)
+- `100.64.x`–`100.127.x`, which VPNs such as Tailscale use
+
+Other addresses get *403 Forbidden*, and the bridge log names each refused address once.
+Do not forward port 5390 on the router. To reach Home Assistant from outside, use a VPN
+into your network; the bridge then still sees a local address.
 
 ## Stream Decks on USB
 

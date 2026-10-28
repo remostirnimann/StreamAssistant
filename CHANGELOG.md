@@ -5,6 +5,22 @@ All notable changes to Stream Assistant. Format based on
 Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
 the same version. Versions before 0.8.0b1 were not released.
 
+## [Unreleased]
+
+### Added
+
+- Terms of use (`docs/terms.md`, in English and German): the bridge is meant for the local
+  network, other use is at your own risk, and the software comes without warranty or
+  liability. The Windows installer shows them with the licence to accept, `install.sh`
+  asks for them (`--accept-terms` for installs without a terminal), and the status page
+  links them.
+
+### Changed
+
+- The bridge only accepts connections from the local network: loopback, private and
+  link-local addresses and `100.64.0.0/10` (VPNs such as Tailscale). Others get
+  *403 Forbidden*. `--allow-public true` lifts this, at your own risk.
+
 ## [0.9.0b2] - 2026-10-28
 
 ### Fixed

@@ -8,6 +8,7 @@
 #   --version X.Y.Z   install this release instead of the newest one
 #   --uninstall       remove the service and the program; the settings (pairing) stay
 #   --purge           with --uninstall: remove the settings too
+#   --accept-terms    accept the terms of use without being asked (docs/terms.md)
 #
 # Linux: program in /opt/stream-assistant-bridge, settings in /var/lib/stream-assistant-bridge,
 # runs as the user stream-assistant, which may use the Stream Decks (udev rule).
@@ -21,6 +22,8 @@ NAME="stream-assistant-bridge"
 VERSION=""
 ACTION="install"
 PURGE=0
+ACCEPT=0
+TERMS="https://github.com/remostirnimann/StreamAssistant/blob/main/docs/terms.md"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -28,7 +31,8 @@ while [ $# -gt 0 ]; do
         --version=*) VERSION="${1#*=}"; shift ;;
         --uninstall) ACTION="uninstall"; shift ;;
         --purge) PURGE=1; shift ;;
-        -h|--help) sed -n '2,17p' "$0" 2>/dev/null || true; exit 0 ;;
+        --accept-terms) ACCEPT=1; shift ;;
+        -h|--help) sed -n '2,18p' "$0" 2>/dev/null || true; exit 0 ;;
         *) echo "Unknown option: $1" >&2; exit 2 ;;
     esac
 done
@@ -84,6 +88,26 @@ uninstall() {
 if [ "$ACTION" = uninstall ]; then
     uninstall
     exit 0
+fi
+
+# Terms of use: asked on the terminal, also when the script itself comes through a pipe
+if [ "$ACCEPT" -eq 0 ]; then
+    cat <<EOF
+Stream Assistant Bridge is free software under the MIT License. It is provided as is,
+without warranty, and its authors are not liable for damage from using it. It is meant
+for the local network: using it from outside (port forwarding, internet) is not intended
+and at your own risk. Terms of use: $TERMS
+EOF
+    if { true </dev/tty; } 2>/dev/null; then
+        printf "Accept the terms of use? [y/N] "
+        read -r answer </dev/tty || answer=""
+    else
+        fail "cannot ask for the terms of use without a terminal; add --accept-terms"
+    fi
+    case "$answer" in
+        y|Y|yes|Yes|j|J|ja|Ja) ;;
+        *) fail "terms of use not accepted, nothing installed" ;;
+    esac
 fi
 
 # What to download

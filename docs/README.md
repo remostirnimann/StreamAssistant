@@ -20,6 +20,7 @@ Deck app, no Companion and no extra plugins are needed.
 | [Key editor](editor.md) | Pages and folders, keys, dials and touch strips, page buttons, templates, info and behaviour |
 | [Automations](automations.md) | Entities, events, actions, NFC tags, examples |
 | [Troubleshooting](troubleshooting.md) | Common problems and how to solve them |
+| [Terms of use](terms.md) | Intended use (local network), your responsibility, no warranty or liability (also in German) |
 
 For developers: [the bridge protocol](bridge-protocol.md) and the
 [bridge source](../bridge/README.md).
