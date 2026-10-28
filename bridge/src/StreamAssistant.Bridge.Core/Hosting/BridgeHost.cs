@@ -72,6 +72,9 @@ public static class BridgeHost
 
         var app = builder.Build();
 
+        // Before everything else: the bridge is meant for the local network
+        app.UseLocalNetworkOnly();
+
         app.UseWebSockets(new WebSocketOptions
         {
             KeepAliveInterval = TimeSpan.FromSeconds(10),

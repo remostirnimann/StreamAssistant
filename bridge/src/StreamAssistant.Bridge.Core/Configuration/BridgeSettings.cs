@@ -55,7 +55,8 @@ public sealed record BridgeOptions(
     string UpdateUrl = BridgeOptions.DefaultUpdateUrl,
     InstallKind Install = InstallKind.Archive,
     bool Service = false,
-    int WaitForLock = 0)
+    int WaitForLock = 0,
+    bool AllowPublic = false)
 {
     public const int DefaultPort = 5390;
 
@@ -65,6 +66,7 @@ public sealed record BridgeOptions(
     // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,4x2:4,plus,neo --mdns false --usb false
     // Set by installers: --service true (a service manager restarts the bridge), --install-kind msi;
     // after a self-update: --wait-for-lock 30; for tests: --update-url <base url>
+    // --allow-public true: also accept connections from public addresses (not intended, see docs/terms.md)
     public static BridgeOptions From(IConfiguration config)
     {
         var simulate = (config["simulate"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -87,7 +89,8 @@ public sealed record BridgeOptions(
             config["update-url"]?.TrimEnd('/') ?? DefaultUpdateUrl,
             string.Equals(config["install-kind"], "msi", StringComparison.OrdinalIgnoreCase) ? InstallKind.Msi : InstallKind.Archive,
             config.GetValue("service", false),
-            Math.Clamp(config.GetValue("wait-for-lock", 0), 0, 300));
+            Math.Clamp(config.GetValue("wait-for-lock", 0), 0, 300),
+            config.GetValue("allow-public", false));
     }
 }
 
