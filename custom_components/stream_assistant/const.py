@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.const import Platform
 
 DOMAIN = "stream_assistant"
-VERSION = "0.9.0b2"
+VERSION = "0.9.0b3"
 PANEL_URL = "stream-assistant"
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.NUMBER, Platform.UPDATE]
