@@ -5,6 +5,17 @@ All notable changes to Stream Assistant. Format based on
 Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
 the same version. Versions before 0.8.0b1 were not released.
 
+## [0.9.0] - 2026-10-29
+
+The first release that is not a beta: everything from 0.8.0b1 to 0.9.0b4 below. HACS
+now offers it without *Show beta versions*. Elgato decks on USB are still untested on real
+hardware (see [devices](https://github.com/remostirnimann/StreamAssistant/blob/main/docs/devices.md)).
+
+### Changed
+
+- Installation guide: HACS offers releases without beta versions turned on; how to get
+  betas, and not to install a commit id HACS may offer instead of a version.
+
 ## [0.9.0b4] - 2026-10-29
 
 ### Added
