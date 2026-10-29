@@ -28,6 +28,8 @@ Home Assistant or with real hardware.
 | `sim-mk2.png` | Simulated Stream Deck MK.2 | [devices](../devices.md) | headless browser |
 | `sim-plus.png` | Simulated Stream Deck + with touch strip and dials | [devices](../devices.md) | headless browser |
 | `sim-neo.png` | Simulated Stream Deck Neo with page buttons and screen | [devices](../devices.md) | headless browser |
+| `icon.svg`, `dark_icon.svg` | The icon (deck with a house key and a dial) for light and dark surfaces; as PNGs in `custom_components/stream_assistant/brand/` for Home Assistant and HACS | [README](../README.md) | `scripts/make_brand.py` |
+| `bridge_icon.svg` | The bridge's icon (the keys with a badge of two arrows); as `bridge/assets/bridge.ico` and `bridge.png` for the programs, the windows and the installer | - | `scripts/make_brand.py` |
 | `sim-studio.png` | Simulated Stream Deck Studio with LED rings and NFC field | [devices](../devices.md) | headless browser |
 | `sim-pedal.png` | Simulated Stream Deck Pedal | [devices](../devices.md) | headless browser |
 | `ha-hacs-custom-repository.png` | HACS → ⋮ → Custom repositories, with the repository URL and type *Integration* filled in | [installation](../installation.md#install-with-hacs-recommended) | test Home Assistant |
@@ -57,10 +59,12 @@ light theme, about 1280 px wide; crop to the dialog.
 | `photo-dock-mk2.jpg` | 📷 Photo: Network Dock with a Stream Deck MK.2 showing a layout | [README](../README.md), [devices](../devices.md) | Daylight, no reflections; about 1600 px wide |
 | `photo-wall-tablet.jpg` | 📷 Photo: a wall tablet showing a virtual panel | [virtual panels](../virtual-panels.md) | Optional |
 | `photo-<model>.jpg` | 📷 Photos of the other models once they are tested | [devices](../devices.md) | When the hardware is available |
-| `logo.png` / `icon.png` | 📷 Logo for the README and icon for HACS / Home Assistant brands (256 × 256 and 512 × 512) | README, brands repository | To decide: design |
 
 ## Making the done images again
 
+- **Icons:** `.venv/Scripts/python.exe scripts/make_brand.py` draws `icon.svg`,
+  `dark_icon.svg` and the brand PNGs (256 and 512 px), and `bridge_icon.svg` with the
+  bridge's ICO and PNG, from the drawings in the script.
 - **Renderer images** (`keys-gallery.png`, `touch-strip.png`, `neo-screen.png`): drawn with
   `custom_components/stream_assistant/render.py`, using the demo layout of `scripts/docs_demo.py`.
 - **Simulator and status page:** start the bridge with

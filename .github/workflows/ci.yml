@@ -125,8 +125,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # The logo in home-assistant/brands comes with the move to the default HACS list
-          ignore: brands
 
   release-check:
     name: Release check

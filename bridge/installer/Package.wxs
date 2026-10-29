@@ -22,6 +22,9 @@
     <ui:WixUI Id="WixUI_Minimal" />
     <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
 
+    <!-- scripts/make_brand.py draws the icon; the programs show it in Apps & features -->
+    <Icon Id="bridge.ico" SourceFile="..\assets\bridge.ico" />
+    <Property Id="ARPPRODUCTICON" Value="bridge.ico" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/remostirnimann/StreamAssistant" />
     <Property Id="ARPHELPLINK" Value="https://github.com/remostirnimann/StreamAssistant/blob/main/docs/bridge.md" />
 
@@ -56,7 +59,7 @@
     <!-- The status page shows the pairing code to this computer only -->
     <StandardDirectory Id="ProgramMenuFolder">
       <Component Id="StatusShortcut">
-        <util:InternetShortcut Id="StatusPage" Name="Stream Assistant Bridge" Target="http://localhost:5390/" />
+        <util:InternetShortcut Id="StatusPage" Name="Stream Assistant Bridge" Target="http://localhost:5390/" IconFile="[#BridgeExe]" IconIndex="0" />
         <RegistryValue Root="HKMU" Key="Software\Stream Assistant\Bridge" Name="StatusShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </StandardDirectory>
