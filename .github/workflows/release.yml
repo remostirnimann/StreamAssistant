@@ -1,6 +1,8 @@
 # Every merge into main is a release: builds the integration zip and the
 # bridge files, tags vX.Y.Z and publishes a GitHub release with the changelog
 # section. Versions with a, b or rc (e.g. 0.8.0b1) become pre-releases.
+# Releases that are not pre-releases also update the add-on repository
+# (remostirnimann/StreamAssistant-addon, written with the deploy key ADDON_DEPLOY_KEY).
 name: Release
 
 on:
@@ -153,3 +155,25 @@ jobs:
             --title "Stream Assistant ${{ needs.prepare.outputs.version }}" \
             --notes-file notes.md \
             "${flags[@]}"
+
+  addon:
+    name: Add-on repository
+    needs: [prepare, release]
+    if: needs.prepare.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: remostirnimann/StreamAssistant-addon
+          ssh-key: ${{ secrets.ADDON_DEPLOY_KEY }}
+          path: addon-repo
+      - name: Update the add-on to this release
+        run: |
+          python3 scripts/addon_sync.py --version "${{ needs.prepare.outputs.version }}" --target addon-repo
+          cd addon-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Stream Assistant Bridge ${{ needs.prepare.outputs.version }}"
+          git push

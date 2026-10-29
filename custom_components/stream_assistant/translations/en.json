@@ -38,6 +38,10 @@
           "code": "Pairing code"
         }
       },
+      "hassio_confirm": {
+        "title": "Stream Assistant Bridge add-on",
+        "description": "Set up the Stream Decks of the add-on {name}? It is paired already, no code is needed."
+      },
       "virtual": {
         "title": "Virtual panel",
         "description": "A Stream Deck that only exists in Home Assistant: keys, pages, templates and automations work like on a real deck, shown by the \"Stream Assistant panel\" dashboard card (wall tablet, phone). Choose any grid size.",

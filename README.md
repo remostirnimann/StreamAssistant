@@ -13,8 +13,9 @@ key, dial and page in a key editor in the sidebar; keys follow their entities li
 A deck can be connected in three ways:
 
 - **Elgato Stream Deck Network Dock:** over the network, no computer needed.
-- **Stream Assistant Bridge:** Stream Decks plugged into a computer (Windows, macOS, Linux);
-  the desktop version also shows **virtual decks** in a window.
+- **Stream Assistant Bridge:** Stream Decks plugged into a computer (Windows, macOS, Linux),
+  or into the Home Assistant host itself with the **add-on**; the desktop version also
+  shows **virtual decks** in a window.
 - **Virtual panel:** a deck that only exists in Home Assistant, shown and pressed on a
   dashboard (wall tablets, phones), with any grid.
 
@@ -70,6 +71,9 @@ A deck can be connected in three ways:
     components, no build step
 - `bridge/`: the Stream Assistant Bridge (.NET 10: core library, console and desktop
   program, tests), see [bridge/README.md](bridge/README.md)
+- `addon/`: the Home Assistant add-on; every release copies it into the add-on repository
+  [StreamAssistant-addon](https://github.com/remostirnimann/StreamAssistant-addon)
+  (`scripts/addon_sync.py`)
 - `docs/`: user documentation and the [bridge protocol](docs/bridge-protocol.md)
 - `scripts/`: tests without hardware, probes for a Home Assistant host
 

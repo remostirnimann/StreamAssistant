@@ -42,6 +42,19 @@ public enum InstallKind
 
     /// <summary>Windows installer (service): the new installer does the update.</summary>
     Msi,
+
+    /// <summary>Home Assistant add-on: the Supervisor updates it, the bridge does not.</summary>
+    Addon,
+}
+
+/// <summary>How the bridge talks to USB HID devices.</summary>
+public enum HidAccess
+{
+    /// <summary>HidSharp: the operating system's HID devices (Windows, macOS, Linux hidraw).</summary>
+    System,
+
+    /// <summary>hidapi over libusb (raw USB, /dev/bus/usb): Home Assistant add-ons get no hidraw devices.</summary>
+    Libusb,
 }
 
 /// <summary>Command line / environment options (read through IConfiguration).</summary>
@@ -56,17 +69,25 @@ public sealed record BridgeOptions(
     InstallKind Install = InstallKind.Archive,
     bool Service = false,
     int WaitForLock = 0,
-    bool AllowPublic = false)
+    bool AllowPublic = false,
+    int IngressPort = 0,
+    HidAccess Hid = HidAccess.System,
+    string SupervisorUrl = BridgeOptions.DefaultSupervisorUrl,
+    string? SupervisorToken = null)
 {
     public const int DefaultPort = 5390;
 
     /// <summary>Release files: {UpdateUrl}/v{version}/{file}.</summary>
     public const string DefaultUpdateUrl = "https://github.com/remostirnimann/StreamAssistant/releases/download";
 
+    public const string DefaultSupervisorUrl = "http://supervisor";
+
     // --port 5390 --config-dir <dir> --name "Office PC" --simulate 5x3,4x2:4,plus,neo --mdns false --usb false
     // Set by installers: --service true (a service manager restarts the bridge), --install-kind msi;
     // after a self-update: --wait-for-lock 30; for tests: --update-url <base url>
     // --allow-public true: also accept connections from public addresses (not intended, see docs/terms.md)
+    // As a Home Assistant add-on: --install-kind addon --ingress-port 8099 --hid libusb; the Supervisor
+    // sets SUPERVISOR_TOKEN (discovery, see SupervisorDiscovery)
     public static BridgeOptions From(IConfiguration config)
     {
         var simulate = (config["simulate"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -87,10 +108,19 @@ public sealed record BridgeOptions(
             config.GetValue("mdns", true),
             config.GetValue("usb", true),
             config["update-url"]?.TrimEnd('/') ?? DefaultUpdateUrl,
-            string.Equals(config["install-kind"], "msi", StringComparison.OrdinalIgnoreCase) ? InstallKind.Msi : InstallKind.Archive,
+            config["install-kind"]?.ToLowerInvariant() switch
+            {
+                "msi" => InstallKind.Msi,
+                "addon" => InstallKind.Addon,
+                _ => InstallKind.Archive,
+            },
             config.GetValue("service", false),
             Math.Clamp(config.GetValue("wait-for-lock", 0), 0, 300),
-            config.GetValue("allow-public", false));
+            config.GetValue("allow-public", false),
+            Math.Clamp(config.GetValue("ingress-port", 0), 0, 65535),
+            string.Equals(config["hid"], "libusb", StringComparison.OrdinalIgnoreCase) ? HidAccess.Libusb : HidAccess.System,
+            config["supervisor-url"]?.TrimEnd('/') ?? DefaultSupervisorUrl,
+            config["SUPERVISOR_TOKEN"] is { Length: > 0 } token ? token : null);
     }
 }
 
@@ -130,6 +160,12 @@ public sealed class BridgeSettings
     public List<PairedClient> Clients { get; set; } = [];
 
     public List<VirtualDeckSettings> VirtualDecks { get; set; } = [];
+
+    /// <summary>
+    /// As an add-on: the token Home Assistant gets through Supervisor discovery, kept so the
+    /// same one is sent after every start (bridge.json lives in the add-on's private /data).
+    /// </summary>
+    public string? DiscoveryToken { get; set; }
 }
 
 [JsonSerializable(typeof(BridgeSettings))]

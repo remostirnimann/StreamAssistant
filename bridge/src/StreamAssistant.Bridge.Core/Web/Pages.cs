@@ -12,7 +12,7 @@ internal static class Pages
         return Results.Content(reader.ReadToEnd(), "text/html; charset=utf-8");
     }
 
-    /// <summary>Request from this computer (loopback).</summary>
+    /// <summary>Request from this computer (loopback), or from Home Assistant's ingress (add-on).</summary>
     public static bool IsLocal(HttpContext context) =>
-        context.Connection.RemoteIpAddress is { } address ? IPAddress.IsLoopback(address) : true; // TestServer has no address
+        context.Connection.RemoteIpAddress is { } address ? IPAddress.IsLoopback(address) || Ingress.IsIngress(context) : true; // TestServer has no address
 }

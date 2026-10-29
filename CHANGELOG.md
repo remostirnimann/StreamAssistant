@@ -5,6 +5,27 @@ All notable changes to Stream Assistant. Format based on
 Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
 the same version. Versions before 0.8.0b1 were not released.
 
+## [Unreleased]
+
+### Added
+
+- Home Assistant add-on with the bridge, for Stream Decks plugged into the Home Assistant
+  host (Home Assistant OS, aarch64 and amd64). It lives in its own repository,
+  [StreamAssistant-addon](https://github.com/remostirnimann/StreamAssistant-addon), which
+  every release that is not a beta updates.
+  - Sets itself up: the add-on tells Home Assistant through the Supervisor where it is,
+    with a token, and the integration only asks for a confirmation (no pairing code). It
+    keeps the entry's address and token current after every start.
+  - Status page and simulator inside Home Assistant (ingress, *Open Web UI* or the sidebar).
+  - Stream Decks over raw USB (hidapi with libusb), following plugging in and out.
+  - Options: name, simulated decks, log level.
+- Bridge options `--install-kind addon`, `--ingress-port` and `--hid libusb`.
+
+### Changed
+
+- The bridge's status page and simulator use relative addresses, so they also work under
+  a path (ingress).
+
 ## [0.9.0] - 2026-10-29
 
 The first release that is not a beta: everything from 0.8.0b1 to 0.9.0b4 below. HACS

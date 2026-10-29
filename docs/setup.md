@@ -47,6 +47,10 @@ You get one device for the dock and one for the Stream Deck.
 
    ![Pairing with a bridge](images/ha-bridge-pairing.png)
 
+With the [Home Assistant add-on](bridge.md#home-assistant-add-on) (decks on the Home
+Assistant host) there is no code: the discovered *Stream Assistant Bridge add-on* only
+needs a confirmation.
+
 You get one device for the bridge and one per deck on it. Decks appear and disappear
 with USB plugging; once seen, a deck keeps its entities and layout while it is unplugged.
 If the bridge forgets the pairing (for example after `--unpair-all`), Home Assistant asks
