@@ -5,6 +5,13 @@ All notable changes to Stream Assistant. Format based on
 Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
 the same version. Versions before 0.8.0b1 were not released.
 
+## [Unreleased]
+
+### Changed
+
+- Installation guide: HACS offers a commit id instead of a version while beta versions are
+  turned off; the guide now says not to install it and how to turn betas on.
+
 ## [0.9.0b4] - 2026-10-29
 
 ### Added
