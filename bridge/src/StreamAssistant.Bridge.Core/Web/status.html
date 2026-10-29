@@ -40,7 +40,7 @@
   <section class="card">
     <strong>Devices</strong>
     <ul id="devices"></ul>
-    <p id="sim" hidden><a href="/sim">Open the simulator</a></p>
+    <p id="sim" hidden><a href="sim">Open the simulator</a></p>
   </section>
   <p class="muted">Meant for the local network; use from outside is not intended and at your own risk.
     <a href="https://github.com/remostirnimann/StreamAssistant/blob/main/docs/terms.md" target="_blank" rel="noopener">Terms of use</a></p>
@@ -49,7 +49,7 @@
   const $ = (id) => document.getElementById(id);
   async function refresh() {
     try {
-      const s = await (await fetch("/api/status")).json();
+      const s = await (await fetch("api/status")).json();
       $("name").textContent = s.bridge.name;
       $("sub").textContent = `Stream Assistant Bridge ${s.bridge.version} · ${s.bridge.platform}`;
       $("pairing").hidden = !s.pairing_code;

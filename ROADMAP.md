@@ -26,8 +26,10 @@
      0.9.0b1/0.9.0b2
    - ~~local network only~~ and terms of use — 0.9.0b3
    - **open: try the MSI on a clean Windows and `install.sh` on macOS**
-   - **open: Home Assistant add-on** with the console bridge (linux-musl, USB passthrough),
-     pairing skipped for the Supervisor network as the protocol allows
+   - ~~Home Assistant add-on~~ with the console bridge: own repository
+     (StreamAssistant-addon, filled by the release workflow), Supervisor discovery with a
+     token instead of a pairing code, status page and simulator through ingress, USB through
+     hidapi/libusb — 0.10.0
    - open: tray icon for the desktop app
 5. **Docs and HACS** — beta published
    - ~~user documentation~~ in `docs/` — 0.9.0b1
@@ -35,7 +37,7 @@
      0.8.0b1; installable in HACS as a custom repository
    - ~~icon~~ in `brand/` of the integration (HA 2026.3 and later; no brands PR needed)
    - **open: missing screenshots and photos** (see `docs/images/README.md`)
-   - **open: the HACS default list**
+   - ~~the HACS default list~~: submitted 2026-10-29 (hacs/default#12924), waiting for review
    - open: first stable 1.0.0 after the hardware test
 
 ## Then

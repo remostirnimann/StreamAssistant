@@ -1,0 +1,39 @@
+# Stream Assistant Bridge as a Home Assistant add-on (app). The version is set by
+# scripts/addon_sync.py when the add-on repository is updated for a release.
+name: Stream Assistant Bridge
+version: "dev"
+slug: stream_assistant_bridge
+description: Stream Decks on this Home Assistant host, for the Stream Assistant integration
+url: https://github.com/remostirnimann/StreamAssistant/blob/main/docs/bridge.md
+arch:
+  - aarch64
+  - amd64
+# The base image's S6 overlay is process 1
+init: false
+startup: application
+boot: auto
+homeassistant: "2026.3.0"
+# Tells the integration where the bridge is, with a token: no pairing code
+discovery:
+  - stream_assistant
+# Status page and simulator inside Home Assistant
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:dots-grid
+panel_title: Stream Decks
+# Raw USB (follows plugging); the bridge talks to the decks through hidapi over libusb
+usb: true
+# Home Assistant on this host reaches the bridge on the add-on network. Another Home
+# Assistant can use it once this port is opened.
+ports:
+  5390/tcp: null
+# Restart the add-on when the bridge stops answering (ingress port, not mapped to the host)
+watchdog: tcp://[HOST]:[PORT:8099]
+options:
+  name: Home Assistant host
+  simulate: ""
+  log_level: info
+schema:
+  name: str
+  simulate: str?
+  log_level: list(info|debug|warning)

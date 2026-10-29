@@ -8,6 +8,7 @@ Stream Assistant drives Elgato Stream Decks directly from Home Assistant, with a
 
 - `custom_components/stream_assistant/`: the HA custom integration (Python, domain `stream_assistant`), shipped through HACS first and possibly HA core later.
 - `bridge/`: the Stream Assistant Bridge (C#, .NET 10). It offers decks on a computer to HA over the vendor-neutral protocol in `docs/bridge-protocol.md`. The user chose .NET because Python is often missing on Windows, so do not write bridge code in Python.
+- `addon/`: the HA add-on with the console bridge. The release workflow copies it into the separate repository `remostirnimann/StreamAssistant-addon` for every non-beta release (`scripts/addon_sync.py`, deploy key secret `ADDON_DEPLOY_KEY`). The Supervisor builds the image from the Dockerfile, which downloads the musl bridge of that release.
 
 `ROADMAP.md` holds the agreed order of work. `CHANGELOG.md` (Keep a Changelog, in English) gets entries with every committed change, under `[Unreleased]` or under the new version.
 
@@ -62,6 +63,7 @@ cd custom_components && tar --exclude=__pycache__ -cf - stream_assistant | ssh -
 - `scripts/sim_probe.py` presses the keys of simulated bridge decks from the command line.
 - HA cannot reach the developer PC (different subnet), so a test bridge runs on the HA host as the `linux-musl-arm64` build.
 - Stop the test bridge with `kill $(pidof stream-assistant-bridge)`. Never use `pkill -f`, which also kills the SSH session.
+- Test the add-on as a local add-on: publish `linux-musl-arm64`, run `scripts/addon_sync.py --version 0.10.0-devN --target <dir> --bridge <publish dir>` (raise N for every build), copy `<dir>/stream_assistant_bridge` to `/addons/` on the host, then `ha store reload` and `ha apps install|rebuild|start local_stream_assistant_bridge`. Set options with `POST http://supervisor/addons/local_stream_assistant_bridge/options`.
 
 ## Branches, CI and releases
 
@@ -139,7 +141,8 @@ Inside Core:
   - `PairingService` stores token hashes in `bridge.json` and locks pairing after 5 wrong codes.
 - **Settings:** `SettingsStore` writes `bridge.json` atomically and holds `bridge.lock`, so one instance per config folder.
 - **Discovery:** `MdnsAdvertiser` is a minimal mDNS responder. It skips virtual adapters and answers with the address in the asker's subnet.
-- **Local pages:** `/` (status; the pairing code appears only for loopback) and `/sim` (simulator, loopback only).
+- **Local pages:** `/` (status; the pairing code appears only for loopback) and `/sim` (simulator, loopback only). Pages use relative URLs so they work under ingress.
+- **Add-on mode** (`--install-kind addon`): no self-update; `SupervisorDiscovery` posts host, port, bridge id and a stable token (`PairingService.DiscoveryToken`, kept in `bridge.json`) to the Supervisor, and the integration's `async_step_hassio` creates or updates the entry without a code. `--ingress-port` adds a second listener that only `172.30.32.2` may use; its requests count as local. `--hid libusb` uses `HidApiBackend` (hidapi over libusb), because add-ons get `/dev/bus/usb` but no hidraw.
 
 Integration side of the protocol: `protocol/bridge.py` holds `BridgeClient`, `fetch_info` and `pair` (aiohttp, HA-independent), and `bridge_hub.py` maps the client onto devices.
 
