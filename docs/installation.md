@@ -21,15 +21,14 @@ Stream Assistant is not in the HACS default list yet; add it as a custom reposit
 
    ![Adding the repository in HACS](images/ha-hacs-custom-repository.png)
 
-4. Search for **Stream Assistant** in HACS, open it and choose **Download**. In the
-   download dialog, turn on **Show beta versions** and pick the newest version
-   (for example `v0.9.0b4`).
+4. Search for **Stream Assistant** in HACS, open it and choose **Download**. HACS
+   offers the newest release (for example `v0.9.0`).
 
-   As long as there are only beta versions, HACS offers a commit id such as `51bd232`
-   instead when betas are off. Do not install that: it is the state of the development
-   branch, not a release. Turn betas on instead (open Stream Assistant in HACS, menu ⋮
-   → **Redownload**, **Show beta versions**). HACS keeps this setting, so later betas
-   show up as updates on their own.
+   To try beta versions as well (for example `v0.10.0b1`), turn on **Show beta
+   versions** in the download dialog, or later in HACS with menu ⋮ → **Redownload**.
+   HACS keeps this setting, so later betas show up as updates on their own. If HACS
+   ever offers a commit id such as `51bd232` instead of a version, do not install it:
+   that is the state of the development branch, not a release.
 5. **Restart Home Assistant** (*Settings → System → Restart*).
 
 Then continue with the [Setup](setup.md).
