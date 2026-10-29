@@ -5,6 +5,15 @@ All notable changes to Stream Assistant. Format based on
 Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
 the same version. Versions before 0.8.0b1 were not released.
 
+## [Unreleased]
+
+### Added
+
+- An icon: a deck with a house key and a dial. Home Assistant shows it for the
+  integration (from 2026.3 on, in `brand/`, light and dark), and so does HACS.
+- An icon for the bridge: the same keys with a badge of two arrows. The programs, their
+  windows, the start menu entry and *Apps & features* show it.
+
 ## [0.9.0b3] - 2026-10-29
 
 ### Added

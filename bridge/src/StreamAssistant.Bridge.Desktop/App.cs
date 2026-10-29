@@ -14,6 +14,9 @@ public sealed class App : Application
 
     public static string? StartupError { get; set; }
 
+    /// <summary>The bridge's icon for the windows (scripts/make_brand.py draws it).</summary>
+    public static WindowIcon Icon => new(typeof(App).Assembly.GetManifestResourceStream("bridge.png")!);
+
     public override void Initialize()
     {
         Styles.Add(new FluentTheme());
@@ -32,6 +35,7 @@ public sealed class App : Application
     private static Window ErrorWindow(string message) => new()
     {
         Title = "Stream Assistant Bridge",
+        Icon = Icon,
         Width = 420,
         Height = 160,
         WindowStartupLocation = WindowStartupLocation.CenterScreen,

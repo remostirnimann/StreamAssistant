@@ -1,6 +1,6 @@
 # Stream Assistant
 
-<!-- TODO image: docs/images/logo.png – logo (list: docs/images/README.md) -->
+<img src="docs/images/icon.svg" alt="" width="96" align="right">
 
 Home Assistant integration that drives **Elgato Stream Decks** directly, with all
 configuration in Home Assistant: no Stream Deck app, no Companion, no plugins. Design every
