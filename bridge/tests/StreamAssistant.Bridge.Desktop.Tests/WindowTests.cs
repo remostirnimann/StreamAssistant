@@ -107,6 +107,7 @@ public sealed class WindowTests
         var pairing = app.Bridge.Services.GetRequiredService<PairingService>();
         Assert.Equal($"{pairing.Code[..3]} {pairing.Code[3..]}", app.Window.CodeText);
         Assert.NotNull(app.Find<TextBlock>("noDecks"));
+        Assert.NotNull(app.Window.Icon);
         app.Screenshot("01-empty");
     }
 

@@ -37,6 +37,7 @@ public sealed class MainWindow : Window
         _options = services.GetRequiredService<BridgeOptions>();
 
         Title = "Stream Assistant Bridge";
+        Icon = App.Icon;
         Width = 760;
         Height = 640;
         MinWidth = 420;

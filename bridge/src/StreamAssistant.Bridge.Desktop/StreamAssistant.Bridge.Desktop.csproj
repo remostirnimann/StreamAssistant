@@ -8,6 +8,8 @@
     <RootNamespace>StreamAssistant.Bridge.Desktop</RootNamespace>
     <AssemblyName>stream-assistant-bridge-desktop</AssemblyName>
     <Version>0.1.0</Version>
+    <!-- scripts/make_brand.py draws the icons -->
+    <ApplicationIcon>..\..\assets\bridge.ico</ApplicationIcon>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
@@ -16,6 +18,10 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\bridge.png" LogicalName="bridge.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

@@ -8,6 +8,8 @@
     <AssemblyName>stream-assistant-bridge</AssemblyName>
     <Version>0.1.0</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- scripts/make_brand.py draws the icon -->
+    <ApplicationIcon>..\..\assets\bridge.ico</ApplicationIcon>
     <!-- dotnet publish -c Release -r <rid> gives one self-contained file -->
   </PropertyGroup>
 
