@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Callable
+from dataclasses import replace
+import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -10,6 +13,8 @@ from homeassistant.core import HomeAssistant
 from .capabilities import DeckCapabilities
 from .display import page_dial_visual, page_key_visual
 from .render import KeyVisual, render_key, render_preview, render_segment
+
+_LOGGER = logging.getLogger(__name__)
 
 CACHE_SIZE = 256
 # Editor previews of keys without a display (pedals)
@@ -24,6 +29,18 @@ class RenderCache:
         self.hass = hass
         self._cache: OrderedDict[tuple[str, int, int | bool, KeyVisual], bytes] = OrderedDict()
 
+    def _render(self, render: Callable[..., bytes], *args: Any) -> bytes:
+        """Call a renderer, the last argument being the visual; blocking, run in the executor.
+
+        Layouts can hold any path (older versions, hand-made ones), and what is drawn here reaches
+        every user of a virtual panel, so only images in the allowed folders are opened.
+        """
+        *rest, visual = args
+        if visual.image and not self.hass.config.is_allowed_path(visual.image):
+            _LOGGER.warning("Not drawing %s: the folder is not in allowlist_external_dirs", visual.image)
+            visual = replace(visual, image=None)
+        return render(*rest, visual)
+
     async def async_render(self, model: DeckCapabilities, visual: KeyVisual, *, upright: bool) -> bytes:
         """JPEG of a key: upright for the editor, else as the deck expects it."""
         # Free grids share ids across key sizes (virtual panel 144 px, bridge deck 72 px)
@@ -32,9 +49,11 @@ class RenderCache:
             self._cache.move_to_end(cache_key)
             return jpeg
         if upright:
-            jpeg = await self.hass.async_add_executor_job(render_preview, model.key_size or PREVIEW_KEY_SIZE, visual)
+            jpeg = await self.hass.async_add_executor_job(
+                self._render, render_preview, model.key_size or PREVIEW_KEY_SIZE, visual
+            )
         else:
-            jpeg = await self.hass.async_add_executor_job(render_key, model, visual)
+            jpeg = await self.hass.async_add_executor_job(self._render, render_key, model, visual)
         self._cache[cache_key] = jpeg
         if len(self._cache) > CACHE_SIZE:
             self._cache.popitem(last=False)
@@ -50,7 +69,7 @@ class RenderCache:
         if (jpeg := self._cache.get(cache_key)) is not None:
             self._cache.move_to_end(cache_key)
             return jpeg
-        jpeg = await self.hass.async_add_executor_job(render_segment, width, height, visual)
+        jpeg = await self.hass.async_add_executor_job(self._render, render_segment, width, height, visual)
         self._cache[cache_key] = jpeg
         if len(self._cache) > CACHE_SIZE:
             self._cache.popitem(last=False)
