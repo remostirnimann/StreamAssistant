@@ -162,6 +162,14 @@
       }
     }
   },
+  "exceptions": {
+    "image_not_allowed": {
+      "message": "Das Bild {path} liegt nicht in einem Ordner, den Home Assistant erlaubt. Verwende einen Ordner wie /config/www oder ergänze den Ordner in allowlist_external_dirs."
+    },
+    "image_not_found": {
+      "message": "Das Bild {path} existiert nicht oder ist keine Datei."
+    }
+  },
   "services": {
     "set_key": {
       "name": "Taste setzen",
@@ -185,7 +193,7 @@
         },
         "image": {
           "name": "Bild",
-          "description": "Pfad zu einer Bilddatei auf dem Home-Assistant-Host, wird auf die Taste skaliert."
+          "description": "Pfad zu einer Bilddatei auf dem Home-Assistant-Host, wird auf die Taste skaliert. Der Ordner muss erlaubt sein, zum Beispiel /config/www, /media oder ein Ordner in allowlist_external_dirs."
         }
       }
     },

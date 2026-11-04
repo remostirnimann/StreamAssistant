@@ -162,6 +162,14 @@
       }
     }
   },
+  "exceptions": {
+    "image_not_allowed": {
+      "message": "The image {path} is not in a folder Home Assistant allows. Use a folder such as /config/www, or add the folder to allowlist_external_dirs."
+    },
+    "image_not_found": {
+      "message": "The image {path} does not exist or is not a file."
+    }
+  },
   "services": {
     "set_key": {
       "name": "Set key",
@@ -185,7 +193,7 @@
         },
         "image": {
           "name": "Image",
-          "description": "Path to an image file on the Home Assistant host, scaled to fill the key."
+          "description": "Path to an image file on the Home Assistant host, scaled to fill the key. The folder must be allowed, for example /config/www, /media or a folder in allowlist_external_dirs."
         }
       }
     },

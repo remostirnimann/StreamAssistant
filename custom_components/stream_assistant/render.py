@@ -6,11 +6,14 @@ from dataclasses import dataclass
 from functools import cache
 import io
 import json
+import logging
 from pathlib import Path
 
 from PIL import Image, ImageColor, ImageDraw, ImageFont, ImageOps
 
 from .capabilities import DeckCapabilities
+
+_LOGGER = logging.getLogger(__name__)
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -145,9 +148,13 @@ def _draw(size: int, visual: KeyVisual) -> Image.Image:
     if visual.image:
         path = Path(visual.image)
         if path.is_file():
-            with Image.open(path) as source:
-                picture = ImageOps.fit(source.convert("RGBA"), (size, size))
-                image.paste(picture, (0, 0), picture)
+            try:
+                with Image.open(path) as source:
+                    picture = ImageOps.fit(source.convert("RGBA"), (size, size))
+                    image.paste(picture, (0, 0), picture)
+            except (OSError, Image.DecompressionBombError) as err:
+                # The key still shows its text and icon, and the other keys get painted
+                _LOGGER.warning("Could not draw the image %s: %s", path, err)
 
     codepoint = _mdi_codepoints().get(visual.icon) if visual.icon else None
     margin = max(3, size // 18)

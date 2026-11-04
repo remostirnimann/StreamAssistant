@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from homeassistant.components.event import EventDeviceClass, EventEntity
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, entity_platform, entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -18,6 +20,7 @@ from .const import (
     ATTR_TEXT,
     ATTR_TEXT_COLOR,
     DIAL_EVENT_TYPES,
+    DOMAIN,
     KEY_EVENT_TYPES,
     SERVICE_CLEAR_KEY,
     SERVICE_SET_KEY,
@@ -50,12 +53,28 @@ def _color(value: Any) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def _check_image(hass: HomeAssistant, path: str) -> None:
+    """Refuse an image outside the allowed folders; blocking, run in the executor.
+
+    Any user may call the action, so the allowed folders are checked first: the answer must not
+    tell whether a file exists elsewhere.
+    """
+    if not hass.config.is_allowed_path(path):
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="image_not_allowed", translation_placeholders={"path": path}
+        )
+    if not Path(path).is_file():
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="image_not_found", translation_placeholders={"path": path}
+        )
+
+
 SET_KEY_SCHEMA = {
     vol.Optional(ATTR_TEXT, default=""): cv.string,
     vol.Optional(ATTR_BACKGROUND_COLOR, default=DEFAULT_BACKGROUND): _color,
     vol.Optional(ATTR_TEXT_COLOR, default=DEFAULT_TEXT_COLOR): _color,
     vol.Optional(ATTR_FONT_SIZE): vol.All(vol.Coerce(int), vol.Range(min=6, max=96)),
-    vol.Optional(ATTR_IMAGE): cv.isfile,
+    vol.Optional(ATTR_IMAGE): cv.string,
 }
 
 
@@ -143,6 +162,8 @@ class StreamDeckKeyEvent(StreamAssistantEntity, EventEntity):
 
     async def async_set_key(self, **kwargs: Any) -> None:
         """Service: change what this key shows (on the page currently shown)."""
+        if ATTR_IMAGE in kwargs:
+            await self.hass.async_add_executor_job(_check_image, self.hass, kwargs[ATTR_IMAGE])
         await self.device.async_set_key(self.key, kwargs)
 
     async def async_clear_key(self) -> None:

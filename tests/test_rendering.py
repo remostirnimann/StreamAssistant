@@ -70,6 +70,42 @@ def test_render_image_and_unknown_icon(tmp_path) -> None:
     assert not icon_exists("does-not-exist")
 
 
+def test_render_skips_unreadable_images(tmp_path, caplog) -> None:
+    text = tmp_path / "text.png"
+    text.write_text("not an image")
+    whole = io.BytesIO()
+    Image.effect_noise((64, 64), 50).save(whole, "PNG")
+    cut = tmp_path / "cut.png"
+    cut.write_bytes(whole.getvalue()[: len(whole.getvalue()) // 2])
+
+    for path in (text, cut):
+        caplog.clear()
+        out = _image(render_preview(72, KeyVisual(title="Hallo", image=str(path))))
+        assert out.convert("L").getbbox() is not None
+        assert "Could not draw the image" in caplog.text
+
+
+async def test_render_cache_only_opens_allowed_images(hass: HomeAssistant, tmp_path, caplog) -> None:
+    allowed, other = tmp_path / "allowed", tmp_path / "other"
+    allowed.mkdir()
+    other.mkdir()
+    for folder in (allowed, other):
+        Image.new("RGB", (10, 10), (255, 0, 0)).save(folder / "p.png")
+    hass.config.allowlist_external_dirs = {str(allowed)}
+    cache = RenderCache(hass)
+    caps = grid_capabilities(2, 1)
+
+    shown = await cache.async_render(caps, KeyVisual(image=str(allowed / "p.png")), upright=True)
+    assert _image(shown).getpixel((72, 72))[0] > 200
+    for jpeg in (
+        await cache.async_render(caps, KeyVisual(image=str(other / "p.png")), upright=True),
+        await cache.async_render(caps, KeyVisual(image=str(other / "p.png")), upright=False),
+        await cache.async_render_area(144, 100, KeyVisual(image=str(other / "p.png"))),
+    ):
+        assert _image(jpeg).convert("L").getbbox() is None
+    assert "Not drawing" in caplog.text
+
+
 async def test_render_cache(hass: HomeAssistant) -> None:
     cache = RenderCache(hass)
     caps = grid_capabilities(2, 1)
