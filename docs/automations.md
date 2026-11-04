@@ -97,6 +97,12 @@ data:
   image: /config/www/streamdeck/washer.png   # optional, a file on the Home Assistant host
 ```
 
+The image must be in a folder Home Assistant allows: `/config/www`, a media folder such as
+`/media`, or a folder listed in
+[`allowlist_external_dirs`](https://www.home-assistant.io/integrations/homeassistant/#allowlist_external_dirs).
+The action refuses other paths, and an image already stored in a layout is not drawn if its
+folder is not allowed.
+
 The change is stored in the layout like an edit in the editor. **Stream Assistant: Clear key**
 (`stream_assistant.clear_key`) empties the key. For keys that should follow an entity, an
 entity in the editor is simpler and updates by itself.

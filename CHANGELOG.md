@@ -5,6 +5,21 @@ All notable changes to Stream Assistant. Format based on
 Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
 the same version. Versions before 0.8.0b1 were not released.
 
+## [Unreleased]
+
+### Security
+
+- `stream_assistant.set_key` only accepts images in folders Home Assistant allows
+  (`/config/www`, media folders, `allowlist_external_dirs`). Any user could call it with any
+  path on the host, and on a virtual panel the image then reached every user. Images
+  already stored in a layout are only drawn from these folders as well.
+
+### Fixed
+
+- `stream_assistant.set_key` no longer checks the image file on the event loop.
+- A file that is not a valid image no longer stops painting the deck: the key shows its text
+  and icon without the image, and the other keys are painted as usual.
+
 ## [0.9.0] - 2026-10-29
 
 The first release that is not a beta: everything from 0.8.0b1 to 0.9.0b4 below. HACS
