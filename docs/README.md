@@ -18,6 +18,7 @@ Deck app, no Companion and no extra plugins are needed.
 | [Devices and status](devices.md) | Every supported deck and connection, with its status (tested, untested, in development, planned) |
 | [Virtual and simulated panels](virtual-panels.md) | Panels without hardware: virtual panels on a dashboard, virtual decks in the bridge window, simulated decks for testing |
 | [Key editor](editor.md) | Pages and folders, keys, dials and touch strips, page buttons, templates, info and behaviour |
+| [Importing Elgato profiles](elgato-import.md) | Turning profiles of the Elgato Stream Deck app into templates: what is taken over and what is not |
 | [Automations](automations.md) | Entities, events, actions, NFC tags, examples |
 | [Troubleshooting](troubleshooting.md) | Common problems and how to solve them |
 | [Terms of use](terms.md) | Intended use (local network), your responsibility, no warranty or liability (also in German) |

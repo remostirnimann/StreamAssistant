@@ -56,6 +56,11 @@
 - Planning without any dock: "Only plan (no hardware yet)" entry in the config flow — 0.5.0
 - Tests (pytest-homeassistant-custom-component, xUnit), CI with required checks,
   hassfest and HACS validation — 0.9.0b1
+- Import of Elgato Stream Deck app profiles as templates (Home Assistant plugin keys,
+  folders, pages, images of converted keys; report of what was not taken over) — next
+  release. Possible follow-ups: multi actions with several Home Assistant steps (needs
+  action sequences in the layout), top-level pages without a back key, other Home
+  Assistant plugins once their settings are known
 
 ## Later
 

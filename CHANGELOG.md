@@ -5,6 +5,18 @@ All notable changes to Stream Assistant. Format based on
 Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
 the same version. Versions before 0.8.0b1 were not released.
 
+## [Unreleased]
+
+### Added
+
+- Import of Elgato Stream Deck app profiles (`.streamDeckProfile`, and
+  `.streamDeckProfilesBackup` with all profiles) in the key editor. Each chosen profile
+  becomes a template for a model of your choice: keys of the Home Assistant plugin
+  (entity, title, press and long press, dials), folders, page changes and their custom
+  images are taken over; further pages become folders of the root page. Other keys stay
+  empty, and a report lists what was not taken over or was changed. Profiles of the app
+  before 6.0, of 6.x and of 7.x are read. See `docs/elgato-import.md`.
+
 ## [0.9.1] - 2026-11-04
 
 ### Security
