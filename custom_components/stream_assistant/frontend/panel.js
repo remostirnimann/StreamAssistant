@@ -164,6 +164,52 @@ const T = {
     templateNamePlaceholder: "z. B. Wohnzimmer",
     model: "Modell",
     freeGrid: "Freies Raster (virtuelles Panel) …",
+    importElgato: "Elgato-Profil importieren",
+    importHelp: "Wähle ein Profil, das du in der Stream-Deck-App exportiert hast (.streamDeckProfile), oder eine Sicherung aller Profile (.streamDeckProfilesBackup). Pro Profil entsteht eine Vorlage. Übernommen werden Tasten des Home-Assistant-Plugins, Ordner und Seitenwechsel. Alles andere bleibt leer und steht im Bericht.",
+    importFile: "Profil-Datei",
+    importUpload: "Datei lesen",
+    importReading: "Datei wird gelesen …",
+    importProfileInfo: "{pages} Seiten, {folders} Ordner, {ha} von {controls} Tasten mit Home Assistant",
+    importStart: "Importieren",
+    importNone: "Bitte mindestens ein Profil wählen.",
+    importDone: "Import abgeschlossen",
+    importSummary: "Vorlage «{name}»: {pages} Seiten und Ordner, {controls} Tasten, {images} Bilder",
+    importImages: "Bilder gespeichert in {folder}",
+    importSkipped: "Nicht übernommen",
+    importChanged: "Übernommen mit Änderungen",
+    importNothing: "Alles übernommen.",
+    importCopy: "Bericht kopieren",
+    importCopied: "Bericht in die Zwischenablage kopiert.",
+    importOpen: "Vorlage öffnen",
+    importKey: "Taste Sp. {c}, Z. {r}",
+    importDial: "Drehregler {c}",
+    importErrors: {
+      not_zip: "Die Datei ist kein Stream-Deck-Profil (kein ZIP-Archiv).",
+      no_profile: "In der Datei wurde kein Profil gefunden.",
+      too_large: "Die Datei ist zu gross (höchstens 64 MB).",
+      no_file: "Es wurde keine Datei übermittelt.",
+      unauthorized: "Nur Administratoren dürfen Profile importieren.",
+    },
+    importReasons: {
+      unsupported: "Aktion ohne Gegenstück in Stream Assistant",
+      multi_action: "Multi-Action mit mehreren Schritten",
+      profile_switch: "Profilwechsel",
+      outside: "Passt nicht auf das gewählte Modell",
+      no_space: "Kein freies Feld mehr",
+      ha_unreadable: "Einstellungen des Home-Assistant-Plugins nicht lesbar",
+      service_template: "Aktion mit Vorlage ({{ … }}) nicht übernommen",
+      service_invalid: "Ungültige Aktion nicht übernommen",
+      title_template: "Titel mit Vorlage: automatischer Titel verwendet",
+      tap_dropped: "Eigene Aktion beim Antippen nicht übernommen",
+      rotation_adjust: "Drehen stellt die Entität direkt ein",
+      rotation_dropped: "Drehen nicht übernommen",
+      moved: "Auf Taste {detail} verschoben (Taste 1 ist «Zurück»)",
+      link_added: "Taste zur Seite «{detail}» ergänzt",
+      unknown_entity: "Entität fehlt in Home Assistant",
+      invalid_entity: "Ungültige Entität",
+      image_skipped: "Bild nicht übernommen (Format oder Grösse)",
+      multi_action_step: "Multi-Action: nur der Home-Assistant-Schritt übernommen",
+    },
     cols: "Spalten",
     rows: "Zeilen",
     cancel: "Abbrechen",
@@ -346,6 +392,52 @@ const T = {
     templateNamePlaceholder: "e.g. Living room",
     model: "Model",
     freeGrid: "Free grid (virtual panel) …",
+    importElgato: "Import Elgato profile",
+    importHelp: "Choose a profile exported from the Stream Deck app (.streamDeckProfile) or a backup of all profiles (.streamDeckProfilesBackup). Each profile becomes a template. Keys of the Home Assistant plugin, folders and page changes are taken over. Everything else stays empty and is listed in the report.",
+    importFile: "Profile file",
+    importUpload: "Read file",
+    importReading: "Reading the file …",
+    importProfileInfo: "{pages} pages, {folders} folders, {ha} of {controls} keys with Home Assistant",
+    importStart: "Import",
+    importNone: "Please choose at least one profile.",
+    importDone: "Import finished",
+    importSummary: "Template “{name}”: {pages} pages and folders, {controls} keys, {images} images",
+    importImages: "Images saved in {folder}",
+    importSkipped: "Not taken over",
+    importChanged: "Taken over with changes",
+    importNothing: "Everything was taken over.",
+    importCopy: "Copy report",
+    importCopied: "Report copied to the clipboard.",
+    importOpen: "Open template",
+    importKey: "Key col. {c}, row {r}",
+    importDial: "Dial {c}",
+    importErrors: {
+      not_zip: "The file is not a Stream Deck profile (no ZIP archive).",
+      no_profile: "No profile was found in the file.",
+      too_large: "The file is too large (64 MB at most).",
+      no_file: "No file was sent.",
+      unauthorized: "Only administrators may import profiles.",
+    },
+    importReasons: {
+      unsupported: "Action without a counterpart in Stream Assistant",
+      multi_action: "Multi action with several steps",
+      profile_switch: "Profile switch",
+      outside: "Does not fit the chosen model",
+      no_space: "No free key left",
+      ha_unreadable: "Settings of the Home Assistant plugin not readable",
+      service_template: "Action with a template ({{ … }}) not taken over",
+      service_invalid: "Invalid action not taken over",
+      title_template: "Title with a template: automatic title used",
+      tap_dropped: "Separate tap action not taken over",
+      rotation_adjust: "Turning adjusts the entity directly",
+      rotation_dropped: "Turning not taken over",
+      moved: "Moved to key {detail} (key 1 is “back”)",
+      link_added: "Key to page “{detail}” added",
+      unknown_entity: "Entity missing in Home Assistant",
+      invalid_entity: "Invalid entity",
+      image_skipped: "Image not taken over (format or size)",
+      multi_action_step: "Multi action: only the Home Assistant step taken over",
+    },
     cols: "Columns",
     rows: "Rows",
     cancel: "Cancel",
@@ -819,6 +911,183 @@ class StreamAssistantPanel extends HTMLElement {
     await this._afterTemplateChange("template", result.template_id);
   }
 
+  // Import of Elgato Stream Deck app profiles (profile_import.py)
+
+  _openImportDialog() {
+    if (!this._confirmLeave()) return;
+    this._picker = { kind: "import" };
+    this._import = { step: "file", error: "" };
+    this._renderImport();
+    this.shadowRoot.getElementById("picker").showModal();
+  }
+
+  _renderImport() {
+    const t = this.t;
+    const state = this._import;
+    const dlg = this.shadowRoot.getElementById("picker");
+    let body = "";
+    let foot = `<button type="button" class="btn" data-role="pk-close">${t.close}</button>`;
+    if (state.step === "file") {
+      body = `<p class="help">${t.importHelp}</p>
+        <label>${t.importFile}<input id="imp-file" type="file" accept=".streamDeckProfile,.streamDeckProfilesBackup,.zip"></label>
+        ${state.busy ? `<p>${t.importReading}</p>` : ""}`;
+      foot = `<button type="button" class="btn" data-role="pk-close">${t.cancel}</button>
+        <button type="button" class="btn primary" data-role="imp-upload" ${state.busy ? "disabled" : ""}>${t.importUpload}</button>`;
+    } else if (state.step === "choose") {
+      const single = state.profiles.length === 1;
+      body = state.profiles
+        .map((p, i) => {
+          const models = this.models.map((m) => [m.id, `${m.name} (${m.cols} × ${m.rows})`]);
+          if (!models.some(([id]) => id === p.suggested_model)) {
+            const grid = /^grid_(\d+)x(\d+)/.exec(p.suggested_model);
+            models.push([p.suggested_model, grid ? `${grid[1]} × ${grid[2]}` : p.suggested_model]);
+          }
+          const options = models
+            .map(([id, name]) => `<option value="${esc(id)}" ${id === p.suggested_model ? "selected" : ""}>${esc(name)}</option>`)
+            .join("");
+          const info = t.importProfileInfo
+            .replace("{pages}", p.pages)
+            .replace("{folders}", p.folders)
+            .replace("{ha}", p.ha_controls)
+            .replace("{controls}", p.controls);
+          return `<fieldset class="imp-profile">
+            <label class="check"><input type="checkbox" id="imp-use-${i}" ${single || p.ha_controls ? "checked" : ""}> <b>${esc(p.name)}</b></label>
+            <p class="help">${esc(info)}</p>
+            <label>${t.templateName}<input id="imp-name-${i}" maxlength="60" value="${esc(p.name)}"></label>
+            <label>${t.model}<select id="imp-model-${i}">${options}</select></label>
+          </fieldset>`;
+        })
+        .join("");
+      foot = `<button type="button" class="btn" data-role="pk-close">${t.cancel}</button>
+        <button type="button" class="btn primary" data-role="imp-create" ${state.busy ? "disabled" : ""}>${t.importStart}</button>`;
+    } else {
+      body = state.results.map((r) => this._importResultHtml(r)).join("");
+      foot = `<button type="button" class="btn" data-role="imp-copy">${t.importCopy}</button>
+        <button type="button" class="btn" data-role="pk-close">${t.close}</button>
+        <button type="button" class="btn primary" data-role="imp-open">${t.importOpen}</button>`;
+    }
+    dlg.innerHTML = `
+      <div class="dlg-head"><h2>${state.step === "done" ? t.importDone : t.importElgato}</h2><button type="button" class="icon-btn" data-role="pk-close" aria-label="${esc(t.close)}"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      <div class="dlg-body">${body}${state.error ? `<p class="warn-text">${esc(state.error)}</p>` : ""}</div>
+      <div class="dlg-foot">${foot}</div>`;
+  }
+
+  _importLines(result) {
+    const t = this.t;
+    const where = (r) =>
+      r.control === "dial"
+        ? t.importDial.replace("{c}", r.col + 1)
+        : t.importKey.replace("{c}", r.col + 1).replace("{r}", r.row + 1);
+    const line = (r) => {
+      const reason = (t.importReasons[r.reason] || r.reason).replace("{detail}", r.detail);
+      const label = [r.title, r.action].filter(Boolean).join(" – ");
+      const detail = r.detail && !["moved", "link_added"].includes(r.reason) ? ` (${r.detail})` : "";
+      return { page: r.page, where: where(r), label, text: reason + detail };
+    };
+    return {
+      skipped: result.report.filter((r) => r.skipped).map(line),
+      changed: result.report.filter((r) => !r.skipped).map(line),
+    };
+  }
+
+  _importResultHtml(result) {
+    const t = this.t;
+    const { skipped, changed } = this._importLines(result);
+    const table = (title, lines) =>
+      lines.length
+        ? `<h3>${esc(title)} (${lines.length})</h3><table class="imp-report"><tbody>${lines
+            .map((l) => `<tr><td>${esc(l.page)}</td><td>${esc(l.where)}</td><td>${esc(l.label)}</td><td>${esc(l.text)}</td></tr>`)
+            .join("")}</tbody></table>`
+        : "";
+    const summary = t.importSummary
+      .replace("{name}", result.name)
+      .replace("{pages}", result.pages)
+      .replace("{controls}", result.controls)
+      .replace("{images}", result.images);
+    return `<section class="imp-result"><p><b>${esc(summary)}</b></p>
+      ${result.image_folder ? `<p class="help">${esc(t.importImages.replace("{folder}", result.image_folder))}</p>` : ""}
+      ${skipped.length || changed.length ? table(t.importSkipped, skipped) + table(t.importChanged, changed) : `<p>${t.importNothing}</p>`}
+    </section>`;
+  }
+
+  async _uploadImport() {
+    const t = this.t;
+    const file = this.shadowRoot.getElementById("imp-file")?.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file, file.name);
+    this._import = { step: "file", busy: true, error: "" };
+    this._renderImport();
+    try {
+      const response = await this._hass.fetchWithAuth("/api/stream_assistant/import/elgato", { method: "POST", body: form });
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      if (!response.ok) throw new Error(t.importErrors[data.error] || data.error || `HTTP ${response.status}`);
+      this._import = { step: "choose", token: data.token, profiles: data.profiles, error: "" };
+    } catch (err) {
+      this._import = { step: "file", error: err.message || String(err) };
+    }
+    this._renderImport();
+  }
+
+  async _createImport() {
+    const t = this.t;
+    const state = this._import;
+    const root = this.shadowRoot;
+    const chosen = state.profiles
+      .map((p, i) => ({
+        use: root.getElementById(`imp-use-${i}`).checked,
+        id: p.id,
+        name: root.getElementById(`imp-name-${i}`).value.trim().slice(0, 60) || p.name,
+        model: root.getElementById(`imp-model-${i}`).value,
+      }))
+      .filter((c) => c.use)
+      .map(({ use, ...c }) => c);
+    if (!chosen.length) {
+      state.error = t.importNone;
+      this._renderImport();
+      return;
+    }
+    state.busy = true;
+    state.error = "";
+    this._renderImport();
+    try {
+      const result = await this._hass.callWS({ type: "stream_assistant/import/create", token: state.token, profiles: chosen });
+      this._import = { step: "done", results: result.templates, error: "" };
+      await this._refreshLists();
+    } catch (err) {
+      state.busy = false;
+      state.error = err.message || String(err);
+    }
+    this._renderImport();
+  }
+
+  async _copyImportReport() {
+    const lines = [];
+    for (const result of this._import.results) {
+      const { skipped, changed } = this._importLines(result);
+      lines.push(`# ${result.name}`);
+      for (const [title, rows] of [[this.t.importSkipped, skipped], [this.t.importChanged, changed]]) {
+        if (rows.length) lines.push(`## ${title}`, ...rows.map((l) => `- ${l.page}, ${l.where}: ${[l.label, l.text].filter(Boolean).join(" – ")}`));
+      }
+      lines.push("");
+    }
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      this._import.error = "";
+      this.message = this.t.importCopied;
+      this._renderStatus();
+    } catch (err) {
+      this._import.error = err.message || String(err);
+      this._renderImport();
+    }
+  }
+
+  async _openImported() {
+    const first = this._import.results[0];
+    this._closePicker();
+    if (first) await this._afterTemplateChange("template", first.template_id);
+  }
+
   async _saveAsTemplate() {
     const t = this.t;
     if (this.dirty) await this._save();
@@ -945,7 +1214,8 @@ class StreamAssistantPanel extends HTMLElement {
     const content = this.shadowRoot.getElementById("content");
     if (!this.entries.length && !this.templates.length) {
       content.innerHTML = `<div class="card empty">${esc(this.message || t.noEntries)}
-        <p><button class="btn" data-role="new-template">${t.newTemplate}</button></p></div>`;
+        <p><button class="btn" data-role="new-template">${t.newTemplate}</button>
+        <button class="btn" data-role="import-elgato">${t.importElgato}</button></p></div>`;
       return;
     }
     const option = (kind, id, title) => {
@@ -965,6 +1235,7 @@ class StreamAssistantPanel extends HTMLElement {
           </select>
         </label>
         <button class="btn small" data-role="new-template">${t.newTemplate}</button>
+        <button class="btn small" data-role="import-elgato" title="${esc(t.importElgato)}" aria-label="${esc(t.importElgato)}"><ha-icon icon="mdi:import"></ha-icon></button>
         <span id="status-chip"></span>
         <span class="spacer"></span>
         <span id="status-text" class="status-text"></span>
@@ -1771,6 +2042,16 @@ class StreamAssistantPanel extends HTMLElement {
       this._openTemplateDialog();
     } else if (role === "tpl-create") {
       this._createTemplate();
+    } else if (role === "import-elgato") {
+      this._openImportDialog();
+    } else if (role === "imp-upload") {
+      this._uploadImport();
+    } else if (role === "imp-create") {
+      this._createImport();
+    } else if (role === "imp-copy") {
+      this._copyImportReport();
+    } else if (role === "imp-open") {
+      this._openImported();
     } else if (role === "save-as-template") {
       this._saveAsTemplate();
     } else if (role === "open-template") {
@@ -2051,6 +2332,13 @@ const STYLE = `
   .ic-cell ha-icon { --mdc-icon-size: 28px; }
   .ic-cell span { font-size: 11px; color: var(--secondary-text-color); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dlg-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 24px 16px; border-top: 1px solid var(--divider-color, #e0e0e0); }
+  .dlg-body { overflow-y: auto; }
+  .imp-profile { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 12px; border: 1px solid var(--divider-color, #e0e0e0); border-radius: 8px; }
+  .imp-result h3 { margin: 12px 0 4px; font-size: 14px; }
+  .imp-report { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .imp-report td { padding: 4px 6px; border-top: 1px solid var(--divider-color, #e0e0e0); vertical-align: top; overflow-wrap: anywhere; }
+  .imp-report td:last-child { color: var(--secondary-text-color); }
+  .imp-report td:nth-child(-n+2) { white-space: nowrap; overflow-wrap: normal; }
   @media (max-width: 600px) { .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); } .content { padding: 8px; } }
 `;
 

@@ -114,6 +114,8 @@ It never talks to hardware directly, only through a `DeckTransport` (`transport.
 - Linked decks subscribe and edit the template.
 - `remap_layout` and `merge_into_template` (`layout.py`) move keys between grids by row and column.
 
+**Elgato import:** `elgato_import.py` reads profiles of the Elgato Stream Deck app (ZIP, V1–V3, in memory) and converts them into layouts plus a report. `profile_import.py` holds the upload view (`/api/stream_assistant/import/elgato`, admins, parsed profiles kept 15 min under a token) and `stream_assistant/import/create`, which writes images below `/config/www/stream_assistant/import/` and creates templates. Test profiles are built in `tests/elgato_profiles.py`.
+
 **Frontend:**
 - `frontend/panel.js`: the editor (sidebar panel, admins only).
 - `frontend/card.js`: `custom:stream-assistant-card`, registered via `add_extra_js_url`.

@@ -130,6 +130,9 @@ A template is a layout that is not tied to one deck:
 - **Save as template** turns a deck's own layout into a template and links the deck to it.
 - **Detach** gives a linked deck its own copy, which no longer follows the template.
 - **Delete template:** linked decks keep a copy of the layout.
+- **Import from the Elgato app:** the import button next to **+ Template** turns profiles of
+  the Elgato Stream Deck app into templates. See
+  [Importing profiles from the Elgato Stream Deck app](elgato-import.md).
 
 ![Creating a template](images/editor-template-dialog.png)
 
