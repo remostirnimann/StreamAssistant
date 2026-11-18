@@ -137,11 +137,19 @@ public sealed class DiscoveryTests
             // The advertiser listens only after its first announcement: ask until it answers,
             // with one receive kept open so no answer lands in an abandoned receive
             var receive = ReceiveAnswerAsync(client, timeout.Token);
-            while (await Task.WhenAny(receive, Task.Delay(500, timeout.Token)) != receive)
+            UdpReceiveResult answer;
+            while (true)
             {
-                await client.SendAsync(query, new IPEndPoint(IPAddress.Loopback, advertiser.Port), timeout.Token);
+                try
+                {
+                    answer = await receive.WaitAsync(TimeSpan.FromMilliseconds(500), timeout.Token);
+                    break;
+                }
+                catch (TimeoutException)
+                {
+                    await client.SendAsync(query, new IPEndPoint(IPAddress.Loopback, advertiser.Port), timeout.Token);
+                }
             }
-            var answer = await receive;
             Assert.Equal(0x4242, BinaryPrimitives.ReadUInt16BigEndian(answer.Buffer));
             Assert.Contains(Parse(answer.Buffer), a => a.Type == MdnsService.TypePtr && a.Name == MdnsService.ServiceType);
         }

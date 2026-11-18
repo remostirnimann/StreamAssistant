@@ -17,6 +17,11 @@ the same version. Versions before 0.8.0b1 were not released.
   empty, and a report lists what was not taken over or was changed. Profiles of the app
   before 6.0, of 6.x and of 7.x are read. See `docs/elgato-import.md`.
 
+### Fixed
+
+- The bridge builds again with current .NET 10 SDKs, whose analyzer rule CA2027 refused a
+  timeout built from `Task.WhenAny` and `Task.Delay` (closing a deck, a discovery test).
+
 ## [0.9.1] - 2026-11-04
 
 ### Security
