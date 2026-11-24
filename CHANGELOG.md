@@ -5,6 +5,13 @@ All notable changes to Stream Assistant. Format based on
 Home Assistant integration (`manifest.json`); since 0.8.0b1 the bridge is released with
 the same version. Versions before 0.8.0b1 were not released.
 
+## [Unreleased]
+
+### Fixed
+
+- The bridge builds again with the newest .NET SDK (analyzer rule CA2027): closing a USB
+  deck no longer leaves a timer running.
+
 ## [0.9.1] - 2026-11-04
 
 ### Security
