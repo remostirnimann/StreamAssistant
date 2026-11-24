@@ -11,6 +11,11 @@ the same version. Versions before 0.8.0b1 were not released.
 
 - Buy Me a Coffee link in the README and the documentation.
 
+### Fixed
+
+- The bridge builds again with the newest .NET SDK (analyzer rule CA2027): closing a USB
+  deck no longer leaves a timer running.
+
 ## [0.9.1] - 2026-11-04
 
 ### Security
