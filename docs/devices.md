@@ -69,8 +69,8 @@ Stream Deck Studio, with its LED rings and the field to read an NFC tag:
 | Stream Assistant Bridge, Windows (console and desktop) | ✅ Tested | With virtual and simulated decks; USB decks 🧪 untested |
 | Stream Assistant Bridge, Alpine Linux ARM64 (console) | ✅ Tested | Ran on a Home Assistant Yellow with simulated decks |
 | Stream Assistant Bridge, other Linux, macOS (console and desktop) | 🧪 Untested | Built for every release |
-| Home Assistant add-on with the bridge (USB on the Home Assistant host) | 📋 Planned | |
-| Packages and installers (Windows, macOS, Linux), tray icon | 📋 Planned | Today: unpack and start, see [bridge](bridge.md) |
+| Home Assistant add-on with the bridge (USB on the Home Assistant host) | ✅ Tested | Ran on a Home Assistant Yellow with simulated decks: discovery, ingress page; USB decks 🧪 untested |
+| Tray icon for the desktop bridge | 📋 Planned | The installers are available, see [bridge](bridge.md#install) |
 
 ## Panels without hardware
 

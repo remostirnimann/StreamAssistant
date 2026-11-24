@@ -2,7 +2,8 @@
 
 Docks and bridges are identified by their serial number / bridge id, never by
 their address. Bridges announce themselves via mDNS (_stream-assistant._tcp)
-and are paired once with the code they show.
+and are paired once with the code they show. The bridge add-on announces itself
+through the Supervisor instead, with a token, so it needs no code.
 
 Dock address changes are picked up from two sources:
 
@@ -24,6 +25,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.selector import NumberSelector, NumberSelectorConfig, NumberSelectorMode
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 import voluptuous as vol
 
@@ -105,6 +107,7 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
         self._child: ChildInfo | None = None
         self._port = BRIDGE_PORT
         self._bridge: BridgeInfo | None = None
+        self._token: str | None = None
 
     async def _probe(self, host: str) -> str | None:
         """Read dock info, return an error key on failure."""
@@ -230,6 +233,41 @@ class StreamAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
         self._bridge = BridgeInfo(bridge_id, properties.get("name") or host, properties.get("version") or "")
         self.context["title_placeholders"] = {"name": self._bridge.name}
         return await self.async_step_pair()
+
+    async def async_step_hassio(self, discovery_info: HassioServiceInfo) -> ConfigFlowResult:
+        """The bridge add-on announced itself through the Supervisor, with a token."""
+        config = discovery_info.config
+        bridge_id, host, token = config.get("bridge_id"), config.get("host"), config.get("token")
+        if not (bridge_id and host and token):
+            return self.async_abort(reason="cannot_connect_bridge")
+        port = int(config.get("port") or BRIDGE_PORT)
+        await self.async_set_unique_id(bridge_id)
+        # Sent after every start of the add-on: keeps a known bridge's address and token
+        self._abort_if_unique_id_configured(updates={CONF_HOST: host, CONF_PORT: port, CONF_TOKEN: token})
+        self._host, self._port, self._token = host, port, token
+        try:
+            self._bridge = await fetch_info(async_get_clientsession(self.hass), host, port)
+        except BridgeError:
+            self._bridge = BridgeInfo(bridge_id, discovery_info.name, "")
+        self.context["title_placeholders"] = {"name": self._bridge.name}
+        return await self.async_step_hassio_confirm()
+
+    async def async_step_hassio_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Confirm the add-on's bridge; it is already paired through the token."""
+        assert self._bridge and self._token
+        if user_input is not None:
+            return self.async_create_entry(
+                title=self._bridge.name,
+                data={
+                    CONF_KIND: KIND_BRIDGE,
+                    CONF_HOST: self._host,
+                    CONF_PORT: self._port,
+                    CONF_BRIDGE_ID: self.unique_id,
+                    CONF_TOKEN: self._token,
+                    CONF_DEVICES: {},
+                },
+            )
+        return self.async_show_form(step_id="hassio_confirm", description_placeholders={"name": self._bridge.name})
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         """The bridge refused the token (e.g. it was reset): pair again."""

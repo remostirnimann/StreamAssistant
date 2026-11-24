@@ -5,10 +5,11 @@ from __future__ import annotations
 from ipaddress import ip_address
 from unittest.mock import patch
 
-from homeassistant.config_entries import SOURCE_DHCP, SOURCE_RECONFIGURE, SOURCE_USER, SOURCE_ZEROCONF
+from homeassistant.config_entries import SOURCE_DHCP, SOURCE_HASSIO, SOURCE_RECONFIGURE, SOURCE_USER, SOURCE_ZEROCONF
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -224,6 +225,55 @@ async def test_bridge_zeroconf(hass: HomeAssistant, fake_bridge: FakeBridge) -> 
         await hass.async_block_till_done()
     assert result["reason"] == "already_configured"
     assert entry.data[CONF_PORT] == 5999
+
+
+def _bridge_hassio(port: int, **config: object) -> HassioServiceInfo:
+    return HassioServiceInfo(
+        config={"host": "127.0.0.1", "port": port, "bridge_id": BRIDGE_ID, "token": "known-token", **config},
+        name="Stream Assistant Bridge",
+        slug="abc123_stream_assistant_bridge",
+        uuid="1234",
+    )
+
+
+async def test_bridge_addon_discovery(hass: HomeAssistant, fake_bridge: FakeBridge) -> None:
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_HASSIO}, data=_bridge_hassio(fake_bridge.port, token="")
+    )
+    assert result["reason"] == "cannot_connect_bridge"
+
+    # The token comes with the discovery: confirm, no pairing code
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_HASSIO}, data=_bridge_hassio(fake_bridge.port)
+    )
+    assert result["step_id"] == "hassio_confirm"
+    assert result["description_placeholders"] == {"name": "Test bridge"}
+    with SKIP_SETUP:
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "Test bridge"
+    data = result["data"]
+    assert data[CONF_KIND] == KIND_BRIDGE and data[CONF_BRIDGE_ID] == BRIDGE_ID
+    assert data[CONF_TOKEN] == "known-token" and data[CONF_PORT] == fake_bridge.port
+
+    # After every start of the add-on: a known bridge keeps address and token up to date
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    with SKIP_SETUP:
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_HASSIO}, data=_bridge_hassio(5999, token="new-token")
+        )
+        await hass.async_block_till_done()
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_PORT] == 5999 and entry.data[CONF_TOKEN] == "new-token"
+
+
+async def test_bridge_addon_discovery_while_unreachable(hass: HomeAssistant) -> None:
+    """The add-on may not answer yet: the Supervisor's add-on name stands in."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_HASSIO}, data=_bridge_hassio(1)
+    )
+    assert result["step_id"] == "hassio_confirm"
+    assert result["description_placeholders"] == {"name": "Stream Assistant Bridge"}
 
 
 async def test_bridge_reauth(hass: HomeAssistant, fake_bridge: FakeBridge) -> None:

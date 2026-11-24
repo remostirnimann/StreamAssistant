@@ -63,17 +63,28 @@ public static class BridgeHost
             return http;
         });
         builder.Services.AddSingleton<UpdateService>();
-        builder.Services.AddSingleton<IHidBackend, HidSharpBackend>();
+        builder.Services.AddSingleton<IHidBackend>(sp => sp.GetRequiredService<BridgeOptions>().Hid == HidAccess.Libusb
+            ? new HidApiBackend(sp.GetRequiredService<ILogger<HidApiBackend>>())
+            : new HidSharpBackend());
         builder.Services.AddHostedService<ElgatoWatcher>();
         builder.Services.AddHostedService<MdnsAdvertiser>();
-        // Read lazily: tests and the command line can set the port
+        builder.Services.AddHostedService<SupervisorDiscovery>();
+        // Read lazily: tests and the command line can set the ports
         builder.WebHost.ConfigureKestrel((context, kestrel) =>
-            kestrel.ListenAnyIP(context.Configuration.GetValue("port", BridgeOptions.DefaultPort)));
+        {
+            var options = BridgeOptions.From(context.Configuration);
+            kestrel.ListenAnyIP(options.Port);
+            if (options.IngressPort > 0)
+            {
+                kestrel.ListenAnyIP(options.IngressPort);
+            }
+        });
 
         var app = builder.Build();
 
         // Before everything else: the bridge is meant for the local network
         app.UseLocalNetworkOnly();
+        app.UseIngress();
 
         app.UseWebSockets(new WebSocketOptions
         {
@@ -168,6 +179,10 @@ public static class BridgeHost
             app.Services.GetRequiredService<VirtualDecks>().Start();
         }
         pairing.LogCode();
+        if (options.IngressPort > 0)
+        {
+            logger.LogInformation("Pages for Home Assistant's ingress on port {Port}", options.IngressPort);
+        }
         if (options.Simulate.Count > 0)
         {
             logger.LogInformation("Simulator: http://localhost:{Port}/sim", options.Port);

@@ -49,7 +49,10 @@
   let socket;
 
   function connect() {
-    socket = new WebSocket(`ws://${location.host}/sim/ws`);
+    // Relative, so it also works under Home Assistant's ingress path (https there)
+    const url = new URL("sim/ws", location.href);
+    url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    socket = new WebSocket(url);
     socket.onopen = () => (document.getElementById("state").textContent = "");
     socket.onclose = () => {
       document.getElementById("state").textContent = "(bridge not reachable, retrying …)";

@@ -13,7 +13,12 @@ using StreamAssistant.Bridge.Protocol;
 namespace StreamAssistant.Bridge.Tests;
 
 /// <summary>An in-memory bridge with one simulated 5×3 deck and its own settings folder.</summary>
-public sealed class TestBridge(Action<IServiceCollection>? services = null, string simulate = "5x3", bool usb = false, bool allowPublic = false) : WebApplicationFactory<Program>
+public sealed class TestBridge(
+    Action<IServiceCollection>? services = null,
+    string simulate = "5x3",
+    bool usb = false,
+    bool allowPublic = false,
+    IReadOnlyDictionary<string, string>? settings = null) : WebApplicationFactory<Program>
 {
     private readonly string _configDir = Path.Combine(Path.GetTempPath(), "sab-test-" + Guid.NewGuid().ToString("N"));
 
@@ -33,6 +38,10 @@ public sealed class TestBridge(Action<IServiceCollection>? services = null, stri
         builder.UseSetting("mdns", "false");
         builder.UseSetting("usb", usb ? "true" : "false");
         builder.UseSetting("allow-public", allowPublic ? "true" : "false");
+        foreach (var (key, value) in settings ?? new Dictionary<string, string>())
+        {
+            builder.UseSetting(key, value);
+        }
         if (services is not null)
         {
             builder.ConfigureTestServices(services);

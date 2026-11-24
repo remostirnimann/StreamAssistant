@@ -6,7 +6,8 @@
   (256 and 512 px, see https://developers.home-assistant.io/docs/core/integration/brand_images).
 - The bridge's icon, the same keys with a badge of two arrows: `docs/images/bridge_icon.svg`,
   `bridge/assets/bridge.ico` (program, installer; 16 and 24 px use a simpler drawing) and
-  `bridge/assets/bridge.png` (window).
+  `bridge/assets/bridge.png` (window), and the add-on's `icon.png` and `logo.png` in
+  `addon/stream_assistant_bridge/`.
 
 Every icon is one list of shapes that both the SVG and the Pillow output draw. Needs Pillow:
 
@@ -24,6 +25,7 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent.parent
 BRAND = ROOT / "custom_components" / "stream_assistant" / "brand"
 BRIDGE = ROOT / "bridge" / "assets"
+ADDON = ROOT / "addon" / "stream_assistant_bridge"
 DOCS = ROOT / "docs" / "images"
 
 SIZE = 120  # drawing units; the images scale this square
@@ -263,6 +265,8 @@ def main() -> None:
     full, simple = bridge_icon(), bridge_icon_simple()
     (DOCS / "bridge_icon.svg").write_text(svg(full), encoding="utf-8", newline="\n")
     png(full, 256).save(BRIDGE / "bridge.png", optimize=True)
+    for name in ("icon.png", "logo.png"):
+        png(full, 256).save(ADDON / name, optimize=True)
     images = [png(simple, p) for p in ICO_SIMPLE] + [png(full, p) for p in ICO_FULL]
     images[-1].save(
         BRIDGE / "bridge.ico",

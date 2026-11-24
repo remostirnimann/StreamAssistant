@@ -1,0 +1,16 @@
+configuration:
+  name:
+    name: Name
+    description: How the bridge appears in Home Assistant.
+  simulate:
+    name: Simulated decks
+    description: >-
+      For trying without hardware, e.g. "5x3" or "mk2,plus". They appear on the
+      add-on's page (Open Web UI → Open the simulator). Leave empty for real decks only.
+  log_level:
+    name: Log level
+    description: How much the bridge writes to the add-on's log.
+network:
+  5390/tcp: >-
+    Protocol port. Only needed when a Home Assistant on another computer should use
+    the decks on this one; this Home Assistant connects without it.

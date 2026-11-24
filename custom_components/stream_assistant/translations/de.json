@@ -38,6 +38,10 @@
           "code": "Kopplungscode"
         }
       },
+      "hassio_confirm": {
+        "title": "Add-on Stream Assistant Bridge",
+        "description": "Die Stream Decks des Add-ons {name} einrichten? Es ist bereits gekoppelt, ein Code ist nicht nötig."
+      },
       "virtual": {
         "title": "Virtuelles Panel",
         "description": "Ein Stream Deck, das nur in Home Assistant existiert: Tasten, Seiten, Vorlagen und Automationen funktionieren wie bei einem echten Deck, angezeigt wird es mit der Dashboard-Karte «Stream Assistant Panel» (Wandtablet, Handy). Das Raster ist frei wählbar.",

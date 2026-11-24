@@ -7,6 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>StreamAssistant.Bridge</RootNamespace>
     <Version>0.1.0</Version>
+    <!-- LibraryImport (hidapi for the add-on) generates unsafe marshalling code -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

@@ -34,6 +34,7 @@ public sealed class SelfInstaller(BridgeOptions options, IHostApplicationLifetim
         ProgramPath is not null
         && string.IsNullOrEmpty(Assembly.GetEntryAssembly()?.Location)
         && Flavor.StartsWith("stream-assistant-bridge", StringComparison.Ordinal)
+        && options.Install != InstallKind.Addon
         && (options.Install != InstallKind.Msi || IsWindows);
 
     public string AssetName(string version) => options.Install == InstallKind.Msi

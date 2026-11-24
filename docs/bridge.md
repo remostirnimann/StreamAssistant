@@ -5,16 +5,41 @@ them to Home Assistant over the network, using the vendor-neutral
 [bridge protocol](bridge-protocol.md). It does not draw anything itself: Home Assistant
 decides what every key shows and does.
 
-There are two versions, with the same features:
+There are three versions, with the same features:
 
 | Version | For |
 |---|---|
+| **Home Assistant add-on** | Stream Decks plugged into the Home Assistant host itself (Home Assistant OS, e.g. Yellow, Green, Raspberry Pi). Sets itself up, no pairing code: see [Home Assistant add-on](#home-assistant-add-on) |
 | **Console** (`stream-assistant-bridge`) | Servers, Raspberry Pi, running in the background; no window |
 | **Desktop** (`stream-assistant-bridge-desktop`) | Windows, macOS and Linux desktops; a window with the connection state, the pairing code and [virtual decks](virtual-panels.md#virtual-decks-in-the-bridge-window) |
 
 Each is a single file and needs nothing else installed (no .NET, no Python).
 
 ## Install
+
+### Home Assistant add-on
+
+For decks plugged into the computer Home Assistant runs on (Home Assistant OS):
+
+1. Install the integration first ([Installation](installation.md)).
+2. Add the add-on repository: **Settings → Add-ons → Add-on store**, menu ⋮ →
+   **Repositories**, add `https://github.com/remostirnimann/StreamAssistant-addon`.
+3. Install **Stream Assistant Bridge** and start it.
+4. *Settings → Devices & services* shows the bridge as discovered; choose **Add** and
+   confirm. No pairing code is needed: the add-on hands Home Assistant a token through the
+   Supervisor.
+
+Its options are the name, [simulated decks](virtual-panels.md#simulated-decks) and the log
+level. **Open Web UI** (or *Show in sidebar*) shows the [status page](#status-page) and the
+simulator inside Home Assistant. The add-on uses raw USB access and follows plugging in
+and out. It is updated like any add-on, together with every release of the integration
+(not with beta versions); Home Assistant offers no bridge update for it.
+
+A Home Assistant on another computer can use the add-on's decks too: open port 5390 in the
+add-on's network settings, add the bridge there by address and pair it with the code on the
+add-on's page.
+
+### On another computer
 
 The installers set the console bridge up as a service: it starts with the computer, runs
 without anyone logged in, and Home Assistant can update it (see [Updates](#updates)).
@@ -165,7 +190,11 @@ shortcut):
 | `--allow-public true` | off | Also accepts connections from public (internet) addresses. Not intended, at your own risk, see [Terms of use](terms.md) |
 
 The installers also set `--service true` (a service manager restarts the bridge after an
-update) and, on Windows, `--install-kind msi` (updates run the new installer).
+update) and, on Windows, `--install-kind msi` (updates run the new installer). The add-on
+starts the bridge with `--install-kind addon` (the Supervisor updates it, and it tells Home
+Assistant about itself through Supervisor discovery), `--ingress-port 8099` (the pages
+inside Home Assistant; only the Supervisor may use that port) and `--hid libusb` (USB
+through hidapi and libusb, since add-ons get raw USB but no HID devices).
 
 Without `--config-dir`, the settings folder is `%APPDATA%\stream-assistant-bridge` on
 Windows and `~/.config/stream-assistant-bridge` on macOS and Linux (the installers use the

@@ -94,12 +94,41 @@ public sealed class PairingService
         return PairingResult.Paired;
     }
 
+    /// <summary>
+    /// The token for Supervisor discovery (add-on): created once and paired like a code
+    /// pairing, then the same on every start. A new one after <see cref="RevokeAll"/>.
+    /// </summary>
+    public string DiscoveryToken()
+    {
+        lock (_lock)
+        {
+            if (_store.Settings.DiscoveryToken is { } existing && IsAuthorized(existing))
+            {
+                return existing;
+            }
+            var token = Base64Url(RandomNumberGenerator.GetBytes(32));
+            var hash = Hash(token);
+            _store.Update(s =>
+            {
+                s.DiscoveryToken = token;
+                s.Clients.Add(new PairedClient { Name = "Home Assistant (add-on discovery)", TokenHash = hash, Paired = _time.GetUtcNow() });
+            });
+            _logger.LogInformation("Created the token for Home Assistant's add-on discovery");
+            Changed?.Invoke();
+            return token;
+        }
+    }
+
     /// <summary>Forget all paired clients; they must pair again.</summary>
     public void RevokeAll()
     {
         lock (_lock)
         {
-            _store.Update(s => s.Clients.Clear());
+            _store.Update(s =>
+            {
+                s.Clients.Clear();
+                s.DiscoveryToken = null;
+            });
         }
         _logger.LogWarning("All paired clients were removed");
         Changed?.Invoke();

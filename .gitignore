@@ -67,3 +67,6 @@ scripts/docs-pages/panel.js
 scripts/docs-pages/card.js
 scripts/docs-pages/mdi.ttf
 scripts/docs-pages/mdi.json
+
+# Local add-on test builds (scripts/addon_sync.py --bridge)
+addon/stream_assistant_bridge/rootfs/opt/
