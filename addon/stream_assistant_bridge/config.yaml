@@ -10,15 +10,12 @@ arch:
   - amd64
 # The base image's S6 overlay is process 1
 init: false
-startup: application
-boot: auto
 homeassistant: "2026.3.0"
 # Tells the integration where the bridge is, with a token: no pairing code
 discovery:
   - stream_assistant
-# Status page and simulator inside Home Assistant
+# Status page and simulator inside Home Assistant (on the default ingress port 8099)
 ingress: true
-ingress_port: 8099
 panel_icon: mdi:dots-grid
 panel_title: Stream Decks
 # Raw USB (follows plugging); the bridge talks to the decks through hidapi over libusb
@@ -27,8 +24,6 @@ usb: true
 # Assistant can use it once this port is opened.
 ports:
   5390/tcp: null
-# Restart the add-on when the bridge stops answering (ingress port, not mapped to the host)
-watchdog: tcp://[HOST]:[PORT:8099]
 options:
   name: Home Assistant host
   simulate: ""

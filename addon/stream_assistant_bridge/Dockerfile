@@ -29,4 +29,8 @@ RUN set -eu; \
     fi; \
     chmod +x /opt/bridge/stream-assistant-bridge /run.sh
 
+# The Supervisor restarts the add-on when the bridge stops answering (its watchdog reads the
+# container's health). Loopback on the protocol port: the ingress port only serves the Supervisor.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3     CMD curl -fsS -o /dev/null http://127.0.0.1:5390/api/status || exit 1
+
 CMD ["/run.sh"]
