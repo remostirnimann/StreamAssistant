@@ -204,14 +204,8 @@ public sealed class ElgatoDeck : IControlDevice, IDisposable
         }
         _closing = true;
         _signal.Release();
-        try
-        {
-            await _idle.Task.WaitAsync(CloseTimeout, _time);
-        }
-        catch (TimeoutException)
-        {
-            // The queue did not drain in time: close anyway
-        }
+        // Gives up after CloseTimeout; neither the timeout nor anything else is thrown
+        await _idle.Task.WaitAsync(CloseTimeout, _time).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         Dispose();
     }
 

@@ -5,6 +5,8 @@ directly from Home Assistant. Everything is set up in Home Assistant: which key
 shows what, what it does, pages and folders, brightness and behaviour. No Stream
 Deck app, no Companion and no extra plugins are needed.
 
+<a href="https://www.buymeacoffee.com/remosti" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="60" width="217"></a>
+
 > **Early development.** Version 0.8 is a beta. See [Devices and status](devices.md)
 > for what has been tried on real hardware.
 
