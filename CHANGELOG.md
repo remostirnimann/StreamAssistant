@@ -7,6 +7,10 @@ the same version. Versions before 0.8.0b1 were not released.
 
 ## [Unreleased]
 
+### Added
+
+- Buy Me a Coffee link in the README and the documentation.
+
 ### Fixed
 
 - The bridge builds again with the newest .NET SDK (analyzer rule CA2027): closing a USB
