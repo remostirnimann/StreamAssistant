@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
+from PIL import Image
 import pytest
 from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
 
@@ -148,6 +151,45 @@ async def test_services_set_and_clear_key(hass: HomeAssistant, setup_entry: Setu
         )
     await hass.services.async_call(DOMAIN, "clear_key", {ATTR_ENTITY_ID: key3}, blocking=True)
     assert "3" not in device.layout["pages"][0]["keys"]
+
+
+async def test_set_key_image_must_be_in_an_allowed_folder(
+    hass: HomeAssistant, setup_entry: SetupEntry, fake_dock: FakeDock, tmp_path
+) -> None:
+    device = await _setup(hass, setup_entry, fake_dock)
+    key3 = entity_id(hass, "event", f"{DECK_SERIAL}_key_3")
+    allowed, other = tmp_path / "allowed", tmp_path / "other"
+    allowed.mkdir()
+    other.mkdir()
+    picture = allowed / "p.png"
+    Image.new("RGB", (10, 10), (255, 0, 0)).save(picture)
+    (other / "secret.png").write_bytes(b"")
+    (allowed / "link.png").symlink_to(other / "secret.png")
+    hass.config.allowlist_external_dirs = {str(allowed)}
+
+    async def set_image(path: Path) -> None:
+        await hass.services.async_call(DOMAIN, "set_key", {ATTR_ENTITY_ID: key3, "image": str(path)}, blocking=True)
+
+    # The answer is the same whether the file exists or not
+    for path in (
+        other / "secret.png",
+        other / "missing.png",
+        allowed / "link.png",
+        allowed / ".." / "other" / "secret.png",
+    ):
+        with pytest.raises(ServiceValidationError) as refused:
+            await set_image(path)
+        assert refused.value.translation_key == "image_not_allowed"
+    with pytest.raises(ServiceValidationError) as missing:
+        await set_image(allowed / "missing.png")
+    assert missing.value.translation_key == "image_not_found"
+    with pytest.raises(ServiceValidationError) as folder:
+        await set_image(allowed)
+    assert folder.value.translation_key == "image_not_found"
+    assert "3" not in device.layout["pages"][0]["keys"]
+
+    await set_image(picture)
+    assert device.layout["pages"][0]["keys"]["3"]["image"] == str(picture)
 
 
 async def test_reconnect_after_dock_restart(hass: HomeAssistant, setup_entry: SetupEntry, fake_dock: FakeDock) -> None:

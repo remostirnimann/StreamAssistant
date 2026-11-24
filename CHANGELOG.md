@@ -20,11 +20,32 @@ the same version. Versions before 0.8.0b1 were not released.
   - Stream Decks over raw USB (hidapi with libusb), following plugging in and out.
   - Options: name, simulated decks, log level.
 - Bridge options `--install-kind addon`, `--ingress-port` and `--hid libusb`.
+- Buy Me a Coffee link in the README and the documentation.
 
 ### Changed
 
 - The bridge's status page and simulator use relative addresses, so they also work under
   a path (ingress).
+
+### Fixed
+
+- The bridge builds again with the newest .NET SDK (analyzer rule CA2027): closing a USB
+  deck no longer leaves a timer running.
+
+## [0.9.1] - 2026-11-04
+
+### Security
+
+- `stream_assistant.set_key` only accepts images in folders Home Assistant allows
+  (`/config/www`, media folders, `allowlist_external_dirs`). Any user could call it with any
+  path on the host, and on a virtual panel the image then reached every user. Images
+  already stored in a layout are only drawn from these folders as well.
+
+### Fixed
+
+- `stream_assistant.set_key` no longer checks the image file on the event loop.
+- A file that is not a valid image no longer stops painting the deck: the key shows its text
+  and icon without the image, and the other keys are painted as usual.
 
 ## [0.9.0] - 2026-10-29
 
