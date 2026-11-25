@@ -6,9 +6,11 @@ V2 (6.x) and V3 (7.1+, with package.json and a Profiles/ prefix).
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 from typing import Any
+import uuid
 import zipfile
 
 from PIL import Image
@@ -113,8 +115,16 @@ def profile_v2(
     profile_id: str = "AAAA1111-2222-3333-4444-555566667777",
     prefix: str = "",
     size: tuple[int, int] | None = None,
+    app_names: bool = False,
 ) -> dict[str, bytes]:
-    """Archive entries of a V2 profile (prefix "Profiles/" for V3). files: paths below a page folder."""
+    """Archive entries of a V2 profile (prefix "Profiles/" for V3). files: paths below a page folder.
+
+    app_names: name the page folders as the app does (see app_folder) instead of by UUID.
+    """
+
+    def folder(page_id: str) -> str:
+        return app_folder(page_id) if app_names else page_id.upper()
+
     root = f"{prefix}{profile_id}.sdProfile"
     device: dict[str, Any] = {"Model": model, "UUID": ""}
     if size:
@@ -130,11 +140,17 @@ def profile_v2(
         ).encode()
     }
     for page_id, manifest in pages.items():
-        entries[f"{root}/Profiles/{page_id.upper()}/manifest.json"] = json.dumps(manifest).encode()
+        entries[f"{root}/Profiles/{folder(page_id)}/manifest.json"] = json.dumps(manifest).encode()
     for path, data in (files or {}).items():
         page_id, rest = path.split("/", 1)
-        entries[f"{root}/Profiles/{page_id.upper()}/{rest}"] = data
+        entries[f"{root}/Profiles/{folder(page_id)}/{rest}"] = data
     return entries
+
+
+def app_folder(page_id: str) -> str:
+    """The folder name the app (6.x and later) gives a page: its UUID in the app's base32."""
+    encoded = base64.b32hexencode(uuid.UUID(page_id).bytes).decode().rstrip("=")
+    return encoded.replace("V", "W").replace("U", "V") + "Z"
 
 
 def zip_bytes(entries: dict[str, bytes]) -> bytes:
@@ -153,7 +169,7 @@ F1 = "22222222-aaaa-bbbb-cccc-000000000001"
 F2 = "22222222-aaaa-bbbb-cccc-000000000002"
 
 
-def mk2_profile() -> bytes:
+def mk2_profile(app_names: bool = False) -> bytes:
     """An MK.2 profile with three pages, a folder in a folder and a mix of actions."""
     pages = {
         P1: page(
@@ -193,7 +209,7 @@ def mk2_profile() -> bytes:
         F2: page({"0,0": back_key(), "1,0": ha("lock.front", short=call("lock.lock", "lock.front"))}, name="Locks"),
     }
     files = {f"{P1}/Images/LIGHT.png": png(), f"{P1}/Images/HOTKEY.png": png("blue")}
-    return zip_bytes(profile_v2("Living room", pages, [P1, P2, P3], files))
+    return zip_bytes(profile_v2("Living room", pages, [P1, P2, P3], files, app_names=app_names))
 
 
 def plus_profile() -> bytes:

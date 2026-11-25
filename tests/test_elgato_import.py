@@ -117,6 +117,14 @@ def test_mk2_profile_pages_folders_and_keys() -> None:
     assert skipped == {"multi_action", "profile_switch", "unsupported"}
 
 
+def test_page_folders_named_by_the_app() -> None:
+    """The app stores pages in folders named after their UUID in its own base32."""
+    assert ep.app_folder("36ddf621-7109-4552-8390-7c93e02c27b4") == "6REWC8BH152L50SGFI9V0B17MGZ"
+    by_app = parse_archive(ep.mk2_profile(app_names=True))[0]
+    assert by_app.summary() == parse_archive(ep.mk2_profile())[0].summary()
+    assert _convert(ep.mk2_profile(app_names=True), "mk2").layout == _convert(ep.mk2_profile(), "mk2").layout
+
+
 def test_smaller_and_larger_decks() -> None:
     small = _convert(ep.mk2_profile(), "grid_3x2", language="de")
     pages = _pages(small)

@@ -25,12 +25,14 @@ only from converted keys.
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass, field
 import io
 import json
 import posixpath
 import re
 from typing import Any
+import uuid
 import zipfile
 
 from .capabilities import CATALOG, DeckCapabilities, grid_capabilities
@@ -51,6 +53,9 @@ MAX_IMAGE_BYTES = 2 * 1024 * 1024
 MAX_TOTAL_IMAGE_BYTES = 32 * 1024 * 1024
 MAX_TITLE = 40
 MAX_PAGE_NAME = 40
+
+# Page folder names of the app 6.x and later: a UUID in the app's base32 (see _page_id)
+_ENCODED_PAGE = re.compile(r"[0-9A-W]{26}Z")
 
 IMAGE_TYPES = {".png": "png", ".jpg": "jpg", ".jpeg": "jpg", ".gif": "gif", ".bmp": "bmp", ".webp": "webp"}
 
@@ -210,9 +215,22 @@ def _model(model_id: str) -> DeckCapabilities:
 
 
 def _page_id(folder: str) -> str:
-    """Id of a page from its folder name: lower case, without ".sdProfile"."""
-    name = posixpath.basename(folder.rstrip("/")).lower()
-    return name.removesuffix(".sdprofile")
+    """Id of a page from its folder name: lower case, without ".sdProfile".
+
+    The app (6.x and later) names page folders after the page's UUID in its own base32:
+    the 16 bytes in base32hex without padding, then "V" written as "W" and "U" as "V",
+    and a "Z" at the end ("36ddf621-..." becomes "6REWC8BH...Z"). Such names are turned
+    back into the UUID the profile's page list uses.
+    """
+    name = posixpath.basename(folder.rstrip("/"))
+    name = name[: -len(".sdprofile")] if name.lower().endswith(".sdprofile") else name
+    if _ENCODED_PAGE.fullmatch(name):
+        encoded = name[:-1].replace("V", "U").replace("W", "V")
+        try:
+            return str(uuid.UUID(bytes=base64.b32hexdecode(encoded + "======")))
+        except ValueError:
+            pass
+    return name.lower()
 
 
 def _read(archive: zipfile.ZipFile, info: zipfile.ZipInfo, limit: int) -> bytes | None:
