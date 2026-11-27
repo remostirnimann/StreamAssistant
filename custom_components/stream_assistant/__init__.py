@@ -7,7 +7,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 
-from . import websocket
+from . import profile_import, websocket
 from .bridge_hub import BridgeHub
 from .const import CONF_DEVICES, CONF_KIND, DOMAIN, KIND_BRIDGE, KIND_PLANNER, PLATFORMS, signal_hub_state
 from .device import StreamAssistantConfigEntry, StreamAssistantDevice, async_remove_layout, deck_key
@@ -23,6 +23,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     await templates.async_load()
     hass.data[DATA_TEMPLATES] = templates
     websocket.async_register(hass)
+    profile_import.async_register(hass)
     await async_register_panel(hass)
     return True
 

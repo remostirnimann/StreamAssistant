@@ -32,6 +32,8 @@ A deck can be connected in three ways:
 - [Devices and status](docs/devices.md): every model and how far it is tested
 - [Virtual and simulated panels](docs/virtual-panels.md)
 - [Key editor](docs/editor.md): pages, keys, dials, templates, behaviour
+- [Importing Elgato profiles](docs/elgato-import.md): from the Elgato Stream Deck app to
+  templates
 - [Automations](docs/automations.md): events, actions, NFC tags
 - [Troubleshooting](docs/troubleshooting.md)
 

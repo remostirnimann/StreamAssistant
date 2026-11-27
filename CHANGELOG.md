@@ -9,6 +9,13 @@ the same version. Versions before 0.8.0b1 were not released.
 
 ### Added
 
+- Import of Elgato Stream Deck app profiles (`.streamDeckProfile`, and
+  `.streamDeckProfilesBackup` with all profiles) in the key editor. Each chosen profile
+  becomes a template for a model of your choice: keys of the Home Assistant plugin
+  (entity, title, press and long press, dials), folders, page changes and their custom
+  images are taken over; further pages become folders of the root page. Other keys stay
+  empty, and a report lists what was not taken over or was changed. Profiles of the app
+  before 6.0, of 6.x and of 7.x are read. See `docs/elgato-import.md`.
 - Buy Me a Coffee link in the README and the documentation.
 
 ### Changed
