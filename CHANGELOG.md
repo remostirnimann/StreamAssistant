@@ -11,6 +11,11 @@ the same version. Versions before 0.8.0b1 were not released.
 
 - Buy Me a Coffee link in the README and the documentation.
 
+### Changed
+
+- Stream Assistant is in the HACS default list: the installation guide and the README no
+  longer describe adding it as a custom repository, and link to it in HACS directly.
+
 ### Fixed
 
 - The bridge builds again with the newest .NET SDK (analyzer rule CA2027): closing a USB
