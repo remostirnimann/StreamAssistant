@@ -29,13 +29,13 @@
    - **open: Home Assistant add-on** with the console bridge (linux-musl, USB passthrough),
      pairing skipped for the Supervisor network as the protocol allows
    - open: tray icon for the desktop app
-5. **Docs and HACS** — beta published
+5. **Docs and HACS** — in the HACS default list
    - ~~user documentation~~ in `docs/` — 0.9.0b1
    - ~~GitHub releases~~ with version tags, built by `release.yml`; pre-releases since
-     0.8.0b1; installable in HACS as a custom repository
+     0.8.0b1
    - ~~icon~~ in `brand/` of the integration (HA 2026.3 and later; no brands PR needed)
    - **open: missing screenshots and photos** (see `docs/images/README.md`)
-   - **open: the HACS default list**
+   - ~~the HACS default list~~ (hacs/default#12924), merged 2026-11-26
    - open: first stable 1.0.0 after the hardware test
 
 ## Then

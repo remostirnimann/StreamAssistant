@@ -55,8 +55,11 @@ A deck can be connected in three ways:
 
 ## Quick start
 
-1. Install with HACS as a custom repository (`https://github.com/remostirnimann/StreamAssistant`,
-   type *Integration*) and restart Home Assistant ([details](docs/installation.md)).
+1. Install **Stream Assistant** with HACS (it is in the default list) and restart Home
+   Assistant ([details](docs/installation.md)).
+
+   [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=remostirnimann&repository=StreamAssistant&category=integration)
+
 2. *Settings → Devices & services → Add integration → Stream Assistant*, choose how the deck
    is connected ([details](docs/setup.md)).
 3. Open **Stream Assistant** in the sidebar and design the keys.

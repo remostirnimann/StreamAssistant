@@ -32,7 +32,7 @@ Home Assistant or with real hardware.
 | `bridge_icon.svg` | The bridge's icon (the keys with a badge of two arrows); as `bridge/assets/bridge.ico` and `bridge.png` for the programs, the windows and the installer | - | `scripts/make_brand.py` |
 | `sim-studio.png` | Simulated Stream Deck Studio with LED rings and NFC field | [devices](../devices.md) | headless browser |
 | `sim-pedal.png` | Simulated Stream Deck Pedal | [devices](../devices.md) | headless browser |
-| `ha-hacs-custom-repository.png` | HACS → ⋮ → Custom repositories, with the repository URL and type *Integration* filled in | [installation](../installation.md#install-with-hacs-recommended) | test Home Assistant |
+| `ha-hacs-search.png` | HACS search with Stream Assistant found, before *Download* | [installation](../installation.md#install-with-hacs-recommended) | test Home Assistant |
 | `ha-add-menu.png` | *Add integration → Stream Assistant*: the menu with Dock / Bridge / Virtual panel / Only plan | [setup](../setup.md) | test Home Assistant |
 | `ha-discovered.png` | *Devices & services* with "Discovered: Stream Deck Network Dock" and/or "Stream Assistant Bridge" | [setup](../setup.md#network-dock) | test Home Assistant |
 | `ha-bridge-pairing.png` | The pairing step asking for the 6-digit code | [setup](../setup.md#stream-assistant-bridge) | test Home Assistant |
